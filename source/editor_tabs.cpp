@@ -20,6 +20,9 @@
 #include "editor_tabs.h"
 #include "editor.h"
 #include "live_tab.h"
+#include "theme.h"
+
+#include <wx/aui/tabart.h>
 
 EditorTab::EditorTab()
 {
@@ -43,6 +46,14 @@ MapTabbook::MapTabbook(wxWindow *parent, wxWindowID id) :
 	notebook = newd wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize);
 	wxz->Add(notebook, 1, wxEXPAND);
 	SetSizerAndFit(wxz);
+	const ThemeColors& theme = Theme::Dark();
+	SetBackgroundColour(theme.background);
+	notebook->SetBackgroundColour(theme.surface);
+	notebook->SetForegroundColour(theme.text);
+	wxAuiSimpleTabArt* art = new wxAuiSimpleTabArt();
+	art->SetColour(theme.surfaceAlt);
+	art->SetActiveColour(theme.accent);
+	notebook->SetArtProvider(art);
 }
 
 void MapTabbook::CycleTab(bool forward)

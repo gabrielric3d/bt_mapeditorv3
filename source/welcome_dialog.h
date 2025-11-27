@@ -20,6 +20,8 @@
 
 #include <wx/wx.h>
 
+#include "theme.h"
+
 wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
 class WelcomeDialogPanel;
@@ -46,7 +48,7 @@ public:
             const wxSize& size,
             const wxString& title_text,
             const wxString& version_text,
-            const wxColour& base_colour,
+            const ThemeColors& theme,
             const wxBitmap& rme_logo,
             const std::vector<wxString> &recent_files);
     void OnPaint(const wxPaintEvent& event);
@@ -55,6 +57,7 @@ private:
     wxBitmap m_rme_logo;
     wxString m_title_text;
     wxString m_version_text;
+    ThemeColors m_theme;
     wxColour m_text_colour;
     wxColour m_background_colour;
     wxCheckBox* m_show_welcome_dialog_checkbox;
@@ -63,7 +66,7 @@ private:
 class WelcomeDialogButton : public wxPanel
 {
 public:
-    WelcomeDialogButton(wxWindow* parent, const wxPoint& pos, const wxSize& size, const wxColour& base_colour, const wxString &text);
+    WelcomeDialogButton(wxWindow* parent, const wxPoint& pos, const wxSize& size, const ThemeColors& theme, const wxString &text);
     void OnPaint(const wxPaintEvent& event);
     void OnMouseEnter(const wxMouseEvent& event);
     void OnMouseLeave(const wxMouseEvent& event);
@@ -72,6 +75,7 @@ public:
 private:
     wxStandardID m_action;
     wxString m_text;
+    ThemeColors m_theme;
     wxColour m_text_colour;
     wxColour m_background;
     wxColour m_background_hover;
@@ -83,19 +87,20 @@ class RecentMapsPanel : public wxPanel
 public:
     RecentMapsPanel(wxWindow* parent,
             WelcomeDialog* dialog,
-            const wxColour& base_colour,
+            const ThemeColors& theme,
             const std::vector<wxString> &recent_files);
 };
 
 class RecentItem : public wxPanel
 {
 public:
-    RecentItem(wxWindow* parent, const wxColour& base_colour, const wxString &item_name);
+    RecentItem(wxWindow* parent, const ThemeColors& theme, const wxString &item_name);
     void OnMouseEnter(const wxMouseEvent& event);
     void OnMouseLeave(const wxMouseEvent& event);
     void PropagateItemClicked(wxMouseEvent& event);
     wxString GetText() { return m_item_text; };
 private:
+    ThemeColors m_theme;
     wxColour m_text_colour;
     wxColour m_text_colour_hover;
     wxStaticText* m_title;

@@ -38,6 +38,7 @@
 #include "materials.h"
 #include "live_client.h"
 #include "live_server.h"
+#include "theme.h"
 
 BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 END_EVENT_TABLE()
@@ -625,6 +626,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	recentFiles.AddFilesToMenu();
 	Update();
 	LoadValues();
+	Theme::ApplyMenu(menubar);
 	return true;
 }
 

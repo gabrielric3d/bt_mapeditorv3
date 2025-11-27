@@ -368,6 +368,7 @@
     <ClCompile Include="..\..\source\updater.cpp" />
     <ClInclude Include="..\..\source\brush.h" />
     <ClCompile Include="..\..\source\brush.cpp" />
+    <ClCompile Include="..\..\source\theme.cpp" />
     <ClInclude Include="..\..\source\brush_enums.h" />
     <ClInclude Include="..\..\source\materials.h" />
     <ClCompile Include="..\..\source\materials.cpp" />

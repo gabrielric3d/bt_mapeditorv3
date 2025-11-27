@@ -35,6 +35,7 @@
 #include "application.h"
 #include "live_server.h"
 #include "browse_tile_window.h"
+#include "theme.h"
 
 #include "doodad_brush.h"
 #include "house_exit_brush.h"
@@ -2505,6 +2506,8 @@ void MapPopupMenu::Update()
 			browseTile->Enable(anything_selected);
 		}
 	}
+
+	Theme::ApplyMenu(this);
 }
 
 void MapCanvas::getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill /*= false*/)

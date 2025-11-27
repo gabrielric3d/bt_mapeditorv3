@@ -30,19 +30,10 @@
 
 #include "house_brush.h"
 #include "map.h"
+#include "theme.h"
 
 #include <wx/dcbuffer.h>
 #include <wx/dcmemory.h>
-
-namespace
-{
-	// Colors mimic the light style shown in the reference UI.
-	const wxColour kSelectorBackground(235, 238, 243);
-	const wxColour kButtonBase(245, 247, 250);
-	const wxColour kButtonHover(222, 231, 245);
-	const wxColour kButtonSelected(203, 220, 247);
-	const wxColour kButtonBorder(166, 173, 188);
-}
 
 // ---------------------------------------------------------------------------
 // Custom button used by the palette selector. It keeps the painting/local
@@ -72,6 +63,9 @@ public:
 			wxFONTSTYLE_NORMAL,
 			wxFONTWEIGHT_NORMAL));
 		SetDoubleBuffered(true);
+		const ThemeColors& theme = Theme::Dark();
+		SetBackgroundColour(theme.surfaceAlt);
+		SetForegroundColour(theme.text);
 
 		Bind(wxEVT_PAINT, &PaletteCategoryButton::OnPaint, this);
 		Bind(wxEVT_ENTER_WINDOW, &PaletteCategoryButton::OnEnter, this);
@@ -94,20 +88,26 @@ private:
 	void OnPaint(wxPaintEvent&)
 	{
 		wxAutoBufferedPaintDC dc(this);
-		dc.SetBackground(wxBrush(kSelectorBackground));
+		const ThemeColors& theme = Theme::Dark();
+		dc.SetBackground(wxBrush(theme.surfaceAlt));
 		dc.Clear();
 
 		wxRect bounds = GetClientRect();
 		bounds.Deflate(4, 2);
 
-		const wxColour fill = selected ? kButtonSelected : (hovered ? kButtonHover : kButtonBase);
-		const wxColour border = selected ? wxColour(106, 136, 190) : kButtonBorder;
+		const wxColour fill = selected ? theme.controlActive : (hovered ? theme.controlHover : theme.controlBase);
+		const wxColour border = selected ? theme.accent : theme.border;
 
 		dc.SetPen(wxPen(border, 1));
 		dc.SetBrush(wxBrush(fill));
 		dc.DrawRoundedRectangle(bounds, 5);
 
-		dc.SetTextForeground(*wxBLACK);
+		if(selected) {
+			dc.SetPen(wxPen(theme.accent, 2));
+			dc.DrawLine(bounds.GetLeft() + 4, bounds.GetBottom() - 2, bounds.GetRight() - 4, bounds.GetBottom() - 2);
+		}
+
+		dc.SetTextForeground(theme.text);
 		int textWidth = 0;
 		int textHeight = 0;
 		dc.GetTextExtent(text, &textWidth, &textHeight);
@@ -180,6 +180,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	raw_palette(nullptr)
 {
 	SetMinSize(wxSize(225, 250));
+	const ThemeColors& theme = Theme::Dark();
+	SetBackgroundColour(theme.background);
+	SetForegroundColour(theme.text);
 
 	// Create the hidden book control that still hosts all palette pages.
 	choicebook = newd wxChoicebook(this, PALETTE_CHOICEBOOK, wxDefaultPosition, wxSize(230, 250));
@@ -191,8 +194,12 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	}
 
 	// Create the left-side selector panel that mimics a FlowLayout (vertical stack).
+	choicebook->SetBackgroundColour(theme.surface);
+	choicebook->SetForegroundColour(theme.text);
+
+	// Create the left-side selector panel that mimics a FlowLayout (vertical stack).
 	palette_selector_panel = newd wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(140, -1));
-	palette_selector_panel->SetBackgroundColour(kSelectorBackground);
+	palette_selector_panel->SetBackgroundColour(theme.surfaceAlt);
 	palette_selector_panel->SetMinSize(wxSize(140, -1));
 
 	terrain_palette = static_cast<BrushPalettePanel*>(CreateTerrainPalette(choicebook, tilesets));

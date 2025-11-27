@@ -29,6 +29,7 @@
 #include "materials.h"
 #include "doodad_brush.h"
 #include "spawn_brush.h"
+#include "theme.h"
 
 #include "common_windows.h"
 #include "result_window.h"
@@ -1014,6 +1015,7 @@ SearchResultWindow* GUI::ShowSearchWindow()
 {
 	if(search_result_window == nullptr) {
 		search_result_window = newd SearchResultWindow(root);
+		Theme::ApplyText(search_result_window, true);
 		aui_manager->AddPane(search_result_window, wxAuiPaneInfo().Caption("Search Results"));
 	} else {
 		aui_manager->GetPane(search_result_window).Show();
@@ -1026,6 +1028,7 @@ DuplicatedItemsWindow* GUI::ShowDuplicatedItemsWindow()
 {
 	if(!duplicated_items_window) {
 		duplicated_items_window = new DuplicatedItemsWindow(root);
+		Theme::ApplyText(duplicated_items_window, true);
 		aui_manager->AddPane(duplicated_items_window, wxAuiPaneInfo().Caption("Duplicated Items"));
 	} else {
 		aui_manager->GetPane(duplicated_items_window).Show();
@@ -1046,6 +1049,7 @@ ActionsHistoryWindow* GUI::ShowActionsWindow()
 {
 	if(!actions_history_window) {
 		actions_history_window = new ActionsHistoryWindow(root);
+		Theme::ApplyText(actions_history_window, true);
 		aui_manager->AddPane(actions_history_window, wxAuiPaneInfo().Caption("Actions History"));
 	} else {
 		aui_manager->GetPane(actions_history_window).Show();
@@ -1068,6 +1072,7 @@ RecentBrushesWindow* GUI::ShowRecentBrushesWindow()
 {
 	if(!recent_brushes_window) {
 		recent_brushes_window = newd RecentBrushesWindow(root);
+		Theme::ApplyText(recent_brushes_window, true);
 		recent_brushes_window->UpdateBrushes(recent_brushes);
 		aui_manager->AddPane(recent_brushes_window,
 			wxAuiPaneInfo().Caption("Recent Brushes").Right().BestSize(260, 400));
@@ -1132,6 +1137,7 @@ PaletteWindow* GUI::CreatePalette()
 		return nullptr;
 
 	auto *palette = newd PaletteWindow(root, g_materials.tilesets);
+	Theme::ApplyText(palette, true);
 	aui_manager->AddPane(palette, wxAuiPaneInfo().Caption("Palette").TopDockable(false).BottomDockable(false));
 	aui_manager->Update();
 
@@ -1211,6 +1217,7 @@ void GUI::CreateMinimap()
 		aui_manager->GetPane(minimap).Show(true);
 	} else {
 		minimap = newd MinimapWindow(root);
+		Theme::ApplyText(minimap, true);
 		minimap->Show(true);
 		aui_manager->AddPane(minimap, wxAuiPaneInfo().Caption("Minimap"));
 	}

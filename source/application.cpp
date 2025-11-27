@@ -29,6 +29,7 @@
 #include "main_menubar.h"
 #include "updater.h"
 #include "artprovider.h"
+#include "theme.h"
 
 #include "materials.h"
 #include "map.h"
@@ -45,6 +46,7 @@
 
 BEGIN_EVENT_TABLE(MainFrame, wxFrame)
 	EVT_CLOSE(MainFrame::OnExit)
+	EVT_MENU_OPEN(MainFrame::OnMenuOpen)
 
 	// Update check complete
 #ifdef _USE_UPDATER_
@@ -89,6 +91,35 @@ END_EVENT_TABLE()
 
 wxIMPLEMENT_APP(Application);
 
+namespace {
+
+void ApplyDarkAuiTheme(wxAuiManager* manager)
+{
+	if(!manager) {
+		return;
+	}
+
+	const ThemeColors& theme = Theme::Dark();
+	wxAuiDockArt* art = manager->GetArtProvider();
+	if(!art) {
+		return;
+	}
+
+	art->SetMetric(wxAUI_DOCKART_GRADIENT_TYPE, wxAUI_GRADIENT_NONE);
+	art->SetColour(wxAUI_DOCKART_BACKGROUND_COLOUR, theme.background);
+	art->SetColour(wxAUI_DOCKART_SASH_COLOUR, theme.border);
+	art->SetColour(wxAUI_DOCKART_BORDER_COLOUR, theme.border);
+	art->SetColour(wxAUI_DOCKART_GRIPPER_COLOUR, theme.surfaceHighlight);
+	art->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_COLOUR, theme.surfaceAlt);
+	art->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_GRADIENT_COLOUR, theme.surfaceAlt);
+	art->SetColour(wxAUI_DOCKART_INACTIVE_CAPTION_TEXT_COLOUR, theme.textMuted);
+	art->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_COLOUR, theme.accent);
+	art->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_GRADIENT_COLOUR, theme.accentSoft);
+	art->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_TEXT_COLOUR, theme.text);
+}
+
+}
+
 Application::~Application()
 {
 	// Destroy
@@ -111,6 +142,7 @@ bool Application::OnInit()
 
 	// Tell that we are the real thing
 	wxAppConsole::SetInstance(this);
+	Bind(wxEVT_CREATE, &Application::OnWindowCreated, this);
 	wxArtProvider::Push(new ArtProvider());
 
 #if defined(__LINUX__) || defined(__WINDOWS__)
@@ -344,6 +376,27 @@ void Application::OnFatalException()
 	////
 }
 
+void Application::OnWindowCreated(wxWindowCreateEvent& event)
+{
+	wxWindow* window = event.GetWindow();
+	event.Skip();
+	if(!window) {
+		return;
+	}
+
+	const ThemeColors& theme = Theme::Dark();
+	const wxClassInfo* info = window->GetClassInfo();
+	const bool is_gl_canvas = (info && info->GetClassName() && wxString(info->GetClassName()).CmpNoCase("wxGLCanvas") == 0);
+
+	if(window->IsTopLevel()) {
+		Theme::ApplySurface(window, theme.background);
+	} else if(!is_gl_canvas && (window->IsKindOf(CLASSINFO(wxPanel)) || window->IsKindOf(CLASSINFO(wxControl)))) {
+		Theme::ApplySurface(window, theme.surface);
+	} else {
+		Theme::ApplyText(window);
+	}
+}
+
 bool Application::ParseCommandLineMap(wxString& fileName)
 {
 	if(argc == 2) {
@@ -358,6 +411,10 @@ MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& si
 {
 	// Receive idle events
 	SetExtraStyle(wxWS_EX_PROCESS_IDLE);
+
+	const ThemeColors& theme = Theme::Dark();
+	SetBackgroundColour(theme.background);
+	SetForegroundColour(theme.text);
 
 	#if wxCHECK_VERSION(3, 1, 0) //3.1.0 or higher
 		// Make sure ShowFullScreen() uses the full screen API on macOS
@@ -380,16 +437,20 @@ MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& si
 
 	wxStatusBar* statusbar = CreateStatusBar();
 	statusbar->SetFieldsCount(4);
+	statusbar->SetBackgroundColour(theme.surfaceAlt);
+	statusbar->SetForegroundColour(theme.textMuted);
 	SetStatusText(wxString("Welcome to ") << __W_RME_APPLICATION_NAME__ << " " << __W_RME_VERSION__);
 
 	// Le sizer
 	g_gui.aui_manager = newd wxAuiManager(this);
+	ApplyDarkAuiTheme(g_gui.aui_manager);
 	g_gui.tabbook = newd MapTabbook(this, wxID_ANY);
 
 	tool_bar = newd MainToolBar(this, g_gui.aui_manager);
 
 	g_gui.aui_manager->AddPane(g_gui.tabbook, wxAuiPaneInfo().CenterPane().Floatable(false).CloseButton(false).PaneBorder(false));
 	g_gui.aui_manager->Update();
+	Theme::ApplyText(this, true);
 
 	UpdateMenubar();
 }
@@ -399,6 +460,15 @@ MainFrame::~MainFrame() = default;
 void MainFrame::OnIdle(wxIdleEvent& event)
 {
 	////
+}
+
+void MainFrame::OnMenuOpen(wxMenuEvent& event)
+{
+	wxMenu* menu = event.GetMenu();
+	if(menu) {
+		Theme::ApplyMenu(menu);
+	}
+	event.Skip();
 }
 
 #ifdef _USE_UPDATER_

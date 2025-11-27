@@ -23,6 +23,7 @@
 #include "brush.h"
 #include "pngfiles.h"
 #include "artprovider.h"
+#include "theme.h"
 
 #include <wx/artprov.h>
 #include <wx/mstream.h>
@@ -40,6 +41,32 @@ inline wxBitmap* _wxGetBitmapFromMemory(const unsigned char* data, int length)
 	wxImage img(is, "image/png");
 	if(!img.IsOk()) return nullptr;
 	return newd wxBitmap(img, -1);
+}
+
+namespace {
+
+void ApplyToolbarTheme(wxAuiToolBar* toolbar)
+{
+	if(!toolbar) {
+		return;
+	}
+
+	const ThemeColors& theme = Theme::Dark();
+	toolbar->SetBackgroundColour(theme.controlBase);
+	toolbar->SetForegroundColour(theme.text);
+	toolbar->SetGripperVisible(false);
+}
+
+void StylePositionControl(wxWindow* window)
+{
+	if(!window) {
+		return;
+	}
+	const ThemeColors& theme = Theme::Dark();
+	window->SetBackgroundColour(theme.surfaceAlt);
+	window->SetForegroundColour(theme.text);
+}
+
 }
 
 MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
@@ -69,6 +96,8 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	standard_toolbar->AddTool(wxID_COPY, wxEmptyString, copy_bitmap, wxNullBitmap, wxITEM_NORMAL, "Copy", wxEmptyString, NULL);
 	standard_toolbar->AddTool(wxID_PASTE, wxEmptyString, paste_bitmap, wxNullBitmap, wxITEM_NORMAL, "Paste", wxEmptyString, NULL);
 	standard_toolbar->Realize();
+	ApplyToolbarTheme(standard_toolbar);
+	Theme::ApplyText(standard_toolbar, true);
 
 	wxBitmap* border_bitmap = loadPNGFile(optional_border_small_png);
 	wxBitmap* eraser_bitmap = loadPNGFile(eraser_small_png);
@@ -101,6 +130,8 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_HATCH_DOOR, wxEmptyString, *hatch_bitmap, wxNullBitmap, wxITEM_CHECK, "Hatch Window", wxEmptyString, NULL);
 	brushes_toolbar->AddTool(PALETTE_TERRAIN_WINDOW_DOOR, wxEmptyString, *window_bitmap, wxNullBitmap, wxITEM_CHECK, "Window", wxEmptyString, NULL);
 	brushes_toolbar->Realize();
+	ApplyToolbarTheme(brushes_toolbar);
+	Theme::ApplyText(brushes_toolbar, true);
 
 	wxBitmap go_bitmap = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, icon_size);
 
@@ -120,6 +151,13 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	position_toolbar->AddControl(z_control);
 	position_toolbar->AddControl(go_button);
 	position_toolbar->Realize();
+	ApplyToolbarTheme(position_toolbar);
+	Theme::ApplyText(position_toolbar, true);
+	StylePositionControl(x_control);
+	StylePositionControl(y_control);
+	StylePositionControl(z_control);
+	go_button->SetBackgroundColour(Theme::Dark().controlHover);
+	go_button->SetForegroundColour(Theme::Dark().text);
 
 	wxBitmap circular_bitmap = wxArtProvider::GetBitmap(ART_CIRCULAR, wxART_TOOLBAR, icon_size);
 	wxBitmap rectangular_bitmap = wxArtProvider::GetBitmap(ART_RECTANGULAR, wxART_TOOLBAR, icon_size);
@@ -146,6 +184,8 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	sizes_toolbar->Realize();
 	sizes_toolbar->ToggleTool(TOOLBAR_SIZES_RECTANGULAR, true);
 	sizes_toolbar->ToggleTool(TOOLBAR_SIZES_1, true);
+	ApplyToolbarTheme(sizes_toolbar);
+	Theme::ApplyText(sizes_toolbar, true);
 
 	wxBitmap hooks_bitmap = wxArtProvider::GetBitmap(ART_HOOKS_TOOLBAR, wxART_TOOLBAR, icon_size);
 	wxBitmap pickupables_bitmap = wxArtProvider::GetBitmap(ART_PICKUPABLE_TOOLBAR, wxART_TOOLBAR, icon_size);
@@ -160,6 +200,8 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	indicators_toolbar->ToggleTool(TOOLBAR_HOOKS, g_settings.getBoolean(Config::SHOW_WALL_HOOKS));
 	indicators_toolbar->ToggleTool(TOOLBAR_PICKUPABLES, g_settings.getBoolean(Config::SHOW_PICKUPABLES));
 	indicators_toolbar->ToggleTool(TOOLBAR_MOVEABLES, g_settings.getBoolean(Config::SHOW_MOVEABLES));
+	ApplyToolbarTheme(indicators_toolbar);
+	Theme::ApplyText(indicators_toolbar, true);
 
 	manager->AddPane(standard_toolbar, wxAuiPaneInfo().Name(STANDARD_BAR_NAME).ToolbarPane().Top().Row(1).Position(1).Floatable(false));
 	manager->AddPane(brushes_toolbar, wxAuiPaneInfo().Name(BRUSHES_BAR_NAME).ToolbarPane().Top().Row(1).Position(2).Floatable(false));

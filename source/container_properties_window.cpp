@@ -25,6 +25,7 @@
 #include "gui.h"
 #include "complexitem.h"
 #include "map.h"
+#include "theme.h"
 
 // ============================================================================
 // Container Item Button
@@ -225,4 +226,6 @@ void ContainerItemPopupMenu::Update(ContainerItemButton* btn)
 	Container* parentContainer = btn->getParentContainer();
 	if(parentContainer->getVolume() <= (int)parentContainer->getVector().size())
 		addItem->Enable(false);
+
+	Theme::ApplyMenu(this);
 }

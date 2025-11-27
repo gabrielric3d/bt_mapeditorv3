@@ -27,6 +27,8 @@
 #include "map_display.h"
 #include "welcome_dialog.h"
 
+#include <wx/window.h>
+
 class Item;
 class Creature;
 
@@ -50,6 +52,7 @@ private:
     wxString m_file_to_open;
 	void FixVersionDiscrapencies();
 	bool ParseCommandLineMap(wxString& fileName);
+	void OnWindowCreated(wxWindowCreateEvent& event);
 
 	virtual void OnFatalException();
 
@@ -87,6 +90,7 @@ public:
 	void UpdateFloorMenu();
 	void UpdateIndicatorsMenu();
 	void OnIdle(wxIdleEvent& event);
+	void OnMenuOpen(wxMenuEvent& event);
 	void OnExit(wxCloseEvent& event);
 
 #ifdef _USE_UPDATER_

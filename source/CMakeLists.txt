@@ -96,6 +96,7 @@ ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/sprites.h
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/templates.h
+${CMAKE_CURRENT_LIST_DIR}/theme.h
 ${CMAKE_CURRENT_LIST_DIR}/threads.h
 ${CMAKE_CURRENT_LIST_DIR}/tile.h
 ${CMAKE_CURRENT_LIST_DIR}/tileset.h
@@ -198,6 +199,7 @@ ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap854.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemapclassic.cpp
+${CMAKE_CURRENT_LIST_DIR}/theme.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tile.cpp
 ${CMAKE_CURRENT_LIST_DIR}/tileset.cpp
 ${CMAKE_CURRENT_LIST_DIR}/town.cpp
