@@ -31,6 +31,130 @@
 #include "house_brush.h"
 #include "map.h"
 
+#include <wx/dcbuffer.h>
+#include <wx/dcmemory.h>
+
+namespace
+{
+	// Colors mimic the light style shown in the reference UI.
+	const wxColour kSelectorBackground(235, 238, 243);
+	const wxColour kButtonBase(245, 247, 250);
+	const wxColour kButtonHover(222, 231, 245);
+	const wxColour kButtonSelected(203, 220, 247);
+	const wxColour kButtonBorder(166, 173, 188);
+}
+
+// ---------------------------------------------------------------------------
+// Custom button used by the palette selector. It keeps the painting/local
+// events encapsulated so PaletteWindow only worries about layout + wiring.
+
+class PaletteCategoryButton : public wxPanel
+{
+public:
+	PaletteCategoryButton(
+		wxWindow* parent,
+		PaletteType type,
+		const wxString& label,
+		const wxBitmap& icon_bitmap) :
+		wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(120, 36)),
+		palette_type(type),
+		text(label),
+		icon(icon_bitmap),
+		hovered(false),
+		selected(false)
+	{
+		SetBackgroundStyle(wxBG_STYLE_PAINT);
+		SetMinSize(wxSize(120, 32));
+		SetCursor(wxCursor(wxCURSOR_HAND));
+		SetFont(wxFont(
+			9,
+			wxFONTFAMILY_SWISS,
+			wxFONTSTYLE_NORMAL,
+			wxFONTWEIGHT_NORMAL));
+		SetDoubleBuffered(true);
+
+		Bind(wxEVT_PAINT, &PaletteCategoryButton::OnPaint, this);
+		Bind(wxEVT_ENTER_WINDOW, &PaletteCategoryButton::OnEnter, this);
+		Bind(wxEVT_LEAVE_WINDOW, &PaletteCategoryButton::OnLeave, this);
+		Bind(wxEVT_LEFT_UP, &PaletteCategoryButton::OnClick, this);
+	}
+
+	void SetSelected(bool value)
+	{
+		if(selected == value) {
+			return;
+		}
+		selected = value;
+		Refresh();
+	}
+
+	PaletteType GetPaletteType() const { return palette_type; }
+
+private:
+	void OnPaint(wxPaintEvent&)
+	{
+		wxAutoBufferedPaintDC dc(this);
+		dc.SetBackground(wxBrush(kSelectorBackground));
+		dc.Clear();
+
+		wxRect bounds = GetClientRect();
+		bounds.Deflate(4, 2);
+
+		const wxColour fill = selected ? kButtonSelected : (hovered ? kButtonHover : kButtonBase);
+		const wxColour border = selected ? wxColour(106, 136, 190) : kButtonBorder;
+
+		dc.SetPen(wxPen(border, 1));
+		dc.SetBrush(wxBrush(fill));
+		dc.DrawRoundedRectangle(bounds, 5);
+
+		dc.SetTextForeground(*wxBLACK);
+		int textWidth = 0;
+		int textHeight = 0;
+		dc.GetTextExtent(text, &textWidth, &textHeight);
+
+		int textX = bounds.GetLeft() + 12;
+		if(icon.IsOk()) {
+			wxSize iconSize = icon.GetSize();
+			const int iconX = bounds.GetLeft() + 8;
+			const int iconY = bounds.GetY() + (bounds.GetHeight() - iconSize.GetHeight()) / 2;
+			dc.DrawBitmap(icon, iconX, iconY, true);
+			textX = iconX + iconSize.GetWidth() + 6;
+		}
+
+		const int textY = bounds.GetY() + (bounds.GetHeight() - textHeight) / 2;
+		dc.DrawText(text, textX, textY);
+	}
+
+	void OnEnter(wxMouseEvent& event)
+	{
+		hovered = true;
+		Refresh();
+		event.Skip();
+	}
+
+	void OnLeave(wxMouseEvent& event)
+	{
+		hovered = false;
+		Refresh();
+		event.Skip();
+	}
+
+	void OnClick(wxMouseEvent& event)
+	{
+		wxCommandEvent click(wxEVT_BUTTON, GetId());
+		click.SetEventObject(this);
+		click.SetInt(static_cast<int>(palette_type));
+		wxPostEvent(this, click);
+		event.Skip();
+	}
+
+	PaletteType palette_type;
+	wxString text;
+	wxBitmap icon;
+	bool hovered;
+	bool selected;
+};
+
 // ============================================================================
 // Palette window
 
@@ -45,6 +169,8 @@ END_EVENT_TABLE()
 PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets) :
 	wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(230, 250)),
 	choicebook(nullptr),
+	palette_selector_panel(nullptr),
+	current_palette(TILESET_UNKNOWN),
 	terrain_palette(nullptr),
 	doodad_palette(nullptr),
 	item_palette(nullptr),
@@ -55,8 +181,19 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 {
 	SetMinSize(wxSize(225, 250));
 
-	// Create choicebook
+	// Create the hidden book control that still hosts all palette pages.
 	choicebook = newd wxChoicebook(this, PALETTE_CHOICEBOOK, wxDefaultPosition, wxSize(230, 250));
+	choicebook->SetMinSize(wxSize(225, 300));
+	if(choicebook->GetChoiceCtrl()) {
+		// Hide the original ComboBox so that all palette switching runs through our custom buttons.
+		choicebook->GetChoiceCtrl()->Hide();
+		choicebook->GetChoiceCtrl()->SetMinSize(wxSize(0, 0));
+	}
+
+	// Create the left-side selector panel that mimics a FlowLayout (vertical stack).
+	palette_selector_panel = newd wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(140, -1));
+	palette_selector_panel->SetBackgroundColour(kSelectorBackground);
+	palette_selector_panel->SetMinSize(wxSize(140, -1));
 
 	terrain_palette = static_cast<BrushPalettePanel*>(CreateTerrainPalette(choicebook, tilesets));
 	choicebook->AddPage(terrain_palette, terrain_palette->GetName());
@@ -79,14 +216,17 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	raw_palette = static_cast<BrushPalettePanel*>(CreateRAWPalette(choicebook, tilesets));
 	choicebook->AddPage(raw_palette, raw_palette->GetName());
 
-	// Setup sizers
-	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
-	choicebook->SetMinSize(wxSize(225, 300));
+	BuildPaletteSelector();
+
+	// Setup layout: palette selector on the left, content book on the right.
+	wxSizer* sizer = newd wxBoxSizer(wxHORIZONTAL);
+	sizer->Add(palette_selector_panel, 0, wxEXPAND | wxRIGHT, 6);
 	sizer->Add(choicebook, 1, wxEXPAND);
 	SetSizer(sizer);
 
 	// Load first page
 	LoadCurrentContents();
+	UpdateButtonStates(GetSelectedPage());
 
 	Fit();
 }
@@ -230,19 +370,7 @@ void PaletteWindow::InvalidateContents()
 
 void PaletteWindow::SelectPage(PaletteType id)
 {
-	if(!choicebook) return;
-	if(id == GetSelectedPage()) {
-		return;
-	}
-
-	for(size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
-		PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
-		if(panel->GetType() == id) {
-			choicebook->SetSelection(iz);
-			//LoadCurrentContents();
-			break;
-		}
-	}
+	ChangePalette(id);
 }
 
 Brush* PaletteWindow::GetSelectedBrush() const
@@ -378,6 +506,7 @@ void PaletteWindow::OnSwitchingPage(wxChoicebookEvent& event)
 void PaletteWindow::OnPageChanged(wxChoicebookEvent& event)
 {
 	if(!choicebook) return;
+	UpdateButtonStates(GetSelectedPage());
 	g_gui.SelectBrush();
 }
 
@@ -420,4 +549,81 @@ void PaletteWindow::OnClose(wxCloseEvent& event)
 		Show(false);
 		event.Veto(true);
 	}
+}
+
+void PaletteWindow::ChangePalette(PaletteType id)
+{
+	if(!choicebook || id == TILESET_UNKNOWN)
+		return;
+
+	if(id == current_palette) {
+		UpdateButtonStates(id);
+		return;
+	}
+
+	for(size_t iz = 0; iz < choicebook->GetPageCount(); ++iz) {
+		PalettePanel* panel = dynamic_cast<PalettePanel*>(choicebook->GetPage(iz));
+		if(panel && panel->GetType() == id) {
+			choicebook->SetSelection(iz);
+			UpdateButtonStates(id);
+			break;
+		}
+	}
+}
+
+void PaletteWindow::BuildPaletteSelector()
+{
+	if(!palette_selector_panel)
+		return;
+
+	wxBoxSizer* selectorSizer = newd wxBoxSizer(wxVERTICAL);
+	selectorSizer->AddSpacer(6);
+	palette_selector_panel->SetSizer(selectorSizer);
+
+	struct ButtonInfo
+	{
+		PaletteType type;
+		const char* label;
+	};
+
+	const ButtonInfo buttons[] = {
+		{TILESET_TERRAIN, "Terrain"},
+		{TILESET_DOODAD, "Doodad"},
+		{TILESET_ITEM, "Item"},
+		{TILESET_HOUSE, "House"},
+		{TILESET_CREATURE, "Creature"},
+		{TILESET_RAW, "RAW"}
+	};
+
+	for(const ButtonInfo& info : buttons) {
+		PaletteCategoryButton* button = newd PaletteCategoryButton(
+			palette_selector_panel,
+			info.type,
+			wxString(info.label),
+			wxBitmap());
+		button->Bind(wxEVT_BUTTON, &PaletteWindow::OnPaletteCategoryClicked, this);
+		palette_buttons[info.type] = button;
+		selectorSizer->Add(button, 0, wxEXPAND | wxBOTTOM, 6);
+	}
+
+	selectorSizer->AddStretchSpacer(1);
+}
+
+void PaletteWindow::UpdateButtonStates(PaletteType palette)
+{
+	if(current_palette == palette && !palette_buttons.empty()) {
+		// Already highlighted, nothing else to do.
+		return;
+	}
+
+	current_palette = palette;
+	for(auto& entry : palette_buttons) {
+		entry.second->SetSelected(entry.first == palette);
+	}
+}
+
+void PaletteWindow::OnPaletteCategoryClicked(wxCommandEvent& event)
+{
+	const PaletteType type = static_cast<PaletteType>(event.GetInt());
+	ChangePalette(type);
 }
