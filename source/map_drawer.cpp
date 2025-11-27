@@ -231,6 +231,7 @@ void MapDrawer::Draw()
 		DrawSelectionBox();
 	DrawLiveCursors();
 	DrawBrush();
+	DrawCursorTile();
 	if(options.show_grid && zoom <= 10.f)
 		DrawGrid();
 	if(options.show_ingame_box)
@@ -1079,6 +1080,29 @@ void MapDrawer::DrawBrush()
 			}
 		}
 	}
+}
+
+void MapDrawer::DrawCursorTile()
+{
+	if(canvas->screenshot_buffer) {
+		return;
+	}
+
+	if(!canvas->cursor_in_window) {
+		return;
+	}
+
+	if(!g_settings.getBoolean(Config::SHOW_CURSOR_HIGHLIGHT)) {
+		return;
+	}
+
+	Position cursor_position(mouse_map_x, mouse_map_y, floor);
+	int x, y;
+	getDrawPosition(cursor_position, x, y);
+
+	glDisable(GL_TEXTURE_2D);
+	drawRect(x, y, rme::TileSize, rme::TileSize, *wxWHITE, 2);
+	glEnable(GL_TEXTURE_2D);
 }
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, const Item* item, bool ephemeral, int red, int green, int blue, int alpha)

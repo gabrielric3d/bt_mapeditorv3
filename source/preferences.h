@@ -99,6 +99,7 @@ protected:
 	wxCheckBox* large_raw_sizebar_chkbox;
 	wxCheckBox* large_container_icons_chkbox;
 	wxCheckBox* large_pick_item_icons_chkbox;
+	wxCheckBox* cursor_highlight_chkbox;
 
 	wxCheckBox* switch_mousebtn_chkbox;
 	wxCheckBox* doubleclick_properties_chkbox;

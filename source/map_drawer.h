@@ -138,6 +138,7 @@ public:
 	void DrawSelectionBox();
 	void DrawLiveCursors();
 	void DrawBrush();
+	void DrawCursorTile();
 	void DrawIngameBox();
 	void DrawGrid();
 	void DrawTooltips();

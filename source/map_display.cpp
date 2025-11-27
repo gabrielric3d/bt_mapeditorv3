@@ -112,6 +112,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	zoom(1.0),
 	cursor_x(-1),
 	cursor_y(-1),
+	cursor_in_window(false),
 	dragging(false),
 	boundbox_selection(false),
 	screendragging(false),
@@ -461,11 +462,14 @@ void MapCanvas::UpdateZoomStatus()
 
 void MapCanvas::OnMouseMove(wxMouseEvent& event)
 {
+	bool refresh_requested = false;
 	if(screendragging) {
 		GetMapWindow()->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom*(event.GetX() - cursor_x)), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom*(event.GetY() - cursor_y)));
 		Refresh();
+		refresh_requested = true;
 	}
 
+	cursor_in_window = true;
 	cursor_x = event.GetX();
 	cursor_y = event.GetY();
 
@@ -488,6 +492,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 	if(g_gui.IsSelectionMode()) {
 		if(map_update && isPasting()) {
 			Refresh();
+			refresh_requested = true;
 		} else if(map_update && dragging) {
 			wxString ss;
 
@@ -498,6 +503,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 			g_gui.SetStatusText(ss);
 
 			Refresh();
+			refresh_requested = true;
 		} else if(boundbox_selection) {
 			if(map_update) {
 				wxString ss;
@@ -509,10 +515,12 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 			}
 
 			Refresh();
+			refresh_requested = true;
 		}
 	} else { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
 		if(map_update && drawing && brush) {
+			g_gui.AddRecentBrush(brush);
 			if(brush->isDoodad()) {
 				if(event.ControlDown()) {
 					PositionVector tilestodraw;
@@ -587,11 +595,18 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 			g_gui.FillDoodadPreviewBuffer();
 
 			g_gui.RefreshView();
+			refresh_requested = true;
 		} else if(dragging_draw) {
 			g_gui.RefreshView();
+			refresh_requested = true;
 		} else if(map_update && brush) {
 			Refresh();
+			refresh_requested = true;
 		}
+	}
+
+	if(map_update && !refresh_requested) {
+		Refresh();
 	}
 }
 
@@ -802,6 +817,7 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 		} while(false);
 	} else if(g_gui.GetCurrentBrush()) { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
+		g_gui.AddRecentBrush(brush);
 		if(event.ShiftDown() && brush->canDrag()) {
 			dragging_draw = true;
 		} else {
@@ -1555,6 +1571,7 @@ void MapCanvas::OnWheel(wxMouseEvent& event)
 
 void MapCanvas::OnLoseMouse(wxMouseEvent& event)
 {
+	cursor_in_window = false;
 	Refresh();
 }
 

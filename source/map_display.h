@@ -141,6 +141,7 @@ private:
 	double zoom;
 	int cursor_x;
 	int cursor_y;
+	bool cursor_in_window;
 
 	bool dragging;
 	bool boundbox_selection;

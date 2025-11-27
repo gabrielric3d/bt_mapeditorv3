@@ -294,6 +294,7 @@ void Settings::IO(IOMode mode)
 	section("UI");
 	Int(USE_LARGE_CONTAINER_ICONS, 1);
 	Int(USE_LARGE_CHOOSE_ITEM_ICONS, 1);
+	Int(SHOW_CURSOR_HIGHLIGHT, 1);
 	Int(USE_LARGE_TERRAIN_TOOLBAR, 1);
 	Int(USE_LARGE_DOODAD_SIZEBAR, 1);
 	Int(USE_LARGE_ITEM_SIZEBAR, 1);
@@ -312,6 +313,8 @@ void Settings::IO(IOMode mode)
 	String(MINIMAP_LAYOUT, "name=066e2bc8486298990000259a00000003;caption=Minimap;state=2099151;dir=4;layer=0;row=0;pos=0;prop=100000;bestw=170;besth=130;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=221;floath=164");
 	Int(ACTIONS_HISTORY_VISIBLE, 0);
 	String(ACTIONS_HISTORY_LAYOUT, "name=945c6eb52a414f1B817e8befd4479412;caption=Actions;state=2099151;dir=2;layer=0;row=0;pos=0;prop=100000;bestw=170;besth=130;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=221;floath=164");
+	Int(RECENT_BRUSHES_VISIBLE, 0);
+	String(RECENT_BRUSHES_LAYOUT, "");
 	Int(WINDOW_HEIGHT, 500);
 	Int(WINDOW_WIDTH, 700);
 	Int(WINDOW_MAXIMIZED, 0);

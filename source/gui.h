@@ -28,6 +28,7 @@
 #include "editor_tabs.h"
 #include "map_tab.h"
 #include "palette_window.h"
+#include "recent_brushes_window.h"
 #include "client_version.h"
 
 class BaseMap;
@@ -186,6 +187,9 @@ public:
 	void UpdateMenus();
 	void UpdateActions();
 	void RefreshActions();
+	void AddRecentBrush(const Brush* brush);
+	void ClearRecentBrushes();
+	const RecentBrushMap& GetRecentBrushes() const { return recent_brushes; }
 	void ShowToolbar(ToolBarID id, bool show);
 	void SetStatusText(wxString text);
 
@@ -211,6 +215,8 @@ public:
 
 	ActionsHistoryWindow* ShowActionsWindow();
 	void HideActionsWindow();
+	RecentBrushesWindow* ShowRecentBrushesWindow();
+	void HideRecentBrushesWindow();
 
 	// Minimap
 	void CreateMinimap();
@@ -243,6 +249,7 @@ public:
 	// Updates the palette AND selects the brush, second parameter is first palette to look in
 	// Returns true if the brush was found and selected
 	bool SelectBrush(const Brush* brush, PaletteType pt = TILESET_UNKNOWN);
+	void ActivateBrush(const Brush* brush);
 	// Selects the brush selected before the current brush
 	void SelectPreviousBrush();
 	// Only selects the brush, doesn't update the palette
@@ -385,6 +392,8 @@ public:
 	SearchResultWindow* search_result_window;
 	DuplicatedItemsWindow* duplicated_items_window;
 	ActionsHistoryWindow* actions_history_window;
+	RecentBrushesWindow* recent_brushes_window;
+	RecentBrushMap recent_brushes;
 	GraphicManager gfx;
 
 	BaseMap* secondary_map; // A buffer map

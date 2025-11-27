@@ -161,6 +161,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
+	MAKE_ACTION(WIN_RECENT_BRUSHES, wxITEM_NORMAL, OnRecentBrushesWindow);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 
@@ -389,6 +390,7 @@ void MainMenuBar::Update()
 		CheckItem(SHOW_SPAWNS, g_settings.getBoolean(Config::SHOW_SPAWNS));
 
 	EnableItem(WIN_MINIMAP, loaded);
+	EnableItem(WIN_RECENT_BRUSHES, loaded);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
@@ -1973,6 +1975,11 @@ void MainMenuBar::OnMinimapWindow(wxCommandEvent& event)
 void MainMenuBar::OnActionsHistoryWindow(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.ShowActionsWindow();
+}
+
+void MainMenuBar::OnRecentBrushesWindow(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.ShowRecentBrushesWindow();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

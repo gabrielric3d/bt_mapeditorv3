@@ -446,6 +446,11 @@ wxNotebookPage* PreferencesWindow::CreateUIPage()
 	large_pick_item_icons_chkbox->SetValue(g_settings.getBoolean(Config::USE_LARGE_CHOOSE_ITEM_ICONS));
 	sizer->Add(large_pick_item_icons_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	cursor_highlight_chkbox = newd wxCheckBox(ui_page, wxID_ANY, "Show hovered tile highlight");
+	cursor_highlight_chkbox->SetValue(g_settings.getBoolean(Config::SHOW_CURSOR_HIGHLIGHT));
+	cursor_highlight_chkbox->SetToolTip("Draws a white square on the map tile currently under the mouse cursor.");
+	sizer->Add(cursor_highlight_chkbox, 0, wxLEFT | wxTOP, 5);
+
 	sizer->AddSpacer(10);
 
 	switch_mousebtn_chkbox = newd wxCheckBox(ui_page, wxID_ANY, "Switch mousebuttons");
@@ -677,6 +682,7 @@ void PreferencesWindow::Apply()
 	g_settings.setInteger(Config::USE_LARGE_RAW_SIZEBAR, large_raw_sizebar_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_LARGE_CONTAINER_ICONS, large_container_icons_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_LARGE_CHOOSE_ITEM_ICONS, large_pick_item_icons_chkbox->GetValue());
+	g_settings.setInteger(Config::SHOW_CURSOR_HIGHLIGHT, cursor_highlight_chkbox->GetValue());
 
 
 	g_settings.setInteger(Config::SWITCH_MOUSEBUTTONS, switch_mousebtn_chkbox->GetValue());

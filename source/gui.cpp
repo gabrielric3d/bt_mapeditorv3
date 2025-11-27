@@ -39,10 +39,13 @@
 #include "application.h"
 #include "welcome_dialog.h"
 #include "actions_history_window.h"
+#include "recent_brushes_window.h"
 
 #include "live_client.h"
 #include "live_tab.h"
 #include "live_server.h"
+
+#include <algorithm>
 
 #ifdef __WXOSX__
 #include <AGL/agl.h>
@@ -50,6 +53,35 @@
 
 const wxEventType EVT_UPDATE_MENUS = wxNewEventType();
 const wxEventType EVT_UPDATE_ACTIONS = wxNewEventType();
+
+namespace {
+
+constexpr size_t kMaxRecentBrushesPerCategory = 24;
+
+TilesetCategoryType GetRecentBrushCategory(const Brush* brush)
+{
+	if(!brush) {
+		return TILESET_UNKNOWN;
+	}
+
+	if(brush->isRaw())
+		return TILESET_RAW;
+	if(brush->isDoodad())
+		return TILESET_DOODAD;
+	if(brush->isCreature() || brush->isSpawn())
+		return TILESET_CREATURE;
+	if(brush->isHouse() || brush->isHouseExit())
+		return TILESET_HOUSE;
+	if(brush->isWaypoint())
+		return TILESET_WAYPOINT;
+	if(brush->isTerrain() || brush->isGround() || brush->isWall() || brush->isDoor() || brush->isOptionalBorder() ||
+		brush->isFlag() || brush->isCarpet() || brush->isTable() || brush->isEraser())
+		return TILESET_TERRAIN;
+
+	return TILESET_ITEM;
+}
+
+}
 
 // Global GUI instance
 GUI g_gui;
@@ -63,6 +95,7 @@ GUI::GUI() :
 	search_result_window(nullptr),
 	duplicated_items_window(nullptr),
 	actions_history_window(nullptr),
+	recent_brushes_window(nullptr),
 	secondary_map(nullptr),
 	doodad_buffer_map(nullptr),
 
@@ -895,6 +928,39 @@ void GUI::LoadPerspective()
 			}
 		}
 
+		if(g_settings.getInteger(Config::RECENT_BRUSHES_VISIBLE)) {
+			if(!recent_brushes_window) {
+				wxAuiPaneInfo info;
+				const wxString& data = wxstr(g_settings.getString(Config::RECENT_BRUSHES_LAYOUT));
+				aui_manager->LoadPaneInfo(data, info);
+
+				recent_brushes_window = newd RecentBrushesWindow(root);
+				recent_brushes_window->UpdateBrushes(recent_brushes);
+				aui_manager->AddPane(recent_brushes_window, info);
+			} else {
+				wxAuiPaneInfo& info = aui_manager->GetPane(recent_brushes_window);
+				const wxString& data = wxstr(g_settings.getString(Config::RECENT_BRUSHES_LAYOUT));
+				aui_manager->LoadPaneInfo(data, info);
+			}
+
+			wxAuiPaneInfo& info = aui_manager->GetPane(recent_brushes_window);
+			if(info.IsFloatable()) {
+				bool offscreen = true;
+				for(uint32_t index = 0; index < wxDisplay::GetCount(); ++index) {
+					wxDisplay display(index);
+					wxRect rect = display.GetClientArea();
+					if(rect.Contains(info.floating_pos)) {
+						offscreen = false;
+						break;
+					}
+				}
+
+				if(offscreen) {
+					info.Dock();
+				}
+			}
+		}
+
 		aui_manager->Update();
 		root->UpdateMenubar();
 	}
@@ -909,6 +975,7 @@ void GUI::SavePerspective()
 	g_settings.setInteger(Config::WINDOW_HEIGHT, root->GetSize().GetHeight());
 	g_settings.setInteger(Config::MINIMAP_VISIBLE, minimap? 1: 0);
 	g_settings.setInteger(Config::ACTIONS_HISTORY_VISIBLE, actions_history_window ? 1 : 0);
+	g_settings.setInteger(Config::RECENT_BRUSHES_VISIBLE, recent_brushes_window ? 1 : 0);
 
 	wxString pinfo;
 	for(auto &palette : palettes) {
@@ -925,6 +992,11 @@ void GUI::SavePerspective()
 	if(actions_history_window) {
 		wxString info = aui_manager->SavePaneInfo(aui_manager->GetPane(actions_history_window));
 		g_settings.setString(Config::ACTIONS_HISTORY_LAYOUT, nstr(info));
+	}
+
+	if(recent_brushes_window) {
+		wxString info = aui_manager->SavePaneInfo(aui_manager->GetPane(recent_brushes_window));
+		g_settings.setString(Config::RECENT_BRUSHES_LAYOUT, nstr(info));
 	}
 
 	root->GetAuiToolBar()->SavePerspective();
@@ -988,6 +1060,30 @@ void GUI::HideActionsWindow()
 {
 	if(actions_history_window) {
 		aui_manager->GetPane(actions_history_window).Show(false);
+		aui_manager->Update();
+	}
+}
+
+RecentBrushesWindow* GUI::ShowRecentBrushesWindow()
+{
+	if(!recent_brushes_window) {
+		recent_brushes_window = newd RecentBrushesWindow(root);
+		recent_brushes_window->UpdateBrushes(recent_brushes);
+		aui_manager->AddPane(recent_brushes_window,
+			wxAuiPaneInfo().Caption("Recent Brushes").Right().BestSize(260, 400));
+	} else {
+		aui_manager->GetPane(recent_brushes_window).Show();
+	}
+	recent_brushes_window->UpdateBrushes(recent_brushes);
+	recent_brushes_window->SetSelectedBrush(current_brush);
+	aui_manager->Update();
+	return recent_brushes_window;
+}
+
+void GUI::HideRecentBrushesWindow()
+{
+	if(recent_brushes_window) {
+		aui_manager->GetPane(recent_brushes_window).Show(false);
 		aui_manager->Update();
 	}
 }
@@ -1526,6 +1622,40 @@ void GUI::RefreshActions()
 		actions_history_window->RefreshActions();
 }
 
+void GUI::AddRecentBrush(const Brush* brush)
+{
+	if(!brush) {
+		return;
+	}
+
+	const TilesetCategoryType category = GetRecentBrushCategory(brush);
+	if(category == TILESET_UNKNOWN) {
+		return;
+	}
+
+	auto& list = recent_brushes[category];
+	if(std::find(list.begin(), list.end(), brush) != list.end()) {
+		return;
+	}
+
+	if(list.size() >= kMaxRecentBrushesPerCategory) {
+		list.erase(list.begin());
+	}
+	list.push_back(brush);
+
+	if(recent_brushes_window) {
+		recent_brushes_window->UpdateBrushes(recent_brushes);
+	}
+}
+
+void GUI::ClearRecentBrushes()
+{
+	recent_brushes.clear();
+	if(recent_brushes_window) {
+		recent_brushes_window->UpdateBrushes(recent_brushes);
+	}
+}
+
 void GUI::ShowToolbar(ToolBarID id, bool show)
 {
 	if(root && root->GetAuiToolBar())
@@ -1797,6 +1927,20 @@ bool GUI::SelectBrush(const Brush* whatbrush, PaletteType primary)
 	return true;
 }
 
+void GUI::ActivateBrush(const Brush* brush)
+{
+	if(!brush)
+		return;
+
+	if(palettes.empty() && !CreatePalette())
+		return;
+
+	SelectBrushInternal(const_cast<Brush*>(brush));
+	if(root && root->GetAuiToolBar()) {
+		root->GetAuiToolBar()->UpdateBrushButtons();
+	}
+}
+
 void GUI::SelectBrushInternal(Brush* brush)
 {
 	// Fear no evil don't you say no evil
@@ -1813,6 +1957,9 @@ void GUI::SelectBrushInternal(Brush* brush)
 		secondary_map = doodad_buffer_map;
 
 	SetDrawingMode();
+	if(recent_brushes_window) {
+		recent_brushes_window->SetSelectedBrush(current_brush);
+	}
 	RefreshView();
 }
 
