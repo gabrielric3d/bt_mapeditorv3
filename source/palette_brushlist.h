@@ -66,6 +66,9 @@ public:
 
 	void OnKey(wxKeyEvent& event);
 
+private:
+	int icon_pixel_size;
+
 	DECLARE_EVENT_TABLE();
 };
 

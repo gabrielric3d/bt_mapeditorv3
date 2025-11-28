@@ -77,6 +77,11 @@ protected:
 	wxCheckBox* hide_items_when_zoomed_chkbox;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;
+	wxCheckBox* custom_client_box_chkbox;
+	wxSpinCtrl* client_box_width_spin;
+	wxSpinCtrl* client_box_height_spin;
+	wxSpinCtrl* client_box_offset_x_spin;
+	wxSpinCtrl* client_box_offset_y_spin;
 	/*
 	wxCheckBox* texture_managment_chkbox;
 	wxSpinCtrl* clean_interval_spin;
@@ -91,6 +96,7 @@ protected:
 	wxChoice* doodad_palette_style_choice;
 	wxChoice* item_palette_style_choice;
 	wxChoice* raw_palette_style_choice;
+	wxChoice* list_icon_size_choice;
 
 	wxCheckBox* large_terrain_tools_chkbox;
 	wxCheckBox* large_doodad_sizebar_chkbox;

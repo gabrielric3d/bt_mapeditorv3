@@ -126,8 +126,9 @@
         <item name="Ghost $higher floors" hotkey="Ctrl+L" action="GHOST_HIGHER_FLOORS" help="Ghost floors."/>
         <menu name="$Ingame Box">
             <item name="Show $client box" hotkey="Shift+I" action="SHOW_INGAME_BOX" help="Shadows out areas not visible ingame (from the center of the screen)."/>
-            <item name="Show $lights" hotkey="Shift+I" action="SHOW_LIGHTS" help="Show lights."/>
         </menu>
+        <item name="Show $lights" hotkey="Shift+L" action="SHOW_LIGHTS" help="Show map lights across the current view."/>
+        <item name="Set $light hour..." action="SET_LIGHT_HOUR" help="Choose the simulated in-game hour used for lighting."/>
         <item name="Show $Grid" hotkey="Shift+G" action="SHOW_GRID" help="Shows a grid over all items."/>
         <item name="H$ighlight items" hotkey="V" action="HIGHLIGHT_ITEMS" help="Highlight tiles with items on them."/>
         <item name="Show $Technical Items" hotkey="Shift+T" action="SHOW_TECHNICAL_ITEMS" help="Shows some of special items that are not visible in game."/>

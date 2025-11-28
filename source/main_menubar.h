@@ -105,6 +105,7 @@ namespace MenuBar
 		HIGHLIGHT_ITEMS,
 		SHOW_INGAME_BOX,
 		SHOW_LIGHTS,
+		SET_LIGHT_HOUR,
 		SHOW_TECHNICAL_ITEMS,
 		SHOW_GRID,
 		SHOW_EXTRA,
@@ -267,6 +268,7 @@ public:
 	void OnZoomOut(wxCommandEvent& event);
 	void OnZoomNormal(wxCommandEvent& event);
 	void OnChangeViewSettings(wxCommandEvent& event);
+	void OnSetLightHour(wxCommandEvent& event);
 
 	// Network menu
 	void OnStartLive(wxCommandEvent& event);

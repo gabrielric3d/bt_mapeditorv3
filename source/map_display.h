@@ -145,6 +145,7 @@ private:
 
 	bool dragging;
 	bool boundbox_selection;
+	bool boundbox_select_creatures;
 	bool screendragging;
 	bool isPasting() const;
 	bool drawing;

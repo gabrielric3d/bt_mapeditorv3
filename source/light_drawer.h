@@ -34,13 +34,14 @@ public:
 	LightDrawer();
 	virtual ~LightDrawer();
 
-	void draw(int map_x, int map_y, int scroll_x, int scroll_y);
+	void draw(int map_x, int map_y, int width, int height, int scroll_x, int scroll_y);
 
 	void setGlobalLightColor(uint8_t color);
 	void addLight(int map_x, int map_y, const SpriteLight& light);
 	void clear() noexcept;
 
 private:
+	void ensureBufferSize(int width, int height);
 	void createGLTexture();
 	void unloadGLTexture();
 
@@ -62,6 +63,8 @@ private:
 	std::vector<Light> lights;
 	std::vector<uint8_t> buffer;
 	wxColor global_color;
+	int buffer_width = 0;
+	int buffer_height = 0;
 };
 
 #endif

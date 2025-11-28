@@ -1107,7 +1107,12 @@ void GameSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int w
 	if(height == -1) height= sz == SPRITE_SIZE_32x32 ? 32 : 16;
 	wxDC* sdc = getDC(sz);
 	if(sdc) {
-		dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		const int source_dim = sz == SPRITE_SIZE_32x32 ? 32 : 16;
+		if(width == source_dim && height == source_dim) {
+			dc->Blit(start_x, start_y, width, height, sdc, 0, 0, wxCOPY, true);
+		} else {
+			dc->StretchBlit(start_x, start_y, width, height, sdc, 0, 0, source_dim, source_dim, wxCOPY, true);
+		}
 	} else {
 		const wxBrush& b = dc->GetBrush();
 		dc->SetBrush(*wxRED_BRUSH);

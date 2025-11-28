@@ -116,6 +116,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	cursor_in_window(false),
 	dragging(false),
 	boundbox_selection(false),
+	boundbox_select_creatures(false),
 	screendragging(false),
 	drawing(false),
 	dragging_draw(false),
@@ -246,7 +247,13 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 			options.show_pickupables = g_settings.getBoolean(Config::SHOW_PICKUPABLES);
 			options.show_moveables = g_settings.getBoolean(Config::SHOW_MOVEABLES);
 			options.hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
+			options.custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
+			options.client_box_width = g_settings.getInteger(Config::CLIENT_BOX_WIDTH);
+			options.client_box_height = g_settings.getInteger(Config::CLIENT_BOX_HEIGHT);
+			options.client_box_offset_x = g_settings.getInteger(Config::CLIENT_BOX_OFFSET_X);
+			options.client_box_offset_y = g_settings.getInteger(Config::CLIENT_BOX_OFFSET_Y);
 		}
+		options.light_hour = g_settings.getInteger(Config::LIGHT_HOUR);
 
 		options.dragging = boundbox_selection;
 
@@ -458,7 +465,14 @@ void MapCanvas::UpdateZoomStatus()
 	int percentage = (int)((1.0 / zoom) * 100);
 	wxString ss;
 	ss << "zoom: " << percentage << "%";
-	g_gui.root->SetStatusText(ss, 3);
+	wxStatusBar* statusbar = g_gui.root ? g_gui.root->GetStatusBar() : nullptr;
+	if(statusbar) {
+		statusbar->SetStatusText(ss, 3);
+		statusbar->SetForegroundColour(wxColour(230, 230, 230));
+		statusbar->Refresh();
+	} else {
+		g_gui.root->SetStatusText(ss, 3);
+	}
 }
 
 void MapCanvas::OnMouseMove(wxMouseEvent& event)
@@ -705,6 +719,7 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+	boundbox_select_creatures = false;
 
 	if(event.ControlDown() && event.AltDown()) {
 		Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
@@ -730,7 +745,8 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 		} else do {
 			boundbox_selection = false;
 			if(event.ShiftDown()) {
-				boundbox_selection = true;
+			boundbox_selection = true;
+			boundbox_select_creatures = event.ControlDown();
 
 				if(!event.ControlDown()) {
 					selection.start(Selection::NONE, ACTION_UNSELECT); // Start selection session
@@ -1086,7 +1102,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 					int cleared = 0;
 					std::vector<SelectionThread*> threads;
 					if(width == 0) {
-						threads.push_back(newd SelectionThread(editor, Position(start_x, start_y, start_z), Position(start_x, end_y, end_z)));
+						threads.push_back(newd SelectionThread(editor, Position(start_x, start_y, start_z), Position(start_x, end_y, end_z), boundbox_select_creatures));
 					} else {
 						for(int i = 0; i < threadcount; ++i) {
 							int chunksize = width / threadcount;
@@ -1094,7 +1110,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 							if(i == threadcount - 1) {
 								chunksize = remainder;
 							}
-							threads.push_back(newd SelectionThread(editor, Position(start_x + cleared, start_y, start_z), Position(start_x + cleared + chunksize, end_y, end_z)));
+							threads.push_back(newd SelectionThread(editor, Position(start_x + cleared, start_y, start_z), Position(start_x + cleared + chunksize, end_y, end_z), boundbox_select_creatures));
 							cleared += chunksize;
 							remainder -= chunksize;
 						}
@@ -1148,6 +1164,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 		editor.updateActions();
 		dragging = false;
 		boundbox_selection = false;
+		boundbox_select_creatures = false;
 	} else if(g_gui.GetCurrentBrush()){ // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
 		if(dragging_draw) {

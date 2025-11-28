@@ -98,7 +98,7 @@ private:
 class SelectionThread : public wxThread
 {
 public:
-	SelectionThread(Editor& editor, Position start, Position end);
+	SelectionThread(Editor& editor, Position start, Position end, bool creaturesOnly);
 
 	void Execute(); // Calls "Create" and then "Run"
 
@@ -106,6 +106,7 @@ protected:
 	virtual ExitCode Entry();
 	Editor& editor;
 	Position start, end;
+	bool creatures_only;
 	Selection selection;
 	Action* result;
 

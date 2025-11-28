@@ -21,6 +21,24 @@
 #include "gui.h"
 #include "brush.h"
 
+namespace {
+
+constexpr int kMinListIconSize = 16;
+constexpr int kMaxListIconSize = 128;
+int GetConfiguredListIconSize()
+{
+	int size = g_settings.getInteger(Config::PALETTE_LIST_ICON_SIZE);
+	if(size < kMinListIconSize) {
+		return kMinListIconSize;
+	}
+	if(size > kMaxListIconSize) {
+		return kMaxListIconSize;
+	}
+	return size;
+}
+
+}
+
 // ============================================================================
 // Brush Palette Panel
 // A common class for terrain/doodad/item/raw palette
@@ -530,7 +548,8 @@ END_EVENT_TABLE()
 
 BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	wxVListBox(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLB_SINGLE),
-	BrushBoxInterface(tileset)
+	BrushBoxInterface(tileset),
+	icon_pixel_size(GetConfiguredListIconSize())
 {
 	SetItemCount(tileset->size());
 }
@@ -575,9 +594,12 @@ bool BrushListBox::SelectBrush(const Brush* whatbrush)
 void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 {
 	ASSERT(n < tileset->size());
+	const int padding = 4;
+	const int icon_x = rect.GetX() + padding;
+	const int icon_y = rect.GetY() + std::max(0, (rect.GetHeight() - icon_pixel_size) / 2);
 	Sprite* spr = g_gui.gfx.getSprite(tileset->brushlist[n]->getLookID());
 	if(spr) {
-		spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+		spr->DrawTo(&dc, SPRITE_SIZE_32x32, icon_x, icon_y, icon_pixel_size, icon_pixel_size);
 	}
 	if(IsSelected(n)) {
 		if(HasFocus())
@@ -585,14 +607,18 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 		else
 			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
 	} else {
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+		dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
 	}
-	dc.DrawText(wxstr(tileset->brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
+	const int text_x = icon_x + icon_pixel_size + padding;
+	const int char_height = dc.GetCharHeight();
+	const int text_y = rect.GetY() + std::max(0, (rect.GetHeight() - char_height) / 2);
+	dc.DrawText(wxstr(tileset->brushlist[n]->getName()), text_x, text_y);
 }
 
 wxCoord BrushListBox::OnMeasureItem(size_t n) const
 {
-	return 32;
+	const int padding = 4;
+	return icon_pixel_size + padding * 2;
 }
 
 void BrushListBox::OnKey(wxKeyEvent& event)

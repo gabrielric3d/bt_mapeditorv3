@@ -43,6 +43,7 @@
 #include "table_brush.h"
 #include "waypoint_brush.h"
 #include "light_drawer.h"
+#include <cmath>
 
 DrawingOptions::DrawingOptions()
 {
@@ -58,6 +59,7 @@ void DrawingOptions::SetDefault()
 	show_tech_items = false;
 	ingame = false;
 	dragging = false;
+	light_hour = 12;
 
 	show_grid = 0;
 	show_all_floors = true;
@@ -80,6 +82,11 @@ void DrawingOptions::SetDefault()
 	show_pickupables = false;
 	show_moveables = false;
 	hide_items_when_zoomed = true;
+	custom_client_box = false;
+	client_box_width = rme::ClientMapWidth;
+	client_box_height = rme::ClientMapHeight;
+	client_box_offset_x = 0;
+	client_box_offset_y = 2;
 }
 
 void DrawingOptions::SetIngame()
@@ -91,6 +98,7 @@ void DrawingOptions::SetIngame()
 	show_tech_items = true;
 	ingame = true;
 	dragging = false;
+	light_hour = 12;
 
 	show_grid = 0;
 	show_all_floors = true;
@@ -113,6 +121,11 @@ void DrawingOptions::SetIngame()
 	show_pickupables = false;
 	show_moveables = false;
 	hide_items_when_zoomed = false;
+	custom_client_box = false;
+	client_box_width = rme::ClientMapWidth;
+	client_box_height = rme::ClientMapHeight;
+	client_box_offset_x = 0;
+	client_box_offset_y = 2;
 }
 
 bool DrawingOptions::isOnlyColors() const noexcept
@@ -134,7 +147,31 @@ bool DrawingOptions::isTooltips() const noexcept
 
 bool DrawingOptions::isDrawLight() const noexcept
 {
-	return show_ingame_box && show_lights;
+	return show_lights;
+}
+
+namespace {
+constexpr double kPi = 3.14159265358979323846;
+constexpr uint8_t kDayBrightness = 240;
+constexpr uint8_t kNightBrightness = 35;
+
+uint8_t CalculateAmbientBrightness(int hour)
+{
+	if(hour < 0) {
+		hour = 0;
+	}
+	hour %= 24;
+	double radians = (static_cast<double>(hour) / 24.0) * 2.0 * kPi - kPi;
+	double normalized = (std::cos(radians) + 1.0) * 0.5;
+	double value = static_cast<double>(kNightBrightness) + normalized * (kDayBrightness - kNightBrightness);
+	if(value < 0.0) {
+		return 0;
+	}
+	if(value > 255.0) {
+		return 255;
+	}
+	return static_cast<uint8_t>(value);
+}
 }
 
 MapDrawer::MapDrawer(MapCanvas* canvas) : canvas(canvas), editor(canvas->editor)
@@ -234,6 +271,8 @@ void MapDrawer::Draw()
 	DrawCursorTile();
 	if(options.show_grid && zoom <= 10.f)
 		DrawGrid();
+	if(options.isDrawLight())
+		DrawLights();
 	if(options.show_ingame_box)
 		DrawIngameBox();
 	if(options.isTooltips())
@@ -287,14 +326,6 @@ void MapDrawer::DrawShade(int map_z)
 
 void MapDrawer::DrawMap()
 {
-	int center_x = start_x + int(screensize_x * zoom / 64);
-	int center_y = start_y + int(screensize_y * zoom / 64);
-	int offset_y = 2;
-	int box_start_map_x = center_x - view_scroll_x;
-	int box_start_map_y = center_y - view_scroll_x + offset_y;
-	int box_end_map_x = center_x + rme::ClientMapWidth;
-	int box_end_map_y = center_y + rme::ClientMapHeight + offset_y;
-
 	bool live_client = editor.IsLiveClient();
 
 	Brush* brush = g_gui.GetCurrentBrush();
@@ -340,12 +371,7 @@ void MapDrawer::DrawMap()
 							for(int map_y = 0; map_y < 4; ++map_y) {
 								TileLocation* location = nd->getTile(map_x, map_y, map_z);
 								DrawTile(location);
-								if(location && options.isDrawLight()) {
-									auto& position = location->getPosition();
-									if(position.x >= box_start_map_x && position.x <= box_end_map_x && position.y >= box_start_map_y && position.y <= box_end_map_y) {
-										AddLight(location);
-									}
-								}
+								AddLight(location);
 							}
 						}
 						if(tile_indicators) {
@@ -491,23 +517,24 @@ void MapDrawer::DrawSecondaryMap(int map_z)
 
 void MapDrawer::DrawIngameBox()
 {
+	const bool use_custom_box = options.custom_client_box;
+	const int map_width = std::max(1, use_custom_box ? options.client_box_width : rme::ClientMapWidth);
+	const int map_height = std::max(1, use_custom_box ? options.client_box_height : rme::ClientMapHeight);
+	const int offset_x = use_custom_box ? options.client_box_offset_x : 0;
+	const int offset_y = use_custom_box ? options.client_box_offset_y : 2;
+
 	int center_x = start_x + int(screensize_x * zoom / 64);
 	int center_y = start_y + int(screensize_y * zoom / 64);
 
-	int offset_y = 2;
-	int box_start_map_x = center_x;
+	int box_start_map_x = center_x + offset_x;
 	int box_start_map_y = center_y + offset_y;
-	int box_end_map_x = center_x + rme::ClientMapWidth;
-	int box_end_map_y = center_y + rme::ClientMapHeight + offset_y;
+	int box_end_map_x = box_start_map_x + map_width;
+	int box_end_map_y = box_start_map_y + map_height;
 
 	int box_start_x = box_start_map_x * rme::TileSize - view_scroll_x;
 	int box_start_y = box_start_map_y * rme::TileSize - view_scroll_y;
 	int box_end_x = box_end_map_x * rme::TileSize - view_scroll_x;
 	int box_end_y = box_end_map_y * rme::TileSize - view_scroll_y;
-
-	if(options.isDrawLight()) {
-		light_drawer->draw(box_start_map_x, box_start_map_y, view_scroll_x, view_scroll_y);
-	}
 
 	static wxColor side_color(0, 0, 0, 150);
 
@@ -537,18 +564,23 @@ void MapDrawer::DrawIngameBox()
 	drawRect(box_start_x, box_start_y, box_end_x-box_start_x, box_end_y-box_start_y, *wxRED);
 
 	// visible tiles
-	box_start_x += rme::TileSize;
-	box_start_y += rme::TileSize;
-	box_end_x -= 2 * rme::TileSize;
-	box_end_y -= 2 * rme::TileSize;
-	drawRect(box_start_x, box_start_y, box_end_x-box_start_x, box_end_y-box_start_y, *wxGREEN);
+	const int visible_start_x = box_start_x + rme::TileSize;
+	const int visible_start_y = box_start_y + rme::TileSize;
+	const int visible_end_x = box_end_x - 2 * rme::TileSize;
+	const int visible_end_y = box_end_y - 2 * rme::TileSize;
 
-	// player position
-	box_start_x += ((rme::ClientMapWidth/2)-2) * rme::TileSize;
-	box_start_y += ((rme::ClientMapHeight/2)-2) * rme::TileSize;
-	box_end_x = box_start_x + rme::TileSize;
-	box_end_y = box_start_y + rme::TileSize;
-	drawRect(box_start_x, box_start_y, box_end_x-box_start_x, box_end_y-box_start_y, *wxGREEN);
+	if(visible_end_x > visible_start_x && visible_end_y > visible_start_y) {
+		drawRect(visible_start_x, visible_start_y, visible_end_x-visible_start_x, visible_end_y-visible_start_y, *wxGREEN);
+
+		// player position
+		const int player_offset_x = std::max(0, (map_width / 2) - 2);
+		const int player_offset_y = std::max(0, (map_height / 2) - 2);
+		int player_start_x = visible_start_x + player_offset_x * rme::TileSize;
+		int player_start_y = visible_start_y + player_offset_y * rme::TileSize;
+		int player_end_x = player_start_x + rme::TileSize;
+		int player_end_y = player_start_y + rme::TileSize;
+		drawRect(player_start_x, player_start_y, player_end_x-player_start_x, player_end_y-player_start_y, *wxGREEN);
+	}
 
 	glEnable(GL_TEXTURE_2D);
 }
@@ -573,6 +605,23 @@ void MapDrawer::DrawGrid()
 
 	glEnd();
 	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawLights()
+{
+	if(!options.isDrawLight() || !light_drawer) {
+		return;
+	}
+
+	const int width = end_x - start_x;
+	const int height = end_y - start_y;
+	if(width <= 0 || height <= 0) {
+		return;
+	}
+
+	const uint8_t brightness = CalculateAmbientBrightness(options.light_hour);
+	light_drawer->setGlobalLightColor(brightness);
+	light_drawer->draw(start_x, start_y, width, height, view_scroll_x, view_scroll_y);
 }
 
 void MapDrawer::DrawDraggingShadow()

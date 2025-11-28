@@ -64,6 +64,7 @@ public:
 	bool show_tech_items;
 	bool ingame;
 	bool dragging;
+	int light_hour;
 
 	int show_grid;
 	bool show_all_floors;
@@ -86,6 +87,11 @@ public:
 	bool show_pickupables;
 	bool show_moveables;
 	bool hide_items_when_zoomed;
+	bool custom_client_box;
+	int client_box_width;
+	int client_box_height;
+	int client_box_offset_x;
+	int client_box_offset_y;
 };
 
 class MapCanvas;
@@ -141,6 +147,7 @@ public:
 	void DrawCursorTile();
 	void DrawIngameBox();
 	void DrawGrid();
+	void DrawLights();
 	void DrawTooltips();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);

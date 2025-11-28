@@ -20,13 +20,10 @@
 
 #include "palette_common.h"
 
-#include <map>
-
 class BrushPalettePanel;
 class CreaturePalettePanel;
 class HousePalettePanel;
 class WaypointPalettePanel;
-class PaletteCategoryButton;
 
 class PaletteWindow : public wxPanel
 {
@@ -59,9 +56,6 @@ public:
 	// Updates the content of the palette (eg. houses, creatures)
 	virtual void OnUpdate(Map* map);
 
-	// Public helper so that palette swaps can be triggered by the new buttons.
-	void ChangePalette(PaletteType palette);
-
 	// wxWidgets Event Handlers
 	void OnSwitchingPage(wxChoicebookEvent& event);
 	void OnPageChanged(wxChoicebookEvent& event);
@@ -78,14 +72,7 @@ protected:
 	static PalettePanel* CreateWaypointPalette(wxWindow* parent, const TilesetContainer& tilesets);
 	static PalettePanel* CreateRAWPalette(wxWindow* parent, const TilesetContainer& tilesets);
 
-	void BuildPaletteSelector();
-	void UpdateButtonStates(PaletteType palette);
-	void OnPaletteCategoryClicked(wxCommandEvent& event);
-
 	wxChoicebook* choicebook;
-	wxPanel* palette_selector_panel;
-	PaletteType current_palette;
-	std::map<PaletteType, PaletteCategoryButton*> palette_buttons;
 
 	BrushPalettePanel* terrain_palette;
 	BrushPalettePanel* doodad_palette;

@@ -220,6 +220,57 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(use_memcached_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(use_memcached_chkbox, "When this is checked, sprites will be loaded into memory at startup and unpacked at runtime. This is faster but consumes more memory.\nIf it is not checked, the editor will use less memory but there will be a performance decrease due to reading sprites from the disk.");
 
+	wxStaticBoxSizer* client_box_sizer = newd wxStaticBoxSizer(wxVERTICAL, graphics_page, "Client Box Customization");
+
+	custom_client_box_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Enable custom client box size");
+	custom_client_box_chkbox->SetValue(g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX));
+	client_box_sizer->Add(custom_client_box_chkbox, 0, wxLEFT | wxTOP, 5);
+
+	auto* client_box_grid = newd wxFlexGridSizer(2, 5, 5);
+	client_box_grid->AddGrowableCol(1);
+
+	wxStaticText* client_box_label = newd wxStaticText(graphics_page, wxID_ANY, "Client box width:");
+	client_box_grid->Add(client_box_label, 0, wxALIGN_CENTER_VERTICAL);
+	client_box_width_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::CLIENT_BOX_WIDTH)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 4, 64);
+	client_box_grid->Add(client_box_width_spin, 0);
+	SetWindowToolTip(client_box_label, client_box_width_spin, "Number of tiles loaded horizontally by the in-game client.");
+
+	client_box_label = newd wxStaticText(graphics_page, wxID_ANY, "Client box height:");
+	client_box_grid->Add(client_box_label, 0, wxALIGN_CENTER_VERTICAL);
+	client_box_height_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::CLIENT_BOX_HEIGHT)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 4, 64);
+	client_box_grid->Add(client_box_height_spin, 0);
+	SetWindowToolTip(client_box_label, client_box_height_spin, "Number of tiles loaded vertically by the in-game client.");
+
+	client_box_label = newd wxStaticText(graphics_page, wxID_ANY, "X border offset:");
+	client_box_grid->Add(client_box_label, 0, wxALIGN_CENTER_VERTICAL);
+	client_box_offset_x_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::CLIENT_BOX_OFFSET_X)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -16, 16);
+	client_box_grid->Add(client_box_offset_x_spin, 0);
+	SetWindowToolTip(client_box_label, client_box_offset_x_spin, "Horizontal offset (in tiles) applied to the overlay to match the client's camera.");
+
+	client_box_label = newd wxStaticText(graphics_page, wxID_ANY, "Y border offset:");
+	client_box_grid->Add(client_box_label, 0, wxALIGN_CENTER_VERTICAL);
+	client_box_offset_y_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::CLIENT_BOX_OFFSET_Y)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -16, 16);
+	client_box_grid->Add(client_box_offset_y_spin, 0);
+	SetWindowToolTip(client_box_label, client_box_offset_y_spin, "Vertical offset (in tiles) applied to the overlay to match the client's camera.");
+
+	client_box_sizer->Add(client_box_grid, 0, wxEXPAND | wxALL, 5);
+	bool custom_box_enabled = custom_client_box_chkbox->GetValue();
+	client_box_width_spin->Enable(custom_box_enabled);
+	client_box_height_spin->Enable(custom_box_enabled);
+	client_box_offset_x_spin->Enable(custom_box_enabled);
+	client_box_offset_y_spin->Enable(custom_box_enabled);
+
+	custom_client_box_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) {
+		const bool enabled = event.IsChecked();
+		client_box_width_spin->Enable(enabled);
+		client_box_height_spin->Enable(enabled);
+		client_box_offset_x_spin->Enable(enabled);
+		client_box_offset_y_spin->Enable(enabled);
+		event.Skip();
+	});
+
+	sizer->Add(client_box_sizer, 0, wxEXPAND | wxALL, 5);
+
 	sizer->AddSpacer(10);
 
     auto * subsizer = newd wxFlexGridSizer(2, 10, 10);
@@ -413,6 +464,27 @@ wxNotebookPage* PreferencesWindow::CreateUIPage()
 		"RAW Palette Style:",
 		"Configures the look of the raw palette.",
 		g_settings.getString(Config::PALETTE_RAW_STYLE));
+
+	static const int icon_size_values[] = { 16, 24, 32, 48, 64, 96, 128 };
+	const size_t icon_size_count = sizeof(icon_size_values) / sizeof(icon_size_values[0]);
+	wxArrayString icon_size_labels;
+	for(int size : icon_size_values) {
+		icon_size_labels.Add(wxString::Format("%d px", size));
+	}
+	wxStaticText* list_icon_size_label = newd wxStaticText(ui_page, wxID_ANY, "Listbox icon size:");
+	list_icon_size_choice = newd wxChoice(ui_page, wxID_ANY, wxDefaultPosition, wxDefaultSize, icon_size_labels);
+	int current_icon_size = g_settings.getInteger(Config::PALETTE_LIST_ICON_SIZE);
+	int selection = 0;
+	for(size_t i = 0; i < icon_size_count; ++i) {
+		if(icon_size_values[i] == current_icon_size) {
+			selection = static_cast<int>(i);
+			break;
+		}
+	}
+	list_icon_size_choice->SetSelection(selection);
+	SetWindowToolTip(list_icon_size_label, list_icon_size_choice, "Adjusts the icon size used in listbox-with-icons palettes.");
+	subsizer->Add(list_icon_size_label, 0, wxALIGN_CENTER_VERTICAL);
+	subsizer->Add(list_icon_size_choice, 0, wxEXPAND);
 
 	sizer->Add(subsizer, 0, wxALL, 5);
 
@@ -661,6 +733,11 @@ void PreferencesWindow::Apply()
 		//g_settings.setInteger(Config::CURSOR_ALT_ALPHA, clr.Alpha());
 
 	g_settings.setInteger(Config::HIDE_ITEMS_WHEN_ZOOMED, hide_items_when_zoomed_chkbox->GetValue());
+	g_settings.setInteger(Config::CUSTOM_CLIENT_BOX, custom_client_box_chkbox->GetValue());
+	g_settings.setInteger(Config::CLIENT_BOX_WIDTH, client_box_width_spin->GetValue());
+	g_settings.setInteger(Config::CLIENT_BOX_HEIGHT, client_box_height_spin->GetValue());
+	g_settings.setInteger(Config::CLIENT_BOX_OFFSET_X, client_box_offset_x_spin->GetValue());
+	g_settings.setInteger(Config::CLIENT_BOX_OFFSET_Y, client_box_offset_y_spin->GetValue());
 	/*
 	g_settings.setInteger(Config::TEXTURE_MANAGEMENT, texture_managment_chkbox->GetValue());
 	g_settings.setInteger(Config::TEXTURE_CLEAN_PULSE, clean_interval_spin->GetValue());
@@ -680,6 +757,15 @@ void PreferencesWindow::Apply()
 	g_settings.setInteger(Config::USE_LARGE_ITEM_SIZEBAR, large_item_sizebar_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_LARGE_HOUSE_SIZEBAR, large_house_sizebar_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_LARGE_RAW_SIZEBAR, large_raw_sizebar_chkbox->GetValue());
+	{
+		static const int icon_size_values[] = { 16, 24, 32, 48, 64, 96, 128 };
+		const size_t icon_size_count = sizeof(icon_size_values) / sizeof(icon_size_values[0]);
+		int selection = list_icon_size_choice->GetSelection();
+		if(selection < 0 || static_cast<size_t>(selection) >= icon_size_count) {
+			selection = 2;
+		}
+		g_settings.setInteger(Config::PALETTE_LIST_ICON_SIZE, icon_size_values[selection]);
+	}
 	g_settings.setInteger(Config::USE_LARGE_CONTAINER_ICONS, large_container_icons_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_LARGE_CHOOSE_ITEM_ICONS, large_pick_item_icons_chkbox->GetValue());
 	g_settings.setInteger(Config::SHOW_CURSOR_HIGHLIGHT, cursor_highlight_chkbox->GetValue());

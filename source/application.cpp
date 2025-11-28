@@ -44,6 +44,8 @@
 
 #include "../brushes/icon/rme_icon.xpm"
 
+#include <wx/dcbuffer.h>
+
 BEGIN_EVENT_TABLE(MainFrame, wxFrame)
 	EVT_CLOSE(MainFrame::OnExit)
 	EVT_MENU_OPEN(MainFrame::OnMenuOpen)
@@ -117,6 +119,42 @@ void ApplyDarkAuiTheme(wxAuiManager* manager)
 	art->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_GRADIENT_COLOUR, theme.accentSoft);
 	art->SetColour(wxAUI_DOCKART_ACTIVE_CAPTION_TEXT_COLOUR, theme.text);
 }
+
+class DarkStatusBar : public wxStatusBar
+{
+public:
+	DarkStatusBar(wxWindow* parent) : wxStatusBar(parent, wxID_ANY, wxST_SIZEGRIP)
+	{
+		SetBackgroundColour(Theme::Dark().surfaceAlt);
+		SetForegroundColour(Theme::Dark().text);
+		SetFont(wxFontInfo(9).Family(wxFONTFAMILY_SWISS));
+		Bind(wxEVT_PAINT, &DarkStatusBar::OnPaint, this);
+	}
+
+private:
+	void OnPaint(wxPaintEvent&)
+	{
+		wxAutoBufferedPaintDC dc(this);
+		dc.SetBackground(wxBrush(GetBackgroundColour()));
+		dc.Clear();
+
+		const wxColour text_col = GetForegroundColour();
+		dc.SetTextForeground(text_col);
+
+		for(int i = 0; i < GetFieldsCount(); ++i) {
+			wxRect rect;
+			GetFieldRect(i, rect);
+			rect.Deflate(6, 2);
+			const wxString text = GetStatusText(i);
+			if(text.empty())
+				continue;
+			const wxSize sz = dc.GetTextExtent(text);
+			const int x = rect.GetX();
+			const int y = rect.GetY() + (rect.GetHeight() - sz.GetHeight()) / 2;
+			dc.DrawText(text, x, y);
+		}
+	}
+};
 
 }
 
@@ -435,10 +473,11 @@ MainFrame::MainFrame(const wxString& title, const wxPoint& pos, const wxSize& si
 		wxLogError(wxString() + "Could not load menubar.xml, editor will NOT be able to show its menu.\n");
 	}
 
-	wxStatusBar* statusbar = CreateStatusBar();
+	auto* statusbar = new DarkStatusBar(this);
 	statusbar->SetFieldsCount(4);
-	statusbar->SetBackgroundColour(theme.surfaceAlt);
-	statusbar->SetForegroundColour(theme.textMuted);
+	int styles[4] = { wxSB_FLAT, wxSB_FLAT, wxSB_FLAT, wxSB_FLAT };
+	statusbar->SetStatusStyles(4, styles);
+	SetStatusBar(statusbar);
 	SetStatusText(wxString("Welcome to ") << __W_RME_APPLICATION_NAME__ << " " << __W_RME_VERSION__);
 
 	// Le sizer

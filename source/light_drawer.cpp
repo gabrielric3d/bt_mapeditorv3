@@ -18,12 +18,12 @@
 #include "main.h"
 #include "light_drawer.h"
 
-LightDrawer::LightDrawer()
+LightDrawer::LightDrawer() :
+	texture(0),
+	global_color(50, 50, 50, 255),
+	buffer_width(0),
+	buffer_height(0)
 {
-	texture = 0;
-	buffer.resize(static_cast<size_t>(rme::ClientMapWidth * rme::ClientMapHeight * rme::PixelFormatRGBA));
-	global_color = wxColor(50, 50, 50, 255);
-
 	createGLTexture();
 }
 
@@ -34,17 +34,23 @@ LightDrawer::~LightDrawer()
 	lights.clear();
 }
 
-void LightDrawer::draw(int map_x, int map_y, int scroll_x, int scroll_y)
+void LightDrawer::draw(int map_x, int map_y, int width, int height, int scroll_x, int scroll_y)
 {
+	if(width <= 0 || height <= 0) {
+		return;
+	}
+
+	ensureBufferSize(width, height);
+
 	constexpr int half_tile_size = rme::TileSize / 2;
 
-	for (int x = 0; x < rme::ClientMapWidth; ++x) {
-		for (int y = 0; y < rme::ClientMapHeight; ++y) {
+	for (int x = 0; x < buffer_width; ++x) {
+		for (int y = 0; y < buffer_height; ++y) {
 			int mx = (map_x + x);
 			int my = (map_y + y);
 			int px = (mx * rme::TileSize + half_tile_size);
 			int py = (my * rme::TileSize + half_tile_size);
-			int index = (y * rme::ClientMapWidth + x);
+			int index = (y * buffer_width + x);
 			int color_index = index * rme::PixelFormatRGBA;
 
 			buffer[color_index]	 = global_color.Red();
@@ -70,15 +76,15 @@ void LightDrawer::draw(int map_x, int map_y, int scroll_x, int scroll_y)
 
 	const int draw_x = map_x * rme::TileSize - scroll_x;
 	const int draw_y = map_y * rme::TileSize - scroll_y;
-	constexpr int draw_width = rme::ClientMapWidth * rme::TileSize;
-	constexpr int draw_height = rme::ClientMapHeight * rme::TileSize;
+	const int draw_width = buffer_width * rme::TileSize;
+	const int draw_height = buffer_height * rme::TileSize;
 
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rme::ClientMapWidth, rme::ClientMapHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, buffer_width, buffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
 
 	glBlendFunc(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -94,9 +100,9 @@ void LightDrawer::draw(int map_x, int map_y, int scroll_x, int scroll_y)
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-void LightDrawer::setGlobalLightColor(uint8_t color)
+void LightDrawer::setGlobalLightColor(uint8_t brightness)
 {
-	global_color = colorFromEightBit(color);
+	global_color = wxColor(brightness, brightness, brightness);
 }
 
 void LightDrawer::addLight(int map_x, int map_y, const SpriteLight& light)
@@ -121,6 +127,20 @@ void LightDrawer::addLight(int map_x, int map_y, const SpriteLight& light)
 void LightDrawer::clear() noexcept
 {
 	lights.clear();
+}
+
+void LightDrawer::ensureBufferSize(int width, int height)
+{
+	width = std::max(width, 1);
+	height = std::max(height, 1);
+
+	if(width == buffer_width && height == buffer_height) {
+		return;
+	}
+
+	buffer_width = width;
+	buffer_height = height;
+	buffer.resize(static_cast<size_t>(buffer_width * buffer_height * rme::PixelFormatRGBA));
 }
 
 void LightDrawer::createGLTexture()

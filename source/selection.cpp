@@ -295,12 +295,13 @@ void Selection::join(SelectionThread* thread)
 	delete thread;
 }
 
-SelectionThread::SelectionThread(Editor& editor, Position start, Position end) :
+SelectionThread::SelectionThread(Editor& editor, Position start, Position end, bool creaturesOnly) :
 	wxThread(wxTHREAD_JOINABLE),
 	editor(editor),
 	start(start),
 	end(end),
 	selection(editor),
+	creatures_only(creaturesOnly),
 	result(nullptr)
 {
 	////
@@ -323,7 +324,16 @@ wxThread::ExitCode SelectionThread::Entry()
 				if(!tile)
 					continue;
 
-				selection.add(tile);
+				if(creatures_only) {
+					if(tile->spawn) {
+						selection.add(tile, tile->spawn);
+					}
+					if(tile->creature) {
+						selection.add(tile, tile->creature);
+					}
+				} else {
+					selection.add(tile);
+				}
 			}
 		}
 		if(compesated && z <= rme::MapGroundLayer) {
