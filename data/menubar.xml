@@ -115,6 +115,7 @@
         <item name="$New View" hotkey="Ctrl+Shift+N" action="NEW_VIEW" help="Creates a new view of the current map."/>
         <item name="$Enter Fullscreen" hotkey="F11" action="TOGGLE_FULLSCREEN" help="Changes between fullscreen mode and windowed mode."/>
         <item name="$Take Screenshot" hotkey="F10" action="TAKE_SCREENSHOT" help="Saves the current view to the disk."/>
+        <item name="$Record GIF" hotkey="F12" action="RECORD_GIF" help="Start/stop recording the current view as an animated GIF."/>
         <separator/>
         <item name="Zoom In" hotkey="Ctrl++" action="ZOOM_IN" help="Increase the zoom."/>
         <item name="Zoom Out" hotkey="Ctrl+-" action="ZOOM_OUT" help="Decrease the zoom."/>
@@ -154,6 +155,7 @@
         <item name="$Minimap" hotkey="M" action="WIN_MINIMAP" help="Displays the minimap window."/>
         <item name="$Actions History" action="WIN_ACTIONS_HISTORY" help="Displays the actions history window."/>
         <item name="$Recent Brushes" action="WIN_RECENT_BRUSHES" help="Displays the recent brushes window."/>
+        <item name="$Brush Manager" action="BRUSH_MANAGER" help="Shows the brush XML manager."/>
         <item name="$New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
         <separator/>
         <item name="$Terrain Palette" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>

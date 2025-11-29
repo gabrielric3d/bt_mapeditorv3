@@ -18,6 +18,12 @@
 #ifndef RME_DISPLAY_WINDOW_H_
 #define RME_DISPLAY_WINDOW_H_
 
+#include <chrono>
+#include <memory>
+#include <vector>
+
+#include <wx/filename.h>
+
 #include "action.h"
 #include "tile.h"
 #include "creature.h"
@@ -28,6 +34,7 @@ class MapWindow;
 class MapPopupMenu;
 class AnimationTimer;
 class MapDrawer;
+class AnimatedGifWriter;
 
 class MapCanvas : public wxGLCanvas
 {
@@ -118,10 +125,14 @@ public:
 
 	void ShowPositionIndicator(const Position& position);
 	void TakeScreenshot(wxFileName path, wxString format);
+	bool StartGifRecording(const wxFileName& path, int fps);
+	void StopGifRecording(bool keepFile, bool notify = true);
+	bool IsGifRecording() const noexcept { return gif_recording; }
 
 protected:
 	void getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill = false);
 	bool floodFill(Map *map, const Position& center, int x, int y, GroundBrush* brush, PositionVector* positions);
+	void captureGifFrame();
 
 private:
 	enum {
@@ -153,6 +164,16 @@ private:
 	bool replace_dragging;
 
 	uint8_t* screenshot_buffer;
+	std::unique_ptr<AnimatedGifWriter> gif_writer;
+	std::vector<uint8_t> gif_frame_buffer;
+	bool gif_recording;
+	int gif_fps;
+	int gif_width;
+	int gif_height;
+	uint64_t gif_frames_written;
+	wxFileName gif_output_path;
+	std::chrono::steady_clock::time_point gif_next_frame_time;
+	std::chrono::steady_clock::duration gif_frame_interval;
 
 	int drag_start_x;
 	int drag_start_y;

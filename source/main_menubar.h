@@ -126,8 +126,10 @@ namespace MenuBar
 		WIN_MINIMAP,
 		WIN_ACTIONS_HISTORY,
 		WIN_RECENT_BRUSHES,
+		BRUSH_MANAGER,
 		NEW_PALETTE,
 		TAKE_SCREENSHOT,
+		RECORD_GIF,
 		LIVE_START,
 		LIVE_JOIN,
 		LIVE_CLOSE,
@@ -279,8 +281,10 @@ public:
 	void OnMinimapWindow(wxCommandEvent& event);
 	void OnActionsHistoryWindow(wxCommandEvent& event);
 	void OnRecentBrushesWindow(wxCommandEvent& event);
+	void OnBrushManager(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
+	void OnRecordGif(wxCommandEvent& event);
 	void OnSelectTerrainPalette(wxCommandEvent& event);
 	void OnSelectDoodadPalette(wxCommandEvent& event);
 	void OnSelectItemPalette(wxCommandEvent& event);

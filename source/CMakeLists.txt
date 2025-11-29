@@ -6,6 +6,7 @@ ${CMAKE_CURRENT_LIST_DIR}/application.h
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
 ${CMAKE_CURRENT_LIST_DIR}/basemap.h
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
+${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.h
@@ -30,6 +31,7 @@ ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
+${CMAKE_CURRENT_LIST_DIR}/gif_recorder.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
 ${CMAKE_CURRENT_LIST_DIR}/graphics.h
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.h
@@ -118,6 +120,7 @@ ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
@@ -139,6 +142,7 @@ ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/gif_recorder.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp

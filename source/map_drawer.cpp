@@ -81,6 +81,7 @@ void DrawingOptions::SetDefault()
 	show_hooks = false;
 	show_pickupables = false;
 	show_moveables = false;
+	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
 	custom_client_box = false;
 	client_box_width = rme::ClientMapWidth;
@@ -120,6 +121,7 @@ void DrawingOptions::SetIngame()
 	show_hooks = false;
 	show_pickupables = false;
 	show_moveables = false;
+	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
 	custom_client_box = false;
 	client_box_width = rme::ClientMapWidth;
@@ -177,6 +179,7 @@ uint8_t CalculateAmbientBrightness(int hour)
 MapDrawer::MapDrawer(MapCanvas* canvas) : canvas(canvas), editor(canvas->editor)
 {
 	light_drawer = std::make_shared<LightDrawer>();
+	selection_indicator_timer.Start();
 }
 
 MapDrawer::~MapDrawer()
@@ -1141,7 +1144,9 @@ void MapDrawer::DrawCursorTile()
 		return;
 	}
 
-	if(!g_settings.getBoolean(Config::SHOW_CURSOR_HIGHLIGHT)) {
+	const bool show_cursor_border = g_settings.getBoolean(Config::SHOW_CURSOR_HIGHLIGHT);
+	const bool show_indicator = HasActiveSelectionIndicator();
+	if(!show_cursor_border && !show_indicator) {
 		return;
 	}
 
@@ -1149,9 +1154,15 @@ void MapDrawer::DrawCursorTile()
 	int x, y;
 	getDrawPosition(cursor_position, x, y);
 
-	glDisable(GL_TEXTURE_2D);
-	drawRect(x, y, rme::TileSize, rme::TileSize, *wxWHITE, 2);
-	glEnable(GL_TEXTURE_2D);
+	if(show_indicator) {
+		DrawSelectedTileIndicator(x, y);
+	}
+
+	if(show_cursor_border) {
+		glDisable(GL_TEXTURE_2D);
+		drawRect(x, y, rme::TileSize, rme::TileSize, *wxWHITE, 2);
+		glEnable(GL_TEXTURE_2D);
+	}
 }
 
 void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, const Item* item, bool ephemeral, int red, int green, int blue, int alpha)
@@ -1826,6 +1837,46 @@ void MapDrawer::DrawPositionIndicator(int z)
 	drawRect(x + offset + 2, y + offset + 2, size - 4, size - 4, *wxWHITE, 2);
 	drawRect(x + offset + 1, y + offset + 1, size - 2, size - 2, *wxBLACK, 2);
 	glEnable(GL_TEXTURE_2D);
+}
+
+bool MapDrawer::HasActiveSelectionIndicator() const
+{
+	if(options.ingame || !options.show_selected_tile_indicator) {
+		return false;
+	}
+	if(!canvas->cursor_in_window) {
+		return false;
+	}
+	if(canvas->isPasting()) {
+		return true;
+	}
+	if(g_gui.IsDrawingMode() && g_gui.GetCurrentBrush() != nullptr) {
+		return true;
+	}
+	return false;
+}
+
+void MapDrawer::DrawSelectedTileIndicator(int x, int y)
+{
+	glDisable(GL_TEXTURE_2D);
+	const uint8_t alpha = GetSelectionIndicatorAlpha();
+	wxColour overlay(255, 215, 0, alpha);
+	drawFilledRect(x, y, rme::TileSize, rme::TileSize, overlay);
+	drawRect(x, y, rme::TileSize, rme::TileSize, *wxWHITE, 1);
+	glEnable(GL_TEXTURE_2D);
+}
+
+uint8_t MapDrawer::GetSelectionIndicatorAlpha() const
+{
+	const long elapsed = selection_indicator_timer.Time() % 1000;
+	const float normalized = static_cast<float>(elapsed) / 1000.f;
+	float wave = normalized < 0.5f ? normalized * 2.0f : (1.0f - normalized) * 2.0f;
+	int alpha = int(80 + wave * 120.0f);
+	if(alpha < 0)
+		alpha = 0;
+	else if(alpha > 255)
+		alpha = 255;
+	return static_cast<uint8_t>(alpha);
 }
 
 void MapDrawer::DrawTooltips()

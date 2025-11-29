@@ -17,6 +17,8 @@
 
 #include "main.h"
 
+#include <ctime>
+
 #include "main_menubar.h"
 #include "application.h"
 #include "preferences.h"
@@ -27,12 +29,15 @@
 #include "extension_window.h"
 #include "find_item_window.h"
 #include "duplicated_items_window.h"
+#include "brush_manager_window.h"
 #include "settings.h"
 
 #include "gui.h"
 
 #include <wx/chartype.h>
 #include <wx/numdlg.h>
+#include <wx/filename.h>
+#include <wx/filedlg.h>
 
 #include "items.h"
 #include "editor.h"
@@ -165,8 +170,10 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
 	MAKE_ACTION(WIN_RECENT_BRUSHES, wxITEM_NORMAL, OnRecentBrushesWindow);
+	MAKE_ACTION(BRUSH_MANAGER, wxITEM_NORMAL, OnBrushManager);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
+	MAKE_ACTION(RECORD_GIF, wxITEM_NORMAL, OnRecordGif);
 
 	MAKE_ACTION(LIVE_START, wxITEM_NORMAL, OnStartLive);
 	MAKE_ACTION(LIVE_JOIN, wxITEM_NORMAL, OnJoinLive);
@@ -388,12 +395,15 @@ void MainMenuBar::Update()
 	EnableItem(ZOOM_IN, has_map);
 	EnableItem(ZOOM_OUT, has_map);
 	EnableItem(ZOOM_NORMAL, has_map);
+	EnableItem(TAKE_SCREENSHOT, has_map);
+	EnableItem(RECORD_GIF, has_map);
 
 	if(has_map)
 		CheckItem(SHOW_SPAWNS, g_settings.getBoolean(Config::SHOW_SPAWNS));
 
 	EnableItem(WIN_MINIMAP, loaded);
 	EnableItem(WIN_RECENT_BRUSHES, loaded);
+	EnableItem(BRUSH_MANAGER, loaded);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
@@ -1901,6 +1911,78 @@ void MainMenuBar::OnTakeScreenshot(wxCommandEvent& WXUNUSED(event))
 
 }
 
+void MainMenuBar::OnRecordGif(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen())
+		return;
+
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if(!tab)
+		return;
+
+	MapCanvas* canvas = tab->GetView()->GetCanvas();
+	if(!canvas)
+		return;
+
+	if(canvas->IsGifRecording()) {
+		canvas->StopGifRecording(true);
+		return;
+	}
+
+	wxString directory = wxstr(g_settings.getString(Config::SCREENSHOT_DIRECTORY));
+	if(directory.empty())
+		directory = wxFileName::GetCwd();
+
+	time_t t = time(nullptr);
+	struct tm* current_time = localtime(&t);
+	wxString timestamp("gif_capture");
+	if(current_time) {
+		timestamp.Printf("gif_%04d-%02d-%02d-%02d-%02d-%02d",
+			1900 + current_time->tm_year,
+			current_time->tm_mon + 1,
+			current_time->tm_mday,
+			current_time->tm_hour,
+			current_time->tm_min,
+			current_time->tm_sec);
+	}
+
+	wxFileName defaultPath(directory, "");
+	defaultPath.SetFullName(timestamp + ".gif");
+
+	wxFileDialog saveDialog(
+		frame,
+		"Save animated GIF",
+		defaultPath.GetPath(),
+		defaultPath.GetFullName(),
+		"GIF files (*.gif)|*.gif",
+		wxFD_SAVE | wxFD_OVERWRITE_PROMPT
+	);
+
+	if(saveDialog.ShowModal() != wxID_OK)
+		return;
+
+	wxNumberEntryDialog fpsDialog(
+		frame,
+		"Frames per second for the recording (1 - 30).",
+		"FPS:",
+		"Animated GIF Recording",
+		8,
+		1,
+		30
+	);
+
+	if(fpsDialog.ShowModal() != wxID_OK)
+		return;
+
+	wxFileName output(saveDialog.GetPath());
+	if(!canvas->StartGifRecording(output, fpsDialog.GetValue())) {
+		g_gui.PopupDialog("GIF recording failed", "Unable to start GIF recording with the current settings.", wxOK);
+		return;
+	}
+
+	g_gui.SetStatusText("Recording GIF... Press F12 again to stop.");
+}
+
 void MainMenuBar::OnZoomIn(wxCommandEvent& event)
 {
 	double zoom = g_gui.GetCurrentZoom();
@@ -2008,6 +2090,17 @@ void MainMenuBar::OnActionsHistoryWindow(wxCommandEvent& WXUNUSED(event))
 void MainMenuBar::OnRecentBrushesWindow(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.ShowRecentBrushesWindow();
+}
+
+void MainMenuBar::OnBrushManager(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsVersionLoaded()) {
+		wxMessageBox("You need to load a client version before accessing brush files.", "Brush Manager", wxOK | wxICON_INFORMATION, frame);
+		return;
+	}
+
+	BrushManagerDialog dialog(frame);
+	dialog.ShowModal();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

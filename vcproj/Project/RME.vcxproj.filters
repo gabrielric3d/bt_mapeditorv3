@@ -167,6 +167,9 @@
     <ClInclude Include="..\..\source\map_display.h">
       <Filter>gui\map window</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\gif_recorder.h">
+      <Filter>gui\map window</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\map_drawer.h">
       <Filter>gui\map window</Filter>
     </ClInclude>
@@ -321,6 +324,9 @@
     <ClInclude Include="..\..\source\browse_tile_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\brush_manager_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\positionctrl.h">
       <Filter>gui\controls</Filter>
     </ClInclude>
@@ -404,6 +410,9 @@
       <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\map_display.cpp">
+      <Filter>gui\map window</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\gif_recorder.cpp">
       <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\map_drawer.cpp">
@@ -611,6 +620,9 @@
       <Filter>editor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\browse_tile_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\brush_manager_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\positionctrl.cpp">

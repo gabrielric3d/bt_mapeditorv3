@@ -210,6 +210,11 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(hide_items_when_zoomed_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(hide_items_when_zoomed_chkbox, "When this option is checked, \"loose\" items will be hidden when you zoom very far out.");
 
+	selected_tile_indicator_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Blink placement tile");
+	selected_tile_indicator_chkbox->SetValue(g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR));
+	sizer->Add(selected_tile_indicator_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(selected_tile_indicator_chkbox, "When enabled, the tile under the cursor blinks while you have a brush/paste selection active.");
+
 	icon_selection_shadow_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use icon selection shadow");
 	icon_selection_shadow_chkbox->SetValue(g_settings.getBoolean(Config::USE_GUI_SELECTION_SHADOW));
 	sizer->Add(icon_selection_shadow_chkbox, 0, wxLEFT | wxTOP, 5);
@@ -733,6 +738,7 @@ void PreferencesWindow::Apply()
 		//g_settings.setInteger(Config::CURSOR_ALT_ALPHA, clr.Alpha());
 
 	g_settings.setInteger(Config::HIDE_ITEMS_WHEN_ZOOMED, hide_items_when_zoomed_chkbox->GetValue());
+	g_settings.setInteger(Config::SELECTED_TILE_INDICATOR, selected_tile_indicator_chkbox->GetValue());
 	g_settings.setInteger(Config::CUSTOM_CLIENT_BOX, custom_client_box_chkbox->GetValue());
 	g_settings.setInteger(Config::CLIENT_BOX_WIDTH, client_box_width_spin->GetValue());
 	g_settings.setInteger(Config::CLIENT_BOX_HEIGHT, client_box_height_spin->GetValue());

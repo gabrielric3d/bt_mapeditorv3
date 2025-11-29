@@ -17,12 +17,83 @@
 
 #include "main.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "selection.h"
 #include "tile.h"
 #include "creature.h"
 #include "item.h"
 #include "editor.h"
 #include "gui.h"
+#include "map.h"
+
+namespace
+{
+	std::vector<Tile*> GetSpawnTilesForTile(Map& map, Tile* tile)
+	{
+		std::vector<Tile*> spawnTiles;
+		if(!tile) {
+			return spawnTiles;
+		}
+
+		const TileLocation* location = tile->getLocation();
+		if(!location || location->getSpawnCount() == 0) {
+			return spawnTiles;
+		}
+
+		auto pushSpawnTile = [&spawnTiles](Tile* candidate) {
+			if(!candidate || !candidate->spawn) {
+				return;
+			}
+			if(std::find(spawnTiles.begin(), spawnTiles.end(), candidate) == spawnTiles.end()) {
+				spawnTiles.push_back(candidate);
+			}
+		};
+
+		pushSpawnTile(tile);
+		const Position& position = tile->getPosition();
+		int start_x = position.x - 1;
+		int end_x = position.x + 1;
+		int start_y = position.y - 1;
+		int end_y = position.y + 1;
+
+		while(spawnTiles.size() < location->getSpawnCount()) {
+			for(int x = start_x; x <= end_x && spawnTiles.size() < location->getSpawnCount(); ++x) {
+				pushSpawnTile(map.getTile(x, start_y, position.z));
+				pushSpawnTile(map.getTile(x, end_y, position.z));
+			}
+
+			for(int y = start_y + 1; y < end_y && spawnTiles.size() < location->getSpawnCount(); ++y) {
+				pushSpawnTile(map.getTile(start_x, y, position.z));
+				pushSpawnTile(map.getTile(end_x, y, position.z));
+			}
+
+			--start_x;
+			--start_y;
+			++end_x;
+			++end_y;
+		}
+
+		return spawnTiles;
+	}
+
+	void AddCreatureWithSpawn(Selection& selection, Tile* tile, Map& map)
+	{
+		if(!tile || !tile->creature) {
+			return;
+		}
+
+		selection.add(tile, tile->creature);
+		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
+			return;
+		}
+
+		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
+			selection.add(spawnTile, spawnTile->spawn);
+		}
+	}
+}
 
 Selection::Selection(Editor& editor) :
 	editor(editor),
@@ -317,6 +388,7 @@ wxThread::ExitCode SelectionThread::Entry()
 {
 	selection.start(Selection::SUBTHREAD);
 	bool compesated = g_settings.getInteger(Config::COMPENSATED_SELECT);
+	Map& map = editor.getMap();
 	for(int z = start.z; z >= end.z; --z) {
 		for(int x = start.x; x <= end.x; ++x) {
 			for(int y = start.y; y <= end.y; ++y) {
@@ -325,11 +397,11 @@ wxThread::ExitCode SelectionThread::Entry()
 					continue;
 
 				if(creatures_only) {
-					if(tile->spawn) {
+					if(tile->spawn && (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES))) {
 						selection.add(tile, tile->spawn);
 					}
 					if(tile->creature) {
-						selection.add(tile, tile->creature);
+						AddCreatureWithSpawn(selection, tile, map);
 					}
 				} else {
 					selection.add(tile);

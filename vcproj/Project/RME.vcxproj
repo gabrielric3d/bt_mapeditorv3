@@ -216,6 +216,7 @@
     <ClCompile Include="..\..\source\actions_history_window.cpp" />
     <ClCompile Include="..\..\source\artprovider.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
+    <ClCompile Include="..\..\source\brush_manager_window.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
     <ClCompile Include="..\..\source\duplicated_items_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
@@ -229,6 +230,7 @@
     <ClInclude Include="..\..\source\const.h" />
     <ClInclude Include="..\..\source\duplicated_items_window.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />
+    <ClInclude Include="..\..\source\brush_manager_window.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />
     <ClInclude Include="..\..\source\otml.h" />
     <ClInclude Include="..\..\source\browse_tile_window.h" />
@@ -344,6 +346,8 @@
     <ClCompile Include="..\..\source\result_window.cpp" />
     <ClInclude Include="..\..\source\map_display.h" />
     <ClCompile Include="..\..\source\map_display.cpp" />
+    <ClInclude Include="..\..\source\gif_recorder.h" />
+    <ClCompile Include="..\..\source\gif_recorder.cpp" />
     <ClInclude Include="..\..\source\map_drawer.h" />
     <ClCompile Include="..\..\source\map_drawer.cpp" />
     <ClInclude Include="..\..\source\map_window.h" />

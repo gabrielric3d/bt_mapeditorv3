@@ -87,6 +87,7 @@ public:
 	bool show_pickupables;
 	bool show_moveables;
 	bool hide_items_when_zoomed;
+	bool show_selected_tile_indicator;
 	bool custom_client_box;
 	int client_box_width;
 	int client_box_height;
@@ -121,6 +122,7 @@ protected:
 	std::ostringstream tooltip;
 
 	wxStopWatch pos_indicator_timer;
+	wxStopWatch selection_indicator_timer;
 	Position pos_indicator;
 
 public:
@@ -162,6 +164,7 @@ public:
 	}
 
 	DrawingOptions& getOptions() noexcept { return options; }
+	bool HasActiveSelectionIndicator() const;
 
 protected:
 	void BlitItem(int& screenx, int& screeny, const Tile* tile, const Item* item, bool ephemeral = false, int red = 255, int green = 255, int blue = 255, int alpha = 255);
@@ -176,6 +179,7 @@ protected:
 	void DrawTileIndicators(TileLocation* location);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 	void DrawPositionIndicator(int z);
+	void DrawSelectedTileIndicator(int x, int y);
 	void WriteTooltip(const Item* item, std::ostringstream& stream);
 	void WriteTooltip(const Waypoint* item, std::ostringstream& stream);
 	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
@@ -201,6 +205,7 @@ protected:
 	void glColorCheck(Brush* brush, const Position& pos);
 	void drawRect(int x, int y, int w, int h, const wxColor& color, int width = 1);
 	void drawFilledRect(int x, int y, int w, int h, const wxColor& color);
+	uint8_t GetSelectionIndicatorAlpha() const;
 
 private:
 	void getDrawPosition(const Position& position, int &x, int &y);

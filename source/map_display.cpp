@@ -17,9 +17,11 @@
 
 #include "main.h"
 
+#include <algorithm>
 #include <sstream>
 #include <time.h>
 #include <wx/wfstream.h>
+#include <wx/filefn.h>
 
 #include "gui.h"
 #include "editor.h"
@@ -48,6 +50,7 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
+#include "gif_recorder.h"
 
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
@@ -123,6 +126,13 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	replace_dragging(false),
 
 	screenshot_buffer(nullptr),
+	gif_writer(nullptr),
+	gif_recording(false),
+	gif_fps(0),
+	gif_width(0),
+	gif_height(0),
+	gif_frames_written(0),
+	gif_frame_interval(std::chrono::steady_clock::duration::zero()),
 
 	drag_start_x(-1),
 	drag_start_y(-1),
@@ -166,12 +176,152 @@ namespace OnMapRemoveItems
 	};
 }
 
+namespace
+{
+	std::vector<Tile*> GetSpawnTilesForTile(Map& map, Tile* tile)
+	{
+		std::vector<Tile*> spawnTiles;
+		if(!tile) {
+			return spawnTiles;
+		}
+
+		const TileLocation* location = tile->getLocation();
+		if(!location || location->getSpawnCount() == 0) {
+			return spawnTiles;
+		}
+
+		auto pushSpawnTile = [&spawnTiles](Tile* candidate) {
+			if(!candidate || !candidate->spawn) {
+				return;
+			}
+			if(std::find(spawnTiles.begin(), spawnTiles.end(), candidate) == spawnTiles.end()) {
+				spawnTiles.push_back(candidate);
+			}
+		};
+
+		pushSpawnTile(tile);
+		const Position& position = tile->getPosition();
+		int start_x = position.x - 1;
+		int end_x = position.x + 1;
+		int start_y = position.y - 1;
+		int end_y = position.y + 1;
+
+		while(spawnTiles.size() < location->getSpawnCount()) {
+			for(int x = start_x; x <= end_x && spawnTiles.size() < location->getSpawnCount(); ++x) {
+				pushSpawnTile(map.getTile(x, start_y, position.z));
+				pushSpawnTile(map.getTile(x, end_y, position.z));
+			}
+
+			for(int y = start_y + 1; y < end_y && spawnTiles.size() < location->getSpawnCount(); ++y) {
+				pushSpawnTile(map.getTile(start_x, y, position.z));
+				pushSpawnTile(map.getTile(end_x, y, position.z));
+			}
+
+			--start_x;
+			--start_y;
+			++end_x;
+			++end_y;
+		}
+
+		return spawnTiles;
+	}
+
+	void AddCreatureWithSpawn(Selection& selection, Tile* tile, Map& map)
+	{
+		if(!tile || !tile->creature) {
+			return;
+		}
+		selection.add(tile, tile->creature);
+		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
+			return;
+		}
+		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
+			selection.add(spawnTile, spawnTile->spawn);
+		}
+	}
+
+	void RemoveCreatureWithSpawn(Selection& selection, Tile* tile, Map& map)
+	{
+		if(!tile || !tile->creature) {
+			return;
+		}
+		if(tile->creature->isSelected()) {
+			selection.remove(tile, tile->creature);
+		}
+		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
+			return;
+		}
+		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
+			if(spawnTile->spawn->isSelected()) {
+				selection.remove(spawnTile, spawnTile->spawn);
+			}
+		}
+	}
+
+	void AddTileOrCreaturesToSelection(Selection& selection, Tile* tile, bool creaturesOnly, Map& map)
+	{
+		if(!tile) {
+			return;
+		}
+
+		if(creaturesOnly) {
+			if(tile->spawn && (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES))) {
+				selection.add(tile, tile->spawn);
+			}
+			if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
+				AddCreatureWithSpawn(selection, tile, map);
+			}
+			return;
+		}
+
+		selection.add(tile);
+	}
+
+	bool ToggleTileObjectSelection(Selection& selection, Tile* tile, Map& map)
+	{
+		if(!tile) {
+			return false;
+		}
+
+		if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
+			if(tile->creature->isSelected()) {
+				RemoveCreatureWithSpawn(selection, tile, map);
+			} else {
+				AddCreatureWithSpawn(selection, tile, map);
+			}
+			return true;
+		}
+
+		if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
+			if(tile->spawn->isSelected()) {
+				selection.remove(tile, tile->spawn);
+			} else {
+				selection.add(tile, tile->spawn);
+			}
+			return true;
+		}
+
+		Item* item = tile->getTopItem();
+		if(item) {
+			if(item->isSelected()) {
+				selection.remove(tile, item);
+			} else {
+				selection.add(tile, item);
+			}
+			return true;
+		}
+
+		return false;
+	}
+}
+
 
 MapCanvas::~MapCanvas()
 {
 	delete popup_menu;
 	delete animation_timer;
 	delete drawer;
+	StopGifRecording(false, false);
 	free(screenshot_buffer);
 }
 
@@ -246,6 +396,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 			options.show_hooks = g_settings.getBoolean(Config::SHOW_WALL_HOOKS);
 			options.show_pickupables = g_settings.getBoolean(Config::SHOW_PICKUPABLES);
 			options.show_moveables = g_settings.getBoolean(Config::SHOW_MOVEABLES);
+			options.show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 			options.hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
 			options.custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
 			options.client_box_width = g_settings.getInteger(Config::CLIENT_BOX_WIDTH);
@@ -257,7 +408,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 
 		options.dragging = boundbox_selection;
 
-		if(options.show_preview || drawer->GetPositionIndicatorTime() != 0)
+		const bool needs_animation = options.show_preview || drawer->GetPositionIndicatorTime() != 0 || drawer->HasActiveSelectionIndicator();
+		if(needs_animation)
 			animation_timer->Start();
 		else
 			animation_timer->Stop();
@@ -268,6 +420,9 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 
 		if(screenshot_buffer)
 			drawer->TakeScreenshot(screenshot_buffer);
+
+		if(gif_recording)
+			captureGifFrame();
 
 		drawer->Release();
 	}
@@ -364,6 +519,114 @@ void MapCanvas::TakeScreenshot(wxFileName path, wxString format)
 	Refresh();
 
 	screenshot_buffer = nullptr;
+}
+
+bool MapCanvas::StartGifRecording(const wxFileName& path, int fps)
+{
+	if(fps <= 0 || gif_recording)
+		return false;
+
+	int screensize_x = 0;
+	int screensize_y = 0;
+	GetMapWindow()->GetViewSize(&screensize_x, &screensize_y);
+
+	if(screensize_x <= 0 || screensize_y <= 0)
+		return false;
+
+	const int delayCs = std::max(1, (100 + fps / 2) / fps);
+	auto writer = std::make_unique<AnimatedGifWriter>();
+	if(!writer->Open(path, static_cast<uint16_t>(screensize_x), static_cast<uint16_t>(screensize_y), static_cast<uint16_t>(delayCs), 0)) {
+		return false;
+	}
+
+	gif_writer = std::move(writer);
+	gif_frame_buffer.assign(static_cast<size_t>(screensize_x) * screensize_y * 3, 0);
+
+	gif_recording = true;
+	gif_fps = fps;
+	gif_width = screensize_x;
+	gif_height = screensize_y;
+	gif_frames_written = 0;
+	gif_output_path = path;
+	const auto seconds_per_frame = std::chrono::duration<double>(1.0 / std::max(1, fps));
+	gif_frame_interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(seconds_per_frame);
+	gif_next_frame_time = std::chrono::steady_clock::now();
+
+	wxString msg;
+	msg << "Recording GIF to " << gif_output_path.GetFullName() << "...";
+	g_gui.SetStatusText(msg);
+	return true;
+}
+
+void MapCanvas::StopGifRecording(bool keepFile, bool notify)
+{
+	if(!gif_recording)
+		return;
+
+	if(gif_writer) {
+		gif_writer->Close();
+		gif_writer.reset();
+	}
+
+	const bool deleteFile = (!keepFile || gif_frames_written == 0);
+	if(deleteFile && !gif_output_path.GetFullPath().empty()) {
+		wxRemoveFile(gif_output_path.GetFullPath());
+	}
+
+	if(notify) {
+		if(deleteFile) {
+			g_gui.SetStatusText("GIF recording canceled.");
+		} else {
+			wxString msg;
+			msg << "Saved GIF to " << gif_output_path.GetFullName();
+			g_gui.SetStatusText(msg);
+		}
+	}
+
+	gif_frame_buffer.clear();
+	gif_recording = false;
+	gif_fps = 0;
+	gif_width = 0;
+	gif_height = 0;
+	gif_frames_written = 0;
+	gif_output_path.Clear();
+}
+
+void MapCanvas::captureGifFrame()
+{
+	if(!gif_recording || !gif_writer)
+		return;
+
+	int current_width = 0;
+	int current_height = 0;
+	GetMapWindow()->GetViewSize(&current_width, &current_height);
+	if(current_width != gif_width || current_height != gif_height) {
+		g_gui.SetStatusText("GIF recording stopped because the window size changed.");
+		StopGifRecording(false, false);
+		return;
+	}
+
+	auto now = std::chrono::steady_clock::now();
+	if(now < gif_next_frame_time)
+		return;
+
+	gif_next_frame_time += gif_frame_interval;
+	if(gif_next_frame_time < now) {
+		gif_next_frame_time = now + gif_frame_interval;
+	}
+
+	if(gif_frame_buffer.size() < static_cast<size_t>(gif_width) * gif_height * 3) {
+		gif_frame_buffer.assign(static_cast<size_t>(gif_width) * gif_height * 3, 0);
+	}
+
+	drawer->TakeScreenshot(gif_frame_buffer.data());
+	if(!gif_writer->WriteFrame(gif_frame_buffer.data())) {
+		g_gui.SetStatusText("Failed to record GIF frame.");
+		StopGifRecording(false, false);
+		return;
+	}
+
+	++gif_frames_written;
 }
 
 void MapCanvas::ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y)
@@ -744,49 +1007,24 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 			drag_start_z = floor;
 		} else do {
 			boundbox_selection = false;
-			if(event.ShiftDown()) {
+		if(event.ShiftDown()) {
 			boundbox_selection = true;
-			boundbox_select_creatures = event.ControlDown();
+			boundbox_select_creatures = event.AltDown();
 
-				if(!event.ControlDown()) {
-					selection.start(Selection::NONE, ACTION_UNSELECT); // Start selection session
-					selection.clear(); // Clear out selection
+			if(!event.ControlDown()) {
+				selection.start(Selection::NONE, ACTION_UNSELECT); // Start selection session
+				selection.clear(); // Clear out selection
 					selection.finish(); // End selection session
 					selection.updateSelectionCount();
 				}
 			} else if(event.ControlDown()) {
 				Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 				if(tile) {
-					if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
-						selection.start(); // Start selection session
-						if(tile->spawn->isSelected()) {
-							selection.remove(tile, tile->spawn);
-						} else {
-							selection.add(tile, tile->spawn);
-						}
-						selection.finish(); // Finish selection session
+					selection.start(); // Start selection session
+					const bool changed = ToggleTileObjectSelection(selection, tile, editor.getMap());
+					selection.finish(); // Finish selection session
+					if(changed) {
 						selection.updateSelectionCount();
-					} else if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
-						selection.start(); // Start selection session
-						if(tile->creature->isSelected()) {
-							selection.remove(tile, tile->creature);
-						} else {
-							selection.add(tile, tile->creature);
-						}
-						selection.finish(); // Finish selection session
-						selection.updateSelectionCount();
-					} else {
-						Item* item = tile->getTopItem();
-						if(item) {
-							selection.start(); // Start selection session
-							if(item->isSelected()) {
-								selection.remove(tile, item);
-							} else {
-								selection.add(tile, item);
-							}
-							selection.finish(); // Finish selection session
-							selection.updateSelectionCount();
-						}
 					}
 				}
 			} else {
@@ -805,14 +1043,20 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 					selection.start(); // Start a selection session
 					selection.clear();
 					selection.commit();
-					if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
+					if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS) && !tile->creature) {
 						selection.add(tile, tile->spawn);
 						dragging = true;
 						drag_start_x = mouse_map_x;
 						drag_start_y = mouse_map_y;
 						drag_start_z = floor;
 					} else if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
-						selection.add(tile, tile->creature);
+						AddCreatureWithSpawn(selection, tile, editor.getMap());
+						dragging = true;
+						drag_start_x = mouse_map_x;
+						drag_start_y = mouse_map_y;
+						drag_start_z = floor;
+					} else if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
+						selection.add(tile, tile->spawn);
 						dragging = true;
 						drag_start_x = mouse_map_x;
 						drag_start_y = mouse_map_y;
@@ -1009,13 +1253,19 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 					Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 					if(tile) {
 						selection.start(); // Start a selection session
-						if(tile->isSelected()) {
-							selection.remove(tile);
-						} else {
-							selection.add(tile);
+						bool changed = ToggleTileObjectSelection(selection, tile, editor.getMap());
+						if(!changed) {
+							if(tile->isSelected()) {
+								selection.remove(tile);
+							} else {
+								selection.add(tile);
+							}
+							changed = true;
 						}
 						selection.finish(); // Finish the selection session
-						selection.updateSelectionCount();
+						if(changed) {
+							selection.updateSelectionCount();
+						}
 					}
 				} else {
 					// The cursor has moved, do some boundboxing!
@@ -1144,7 +1394,7 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 					} else if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
 						if(!tile->creature->isSelected()) {
 							selection.start(); // Start a selection session
-							selection.add(tile, tile->creature);
+							AddCreatureWithSpawn(selection, tile, editor.getMap());
 							selection.finish(); // Finish the selection session
 							selection.updateSelectionCount();
 						}
@@ -1346,8 +1596,10 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event)
 	Selection& selection = editor.getSelection();
 
 	boundbox_selection = false;
+	boundbox_select_creatures = false;
 	if(event.ShiftDown()) {
 		boundbox_selection = true;
+		boundbox_select_creatures = event.AltDown();
 
 		if(!event.ControlDown()) {
 			selection.start(); // Start selection session
@@ -1366,10 +1618,10 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event)
 		selection.start(); // Start a selection session
 		selection.clear();
 		selection.commit();
-		if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
+		if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
+			AddCreatureWithSpawn(selection, tile, editor.getMap());
+		} else if(tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
 			selection.add(tile, tile->spawn);
-		} else if(tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
-			selection.add(tile, tile->creature);
 		} else {
 			Item* item = tile->getTopItem();
 			if(item) {
@@ -1409,13 +1661,19 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 			Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 			if(tile) {
 				selection.start(); // Start a selection session
-				if(tile->isSelected()) {
-					selection.remove(tile);
-				} else {
-					selection.add(tile);
+				bool changed = ToggleTileObjectSelection(selection, tile, editor.getMap());
+				if(!changed) {
+					if(tile->isSelected()) {
+						selection.remove(tile);
+					} else {
+						selection.add(tile);
+					}
+					changed = true;
 				}
 				selection.finish(); // Finish the selection session
-				selection.updateSelectionCount();
+				if(changed) {
+					selection.updateSelectionCount();
+				}
 			}
 		} else {
 			// The cursor has moved, do some boundboxing!
@@ -1432,8 +1690,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 					for(int x = last_click_map_x; x <= mouse_map_x; x++) {
 						for(int y = last_click_map_y; y <= mouse_map_y; y ++) {
 							Tile* tile = editor.getMap().getTile(x, y, floor);
-							if(!tile) continue;
-							selection.add(tile);
+							AddTileOrCreaturesToSelection(selection, tile, boundbox_select_creatures, editor.getMap());
 						}
 					}
 					break;
@@ -1461,8 +1718,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 						for(int x = start_x; x <= end_x; x++) {
 							for(int y = start_y; y <= end_y; y++) {
 								Tile* tile = editor.getMap().getTile(x, y, z);
-								if(!tile) continue;
-								selection.add(tile);
+								AddTileOrCreaturesToSelection(selection, tile, boundbox_select_creatures, editor.getMap());
 							}
 						}
 						if(z <= rme::MapGroundLayer && g_settings.getInteger(Config::COMPENSATED_SELECT)) {
@@ -1499,8 +1755,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 						for(int x = start_x; x <= end_x; x++) {
 							for(int y = start_y; y <= end_y; y++) {
 								Tile* tile = editor.getMap().getTile(x, y, z);
-								if(!tile) continue;
-								selection.add(tile);
+								AddTileOrCreaturesToSelection(selection, tile, boundbox_select_creatures, editor.getMap());
 							}
 						}
 						if(z <= rme::MapGroundLayer && g_settings.getInteger(Config::COMPENSATED_SELECT)) {
@@ -1517,6 +1772,8 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 	} else if(event.ControlDown()) {
 		// Nothing
 	}
+
+	boundbox_select_creatures = false;
 
 	popup_menu->Update();
 	PopupMenu(popup_menu);
@@ -2323,6 +2580,8 @@ void MapCanvas::EndPasting()
 
 void MapCanvas::Reset()
 {
+	StopGifRecording(false, false);
+
 	cursor_x = 0;
 	cursor_y = 0;
 
