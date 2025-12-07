@@ -221,6 +221,9 @@ public:
 	bool hasValidPaths();
 	bool loadValidPaths();
 	void setClientPath(const FileName& dir);
+	void setItemsDataPath(const FileName& dir);
+	void clearItemsDataPath();
+	bool hasCustomItemsDataPath() const { return has_custom_items_path; }
 
 	bool isVisible() const;
 	std::string getName() const;
@@ -232,8 +235,10 @@ public:
 	ClientVersionList getExtensionsSupported() const;
 
 	FileName getDataPath() const;
+	FileName getItemsDataPath() const;
 	FileName getLocalDataPath() const;
 	FileName getClientPath() const { return client_path; }
+	FileName getCustomItemsDataPath() const { return custom_items_path; }
 	wxFileName getMetadataPath() const { return metadata_path; }
 	wxFileName getSpritesPath() const { return sprites_path; }
 
@@ -251,8 +256,10 @@ private:
 
 	wxString data_path;
 	FileName client_path;
+	FileName custom_items_path;
 	wxFileName metadata_path;
 	wxFileName sprites_path;
+	bool has_custom_items_path;
 
 private:
 	static void loadOTBInfo(pugi::xml_node otb_nodes);

@@ -125,6 +125,7 @@ public:
 
 	void ShowPositionIndicator(const Position& position);
 	void TakeScreenshot(wxFileName path, wxString format);
+	void TakeRegionScreenshot(wxFileName path, wxString format, const Position& fromPos, const Position& toPos);
 	bool StartGifRecording(const wxFileName& path, int fps);
 	void StopGifRecording(bool keepFile, bool notify = true);
 	bool IsGifRecording() const noexcept { return gif_recording; }
@@ -142,6 +143,9 @@ private:
 	inline int getFillIndex(int x, int y) const noexcept { return ((y % BLOCK_SIZE) * BLOCK_SIZE) + (x % BLOCK_SIZE); }
 
 	static bool processed[BLOCK_SIZE*BLOCK_SIZE];
+
+	bool CaptureScreenshot(wxImage& outImage, int* out_view_start_x = nullptr, int* out_view_start_y = nullptr);
+	bool SaveScreenshotImage(const wxImage& image, wxFileName path, const wxString& format, const wxString& prefix);
 
 	Editor& editor;
 	MapDrawer *drawer;

@@ -22,7 +22,10 @@
 #include "map.h"
 #include "tile.h"
 
+#include <wx/timer.h>
+
 class BrowseTileListBox;
+class Editor;
 
 class BrowseTileWindow : public wxDialog
 {
@@ -47,6 +50,58 @@ protected:
 	wxButton* movedown_button;
 
 	DECLARE_EVENT_TABLE();
+};
+
+class BrowseTilePanel : public wxPanel
+{
+public:
+	BrowseTilePanel(wxWindow* parent);
+	~BrowseTilePanel();
+
+	void LoadSelectionFromEditor();
+	void ClearSelection();
+
+private:
+	void OnItemSelected(wxCommandEvent&);
+	void OnClickDelete(wxCommandEvent&);
+	void OnClickSelectRaw(wxCommandEvent&);
+	void OnClickMoveUp(wxCommandEvent&);
+	void OnClickMoveDown(wxCommandEvent&);
+	void OnClickApply(wxCommandEvent&);
+	void OnClickLoadSelection(wxCommandEvent&);
+	void OnToggleAutoLoad(wxCommandEvent&);
+	void OnAutoLoadTimer(wxTimerEvent&);
+
+	void UpdateTileInfo();
+	void UpdateControlStates();
+	void ResetTile(Tile* new_tile);
+	void RefreshFromSourceTile();
+	bool HasTile() const { return working_tile != nullptr; }
+
+	BrowseTileListBox* item_list;
+	wxStaticText* item_count_txt;
+	wxStaticText* position_txt;
+	wxStaticText* protection_txt;
+	wxStaticText* nopvp_txt;
+	wxStaticText* nologout_txt;
+	wxStaticText* pvpzone_txt;
+	wxStaticText* worldboss_txt;
+	wxStaticText* house_txt;
+	wxButton* delete_button;
+	wxButton* select_raw_button;
+	wxButton* moveup_button;
+	wxButton* movedown_button;
+	wxButton* apply_button;
+	wxButton* load_selection_button;
+	wxCheckBox* auto_load_checkbox;
+
+	Tile* working_tile;
+	Editor* source_editor;
+	Position working_position;
+	bool working_position_valid;
+
+	wxTimer* auto_load_timer;
+	bool auto_load_enabled;
 };
 
 #endif

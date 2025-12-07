@@ -1043,7 +1043,7 @@ wxMemoryDC* GameSprite::getDC(SpriteSize size)
 
 		// Now comes the resizing / antialiasing
 		if(size == SPRITE_SIZE_16x16 || image.GetWidth() > rme::SpritePixels || image.GetHeight() > rme::SpritePixels) {
-			int new_size = SPRITE_SIZE_16x16 ? 16 : 32;
+			const int new_size = (size == SPRITE_SIZE_16x16 ? 16 : 32);
 			image.Rescale(new_size, new_size);
 		}
 

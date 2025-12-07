@@ -1,0 +1,16 @@
+{
+  "name": "bt-mapeditor",
+  "version": "0.1.0",
+  "dependencies": [
+    "wxwidgets",
+    "freeglut",
+    "zlib",
+    "fmt",
+    "nlohmann-json",
+    "asio",
+    "boost-date-time",
+    "boost-system",
+    "boost-filesystem",
+    "boost-iostreams"
+  ]
+}

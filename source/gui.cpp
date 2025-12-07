@@ -36,6 +36,7 @@
 #include "duplicated_items_window.h"
 #include "minimap_window.h"
 #include "palette_window.h"
+#include "browse_tile_window.h"
 #include "map_display.h"
 #include "application.h"
 #include "welcome_dialog.h"
@@ -97,6 +98,7 @@ GUI::GUI() :
 	duplicated_items_window(nullptr),
 	actions_history_window(nullptr),
 	recent_brushes_window(nullptr),
+	browse_tile_panel(nullptr),
 	secondary_map(nullptr),
 	doodad_buffer_map(nullptr),
 
@@ -368,6 +370,7 @@ void GUI::CycleTab(bool forward)
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 {
 	FileName data_path = getLoadedVersion()->getDataPath();
+	FileName items_path = getLoadedVersion()->getItemsDataPath();
 	FileName client_path = getLoadedVersion()->getClientPath();
 	FileName extension_path = GetExtensionsDirectory();
 
@@ -413,7 +416,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(20, "Loading items.otb file...");
-	if(!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
+	if(!g_items.loadFromOtb(wxString(items_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();
 		UnloadVersion();
@@ -421,7 +424,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(30, "Loading items.xml ...");
-	if(!g_items.loadFromGameXml(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
+	if(!g_items.loadFromGameXml(wxString(items_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
 		warnings.push_back("Couldn't load items.xml: " + error);
 	}
 
@@ -743,6 +746,9 @@ void GUI::CloseCurrentEditor()
 	if(duplicated_items_window) {
 		duplicated_items_window->Clear();
 	}
+	if(browse_tile_panel) {
+		browse_tile_panel->ClearSelection();
+	}
 }
 
 bool GUI::CloseLiveEditors(LiveSocket* sock)
@@ -761,6 +767,9 @@ bool GUI::CloseLiveEditors(LiveSocket* sock)
 				tabbook->DeleteTab(i--);
 			}
 		}
+	}
+	if(browse_tile_panel) {
+		browse_tile_panel->ClearSelection();
 	}
 	root->UpdateMenubar();
 	return true;
@@ -791,6 +800,9 @@ bool GUI::CloseAllEditors()
 
 	if(duplicated_items_window) {
 		duplicated_items_window->Clear();
+	}
+	if(browse_tile_panel) {
+		browse_tile_panel->ClearSelection();
 	}
 	return true;
 }
@@ -1089,6 +1101,29 @@ void GUI::HideRecentBrushesWindow()
 {
 	if(recent_brushes_window) {
 		aui_manager->GetPane(recent_brushes_window).Show(false);
+		aui_manager->Update();
+	}
+}
+
+BrowseTilePanel* GUI::ShowBrowseFieldPanel()
+{
+	if(!browse_tile_panel) {
+		browse_tile_panel = newd BrowseTilePanel(root);
+		Theme::ApplyText(browse_tile_panel, true);
+		aui_manager->AddPane(browse_tile_panel,
+			wxAuiPaneInfo().Caption("Browse Field").Right().BestSize(320, 420));
+	} else {
+		aui_manager->GetPane(browse_tile_panel).Show();
+	}
+
+	aui_manager->Update();
+	return browse_tile_panel;
+}
+
+void GUI::HideBrowseFieldPanel()
+{
+	if(browse_tile_panel) {
+		aui_manager->GetPane(browse_tile_panel).Show(false);
 		aui_manager->Update();
 	}
 }

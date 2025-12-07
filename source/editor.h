@@ -129,6 +129,7 @@ public: // Functions
 	void draw(const PositionVector& todraw, PositionVector& toborder, bool alt);
 	void undraw(const PositionVector& posvec, bool alt);
 	void undraw(const PositionVector& todraw, PositionVector& toborder, bool alt);
+	void drawGroundSingleTile(const Position& position);
 
 protected:
 	void drawInternal(const Position offset, bool alt, bool dodraw);

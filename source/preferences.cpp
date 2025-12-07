@@ -598,8 +598,9 @@ wxNotebookPage* PreferencesWindow::CreateClientPage()
 
 	wxScrolledWindow *client_list_window = newd wxScrolledWindow(client_page, wxID_ANY, wxDefaultPosition, wxDefaultSize);
 	client_list_window->SetMinSize(FROM_DIP(this, wxSize(450, 450)));
-    auto * client_list_sizer = newd wxFlexGridSizer(2, 10, 10);
+    auto * client_list_sizer = newd wxFlexGridSizer(3, 10, 10);
 	client_list_sizer->AddGrowableCol(1);
+	version_dir_controls.clear();
 
     int version_counter = 0;
 	for(auto version : versions) {
@@ -609,16 +610,49 @@ wxNotebookPage* PreferencesWindow::CreateClientPage()
 		default_version_choice->Append(wxstr(version->getName()));
 
 		wxStaticText *tmp_text = newd wxStaticText(client_list_window, wxID_ANY, wxString(version->getName()));
-		client_list_sizer->Add(tmp_text, wxSizerFlags(0).Expand());
+		client_list_sizer->Add(tmp_text, wxSizerFlags(0).Align(wxALIGN_CENTER_VERTICAL));
 
-		wxDirPickerCtrl* dir_picker = newd wxDirPickerCtrl(client_list_window, wxID_ANY, version->getClientPath().GetFullPath());
-		version_dir_pickers.push_back(dir_picker);
-		client_list_sizer->Add(dir_picker, wxSizerFlags(0).Border(wxRIGHT, 10).Expand());
+		wxTextCtrl* dir_ctrl = newd wxTextCtrl(client_list_window, wxID_ANY, version->getClientPath().GetFullPath());
+		client_list_sizer->Add(dir_ctrl, wxSizerFlags(1).Border(wxRIGHT, 5).Expand());
+
+		wxButton* browse_button = newd wxButton(client_list_window, wxID_ANY, "Browse");
+		browse_button->Bind(wxEVT_BUTTON, [this, dir_ctrl](wxCommandEvent&) {
+			wxDirDialog browse_dialog(this, "Select Tibia assets directory", dir_ctrl->GetValue(), wxDD_DIR_MUST_EXIST);
+			if(browse_dialog.ShowModal() == wxID_OK) {
+				dir_ctrl->SetValue(browse_dialog.GetPath());
+			}
+		});
+		client_list_sizer->Add(browse_button, wxSizerFlags(0).CenterVertical());
+
+		wxStaticText* items_label = newd wxStaticText(client_list_window, wxID_ANY, "Items directory:");
+		client_list_sizer->Add(items_label, wxSizerFlags(0).Align(wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL));
+
+		wxString custom_items_path = version->hasCustomItemsDataPath() ? version->getCustomItemsDataPath().GetFullPath() : wxString();
+		wxTextCtrl* items_ctrl = newd wxTextCtrl(client_list_window, wxID_ANY, custom_items_path);
+		client_list_sizer->Add(items_ctrl, wxSizerFlags(1).Border(wxRIGHT, 5).Expand());
+
+		wxButton* items_browse_button = newd wxButton(client_list_window, wxID_ANY, "Browse");
+		items_browse_button->Bind(wxEVT_BUTTON, [this, items_ctrl](wxCommandEvent&) {
+			wxDirDialog browse_dialog(this, "Select items.xml & items.otb directory", items_ctrl->GetValue(), wxDD_DIR_MUST_EXIST);
+			if(browse_dialog.ShowModal() == wxID_OK) {
+				items_ctrl->SetValue(browse_dialog.GetPath());
+			}
+		});
+		client_list_sizer->Add(items_browse_button, wxSizerFlags(0).CenterVertical());
+
+		version_dir_controls.push_back({version, dir_ctrl, items_ctrl});
 
 		wxString tooltip;
 		tooltip << "The editor will look for " << wxstr(version->getName()) << " DAT & SPR here.";
 		tmp_text->SetToolTip(tooltip);
-		dir_picker->SetToolTip(tooltip);
+		dir_ctrl->SetToolTip(tooltip);
+		browse_button->SetToolTip(tooltip);
+
+		wxString items_tooltip;
+		items_tooltip << "The editor will load " << wxstr(version->getName()) << " items.otb and items.xml from this directory (leave empty for default).";
+		items_label->SetToolTip(items_tooltip);
+		items_ctrl->SetToolTip(items_tooltip);
+		items_browse_button->SetToolTip(items_tooltip);
 
 		if(version->getID() == g_settings.getInteger(Config::DEFAULT_CLIENT_VERSION))
 			default_version_choice->SetSelection(version_counter);
@@ -788,10 +822,12 @@ void PreferencesWindow::Apply()
 	g_settings.setFloat(Config::ZOOM_SPEED, zoom_speed_slider->GetValue()/10.f);
 
 	// Client
-	ClientVersionList versions = ClientVersion::getAllVisible();
-	int version_counter = 0;
-	for(auto version : versions) {
-        wxString dir = version_dir_pickers[version_counter]->GetPath();
+	for(const VersionDirControl& control : version_dir_controls) {
+		ClientVersion* version = control.version;
+		if(!version || !control.client_path_ctrl) {
+			continue;
+		}
+        wxString dir = control.client_path_ctrl->GetValue();
 		if(dir.Length() > 0 && dir.Last() != '/' && dir.Last() != '\\')
 			dir.Append("/");
 		version->setClientPath(FileName(dir));
@@ -799,7 +835,21 @@ void PreferencesWindow::Apply()
 		if(version->getName() == default_version_choice->GetStringSelection())
 			g_settings.setInteger(Config::DEFAULT_CLIENT_VERSION, version->getID());
 
-		version_counter++;
+		if(control.items_path_ctrl) {
+			wxString items_dir = control.items_path_ctrl->GetValue();
+			items_dir.Trim(true);
+			items_dir.Trim(false);
+			if(items_dir.empty()) {
+				version->clearItemsDataPath();
+			} else {
+				if(items_dir.Last() != '/' && items_dir.Last() != '\\') {
+					items_dir.Append("/");
+				}
+				version->setItemsDataPath(FileName(items_dir));
+			}
+		} else {
+			version->clearItemsDataPath();
+		}
 	}
 	g_settings.setInteger(Config::CHECK_SIGNATURES, check_sigs_chkbox->GetValue());
 

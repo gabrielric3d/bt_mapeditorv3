@@ -661,6 +661,7 @@
     <ClCompile Include="..\..\source\duplicated_items_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\theme.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="rme.rc">

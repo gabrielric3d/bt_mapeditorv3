@@ -544,15 +544,17 @@ void GroundBrush::draw(BaseMap* map, Tile* tile, void* parameter)
 	ASSERT(tile);
 	if(border_items.empty()) return;
 
-	if(parameter != nullptr) {
-		std::pair<bool, GroundBrush*>& param = *reinterpret_cast<std::pair<bool, GroundBrush*>* >(parameter);
+	const DrawParams* params = parameter ? reinterpret_cast<const DrawParams*>(parameter) : nullptr;
+	if(params && !params->paintSingleTile) {
 		GroundBrush* other = tile->getGroundBrush();
-		if(param.first) { // Volatile? :)
+		if(params->replaceCondition == DrawParams::ReplaceCondition::RequireEmptyTile) {
 			if(other != nullptr) {
 				return;
 			}
-		} else if(other != param.second) {
-			return;
+		} else if(params->replaceCondition == DrawParams::ReplaceCondition::MatchBrush) {
+			if(other != params->matchBrush) {
+				return;
+			}
 		}
 	}
 	int chance = random(1, total_chance);

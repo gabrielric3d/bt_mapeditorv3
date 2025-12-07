@@ -1261,6 +1261,32 @@ void removeDuplicateWalls(Tile* buffer, Tile* tile)
 	}
 }
 
+void Editor::drawGroundSingleTile(const Position& position)
+{
+	if(!CanEdit()) {
+		return;
+	}
+
+	Brush* brush = g_gui.GetCurrentBrush();
+	if(!brush || !brush->isGround()) {
+		return;
+	}
+
+	TileLocation* location = map.createTileL(position);
+	Tile* tile = location->get();
+	Tile* new_tile = tile ? tile->deepCopy(map) : map.allocator(location);
+
+	GroundBrush::DrawParams params;
+	params.paintSingleTile = true;
+	brush->draw(&map, new_tile, &params);
+
+	BatchAction* batch = actionQueue->createBatch(ACTION_DRAW);
+	Action* action = actionQueue->createAction(batch);
+	action->addChange(newd Change(new_tile));
+	batch->addAndCommitAction(action);
+	addBatch(batch, 2);
+}
+
 void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 {
 	if(!CanEdit()) {
@@ -1528,20 +1554,20 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 				if(g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 					new_tile->cleanBorders();
 				}
-				if(dodraw)
+				if(dodraw) {
 					if(brush->isGround() && alt) {
-						std::pair<bool, GroundBrush*> param;
+						GroundBrush::DrawParams params;
 						if(replace_brush) {
-							param.first = false;
-							param.second = replace_brush;
+							params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::MatchBrush;
+							params.matchBrush = replace_brush;
 						} else {
-							param.first = true;
-							param.second = nullptr;
+							params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::RequireEmptyTile;
 						}
-						g_gui.GetCurrentBrush()->draw(&map, new_tile, &param);
+						g_gui.GetCurrentBrush()->draw(&map, new_tile, &params);
 					} else {
 						g_gui.GetCurrentBrush()->draw(&map, new_tile, nullptr);
 					}
+				}
 				else {
 					g_gui.GetCurrentBrush()->undraw(&map, new_tile);
 					tilestoborder.push_back(*it);
@@ -1550,15 +1576,14 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			} else if(dodraw) {
 				Tile* new_tile = map.allocator(location);
 				if(brush->isGround() && alt) {
-					std::pair<bool, GroundBrush*> param;
+					GroundBrush::DrawParams params;
 					if(replace_brush) {
-						param.first = false;
-						param.second = replace_brush;
+						params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::MatchBrush;
+						params.matchBrush = replace_brush;
 					} else {
-						param.first = true;
-						param.second = nullptr;
+						params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::RequireEmptyTile;
 					}
-					g_gui.GetCurrentBrush()->draw(&map, new_tile, &param);
+					g_gui.GetCurrentBrush()->draw(&map, new_tile, &params);
 				} else {
 					g_gui.GetCurrentBrush()->draw(&map, new_tile, nullptr);
 				}

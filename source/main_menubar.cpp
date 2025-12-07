@@ -31,6 +31,7 @@
 #include "duplicated_items_window.h"
 #include "brush_manager_window.h"
 #include "settings.h"
+#include "browse_tile_window.h"
 
 #include "gui.h"
 
@@ -170,9 +171,11 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
 	MAKE_ACTION(WIN_RECENT_BRUSHES, wxITEM_NORMAL, OnRecentBrushesWindow);
+	MAKE_ACTION(WIN_BROWSE_FIELD, wxITEM_NORMAL, OnBrowseFieldWindow);
 	MAKE_ACTION(BRUSH_MANAGER, wxITEM_NORMAL, OnBrushManager);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
+	MAKE_ACTION(TAKE_REGION_SCREENSHOT, wxITEM_NORMAL, OnTakeRegionScreenshot);
 	MAKE_ACTION(RECORD_GIF, wxITEM_NORMAL, OnRecordGif);
 
 	MAKE_ACTION(LIVE_START, wxITEM_NORMAL, OnStartLive);
@@ -396,6 +399,7 @@ void MainMenuBar::Update()
 	EnableItem(ZOOM_OUT, has_map);
 	EnableItem(ZOOM_NORMAL, has_map);
 	EnableItem(TAKE_SCREENSHOT, has_map);
+	EnableItem(TAKE_REGION_SCREENSHOT, has_map && has_selection);
 	EnableItem(RECORD_GIF, has_map);
 
 	if(has_map)
@@ -403,6 +407,7 @@ void MainMenuBar::Update()
 
 	EnableItem(WIN_MINIMAP, loaded);
 	EnableItem(WIN_RECENT_BRUSHES, loaded);
+	EnableItem(WIN_BROWSE_FIELD, loaded);
 	EnableItem(BRUSH_MANAGER, loaded);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
@@ -574,7 +579,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	}
 
 #ifdef __LINUX__
-	const int count = 43;
+	const int count = 44;
 	wxAcceleratorEntry entries[count];
 	// Edit
 	entries[0].Set(wxACCEL_CTRL, (int)'Z', MAIN_FRAME_MENU + MenuBar::UNDO);
@@ -623,6 +628,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	entries[40].Set(wxACCEL_NORMAL, (int)'C', MAIN_FRAME_MENU + MenuBar::SELECT_CREATURE);
 	entries[41].Set(wxACCEL_NORMAL, (int)'W', MAIN_FRAME_MENU + MenuBar::SELECT_WAYPOINT);
 	entries[42].Set(wxACCEL_NORMAL, (int)'R', MAIN_FRAME_MENU + MenuBar::SELECT_RAW);
+	entries[43].Set(wxACCEL_CTRL, WXK_F10, MAIN_FRAME_MENU + MenuBar::TAKE_REGION_SCREENSHOT);
 
 	wxAcceleratorTable accelerator(count, entries);
 	frame->SetAcceleratorTable(accelerator);
@@ -1911,6 +1917,38 @@ void MainMenuBar::OnTakeScreenshot(wxCommandEvent& WXUNUSED(event))
 
 }
 
+void MainMenuBar::OnTakeRegionScreenshot(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen())
+		return;
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor)
+		return;
+
+	Selection& selection = editor->getSelection();
+	if(selection.empty()) {
+		g_gui.SetStatusText("Select an area before taking an area screenshot.");
+		return;
+	}
+
+	Position from = selection.minPosition();
+	Position to = selection.maxPosition();
+
+	wxString path = wxstr(g_settings.getString(Config::SCREENSHOT_DIRECTORY));
+	if(path.size() > 0 && (path.Last() == '/' || path.Last() == '\\'))
+		path = path + "/";
+
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if(!tab)
+		return;
+
+	MapCanvas* canvas = tab->GetView()->GetCanvas();
+	canvas->TakeRegionScreenshot(
+		path, wxstr(g_settings.getString(Config::SCREENSHOT_FORMAT)), from, to
+	);
+}
+
 void MainMenuBar::OnRecordGif(wxCommandEvent& WXUNUSED(event))
 {
 	if(!g_gui.IsEditorOpen())
@@ -2090,6 +2128,13 @@ void MainMenuBar::OnActionsHistoryWindow(wxCommandEvent& WXUNUSED(event))
 void MainMenuBar::OnRecentBrushesWindow(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.ShowRecentBrushesWindow();
+}
+
+void MainMenuBar::OnBrowseFieldWindow(wxCommandEvent& WXUNUSED(event))
+{
+	if(BrowseTilePanel* panel = g_gui.ShowBrowseFieldPanel()) {
+		panel->LoadSelectionFromEditor();
+	}
 }
 
 void MainMenuBar::OnBrushManager(wxCommandEvent& WXUNUSED(event))

@@ -58,6 +58,7 @@ class PaletteWindow;
 class OldPropertiesWindow;
 class EditTownsDialog;
 class ItemButton;
+class BrowseTilePanel;
 
 class LiveSocket;
 
@@ -217,6 +218,8 @@ public:
 	void HideActionsWindow();
 	RecentBrushesWindow* ShowRecentBrushesWindow();
 	void HideRecentBrushesWindow();
+	BrowseTilePanel* ShowBrowseFieldPanel();
+	void HideBrowseFieldPanel();
 
 	// Minimap
 	void CreateMinimap();
@@ -393,6 +396,7 @@ public:
 	DuplicatedItemsWindow* duplicated_items_window;
 	ActionsHistoryWindow* actions_history_window;
 	RecentBrushesWindow* recent_brushes_window;
+	BrowseTilePanel* browse_tile_panel;
 	RecentBrushMap recent_brushes;
 	GraphicManager gfx;
 

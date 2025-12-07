@@ -30,6 +30,18 @@ protected:
 public:
 	static void init();
 
+	struct DrawParams {
+		enum class ReplaceCondition {
+			None,
+			RequireEmptyTile,
+			MatchBrush,
+		};
+
+		ReplaceCondition replaceCondition = ReplaceCondition::None;
+		GroundBrush* matchBrush = nullptr;
+		bool paintSingleTile = false;
+	};
+
 	GroundBrush();
 	virtual ~GroundBrush();
 

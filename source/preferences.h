@@ -24,6 +24,8 @@
 #include <wx/collpane.h>
 #include <wx/clrpicker.h>
 
+class ClientVersion;
+
 class PreferencesWindow : public wxDialog
 {
 public:
@@ -116,7 +118,12 @@ protected:
 
 	// Client info
 	wxChoice* default_version_choice;
-	std::vector<wxDirPickerCtrl*> version_dir_pickers;
+	struct VersionDirControl {
+		ClientVersion* version;
+		wxTextCtrl* client_path_ctrl;
+		wxTextCtrl* items_path_ctrl;
+	};
+	std::vector<VersionDirControl> version_dir_controls;
 	wxCheckBox* check_sigs_chkbox;
 
 	// Create controls

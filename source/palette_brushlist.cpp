@@ -25,6 +25,10 @@ namespace {
 
 constexpr int kMinListIconSize = 16;
 constexpr int kMaxListIconSize = 128;
+const wxColour kPaletteListBackgroundColour(0x0C, 0x14, 0x2A);
+const wxColour kPaletteListSelectionColour(0x16, 0x24, 0x43);
+const wxColour kPaletteListTextColour(0xE0, 0xE6, 0xFF);
+
 int GetConfiguredListIconSize()
 {
 	int size = g_settings.getInteger(Config::PALETTE_LIST_ICON_SIZE);
@@ -551,6 +555,8 @@ BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	BrushBoxInterface(tileset),
 	icon_pixel_size(GetConfiguredListIconSize())
 {
+	SetBackgroundColour(kPaletteListBackgroundColour);
+	SetOwnForegroundColour(kPaletteListTextColour);
 	SetItemCount(tileset->size());
 }
 
@@ -594,6 +600,14 @@ bool BrushListBox::SelectBrush(const Brush* whatbrush)
 void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 {
 	ASSERT(n < tileset->size());
+	dc.SetPen(*wxTRANSPARENT_PEN);
+	if(IsSelected(n)) {
+		dc.SetBrush(wxBrush(kPaletteListSelectionColour));
+	} else {
+		dc.SetBrush(wxBrush(kPaletteListBackgroundColour));
+	}
+	dc.DrawRectangle(rect);
+
 	const int padding = 4;
 	const int icon_x = rect.GetX() + padding;
 	const int icon_y = rect.GetY() + std::max(0, (rect.GetHeight() - icon_pixel_size) / 2);
@@ -602,12 +616,9 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 		spr->DrawTo(&dc, SPRITE_SIZE_32x32, icon_x, icon_y, icon_pixel_size, icon_pixel_size);
 	}
 	if(IsSelected(n)) {
-		if(HasFocus())
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		else
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-	} else {
 		dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
+	} else {
+		dc.SetTextForeground(kPaletteListTextColour);
 	}
 	const int text_x = icon_x + icon_pixel_size + padding;
 	const int char_height = dc.GetCharHeight();

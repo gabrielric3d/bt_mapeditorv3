@@ -131,7 +131,17 @@ void ClientVersion::loadVersions()
 			if (version == nullptr) {
 				continue;
 			}
-			version->setClientPath(wxstr(ver_obj.at("path").get<std::string>()));
+			auto client_path_it = ver_obj.find("client_path");
+			if(client_path_it == ver_obj.end()) {
+				client_path_it = ver_obj.find("path");
+			}
+			if(client_path_it != ver_obj.end()) {
+				version->setClientPath(wxstr(client_path_it->second.get<std::string>()));
+			}
+			auto items_path_it = ver_obj.find("items_path");
+			if(items_path_it != ver_obj.end()) {
+				version->setItemsDataPath(FileName(wxstr(items_path_it->second.get<std::string>())));
+			}
 		}
 	}
 	catch ([[maybe_unused]]const json::exception& e)
@@ -350,7 +360,10 @@ void ClientVersion::saveVersions()
 		for(auto& [id, version] : client_versions) {
 			json ver_obj;
 			ver_obj["id"] = version->getName();
-			ver_obj["path"] = version->getClientPath().GetFullPath().ToStdString();
+			ver_obj["client_path"] = version->getClientPath().GetFullPath().ToStdString();
+			if(version->hasCustomItemsDataPath()) {
+				ver_obj["items_path"] = version->getCustomItemsDataPath().GetFullPath().ToStdString();
+			}
 			vers_obj.push_back(ver_obj);
 		}
 
@@ -370,7 +383,8 @@ ClientVersion::ClientVersion(OtbVersion otb, std::string versionName, wxString p
 	name(versionName),
 	visible(false),
 	preferred_map_version(MAP_OTBM_UNKNOWN),
-	data_path(path)
+	data_path(path),
+	has_custom_items_path(false)
 {
 	////
 }
@@ -433,6 +447,14 @@ FileName ClientVersion::getDataPath() const
 	if(!wxFileName(basePath).DirExists())
 		basePath = g_gui.getFoundDataDirectory();
 	return basePath + data_path + FileName::GetPathSeparator();
+}
+
+FileName ClientVersion::getItemsDataPath() const
+{
+	if(has_custom_items_path) {
+		return custom_items_path;
+	}
+	return getDataPath();
 }
 
 FileName ClientVersion::getLocalDataPath() const
@@ -558,6 +580,18 @@ bool ClientVersion::isVisible() const
 void ClientVersion::setClientPath(const FileName& dir)
 {
 	client_path.Assign(dir);
+}
+
+void ClientVersion::setItemsDataPath(const FileName& dir)
+{
+	custom_items_path.Assign(dir);
+	has_custom_items_path = true;
+}
+
+void ClientVersion::clearItemsDataPath()
+{
+	custom_items_path.Clear();
+	has_custom_items_path = false;
 }
 
 MapVersionID ClientVersion::getPrefferedMapVersionID() const

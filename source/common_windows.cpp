@@ -958,9 +958,15 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 		dc.DrawText("Please enter your search string.", rect.GetX() + 40, rect.GetY() + 6);
 	} else {
 		ASSERT(n < brushlist.size());
+		const int icon_padding = 4;
+		const int icon_size = std::min(rect.GetHeight(), 32);
+		const int icon_x = rect.GetX() + icon_padding;
+		const int icon_y = rect.GetY() + (rect.GetHeight() - icon_size) / 2;
+		const wxRect icon_rect(icon_x, icon_y, icon_size, icon_size);
+
 		Sprite* spr = g_gui.gfx.getSprite(brushlist[n]->getLookID());
 		if(spr) {
-			spr->DrawTo(&dc, SPRITE_SIZE_32x32, rect.GetX(), rect.GetY(), rect.GetWidth(), rect.GetHeight());
+			spr->DrawTo(&dc, SPRITE_SIZE_32x32, icon_rect.GetX(), icon_rect.GetY(), icon_rect.GetWidth(), icon_rect.GetHeight());
 		} else {
 			auto creatureType = g_creatures[brushlist[n]->getName()];
 			if (!creatureType) {
@@ -969,7 +975,7 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 
 			auto creatureSprite = g_gui.gfx.getCreatureSprite(creatureType->outfit.lookType);
 			if (creatureSprite) {
-				creatureSprite->DrawTo(&dc, rect, creatureType->outfit);
+				creatureSprite->DrawTo(&dc, icon_rect, creatureType->outfit);
 			}
 		}
 
@@ -982,7 +988,8 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 			dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
 		}
 
-		dc.DrawText(wxstr(brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);
+		const int text_x = icon_rect.GetRight() + icon_padding;
+		dc.DrawText(wxstr(brushlist[n]->getName()), text_x, rect.GetY() + 6);
 	}
 }
 

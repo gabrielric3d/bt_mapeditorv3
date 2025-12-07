@@ -37,6 +37,38 @@ add_executable(${PROJECT_NAME} ${rme_H} ${rme_SRC})
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD_REQUIRED ON)
 
+# ---------------------------------------------------------------------------
+# Deploy artifacts to the project root after every successful build so the
+# editor executable and dependent DLLs are ready to ship.
+set(RME_RUNTIME_OUTPUT_DIR ${CMAKE_SOURCE_DIR})
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		$<TARGET_FILE:${PROJECT_NAME}>
+		${RME_RUNTIME_OUTPUT_DIR}/$<TARGET_FILE_NAME:${PROJECT_NAME}>
+	COMMENT "Copying ${PROJECT_NAME} executable to project root")
+
+set(RME_VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
+if(NOT RME_VCPKG_TRIPLET)
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(RME_VCPKG_TRIPLET "x64-windows")
+	else()
+		set(RME_VCPKG_TRIPLET "x86-windows")
+	endif()
+endif()
+
+set(RME_VCPKG_BIN_DIR "${CMAKE_SOURCE_DIR}/vcpkg/installed/${RME_VCPKG_TRIPLET}/bin")
+if(EXISTS ${RME_VCPKG_BIN_DIR})
+	file(GLOB RME_DEPENDENCY_DLLS "${RME_VCPKG_BIN_DIR}/*.dll")
+	foreach(dll ${RME_DEPENDENCY_DLLS})
+		get_filename_component(dll_name ${dll} NAME)
+		add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${dll}"
+				"${RME_RUNTIME_OUTPUT_DIR}/${dll_name}"
+			COMMENT "Copying ${dll_name} to project root")
+	endforeach()
+endif()
+
 include_directories(
     ${LibArchive_INCLUDE_DIRS}
     ${OPENGL_INCLUDE_DIR}

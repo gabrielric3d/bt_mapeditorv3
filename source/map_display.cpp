@@ -18,6 +18,8 @@
 #include "main.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <sstream>
 #include <time.h>
 #include <wx/wfstream.h>
@@ -370,6 +372,7 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 		DrawingOptions& options = drawer->getOptions();
 		if(screenshot_buffer) {
 			options.SetIngame();
+			options.show_lights = g_settings.getBoolean(Config::SHOW_LIGHTS);
 		} else {
 			options.transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
 			options.transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
@@ -449,76 +452,207 @@ void MapCanvas::ShowPositionIndicator(const Position& position)
 
 void MapCanvas::TakeScreenshot(wxFileName path, wxString format)
 {
+	wxImage screenshot;
+	if(!CaptureScreenshot(screenshot)) {
+		return;
+	}
+
+	SaveScreenshotImage(screenshot, path, format, "screenshot");
+	Refresh();
+}
+
+bool MapCanvas::CaptureScreenshot(wxImage& outImage, int* out_view_start_x, int* out_view_start_y)
+{
 	int screensize_x, screensize_y;
 	GetViewBox(&view_scroll_x, &view_scroll_y, &screensize_x, &screensize_y);
+
+	if(out_view_start_x) {
+		*out_view_start_x = view_scroll_x;
+	}
+	if(out_view_start_y) {
+		*out_view_start_y = view_scroll_y;
+	}
 
 	delete[] screenshot_buffer;
 	screenshot_buffer = newd uint8_t[3 * screensize_x * screensize_y];
 
-	// Draw the window
 	Refresh();
-	wxGLCanvas::Update(); // Forces immediate redraws the window.
+	wxGLCanvas::Update();
 
-	// screenshot_buffer should now contain the screenbuffer
 	if(screenshot_buffer == nullptr) {
 		g_gui.PopupDialog("Capture failed", "Image capture failed. Old Video Driver?", wxOK);
-	} else {
-		// We got the shit
-		int screensize_x, screensize_y;
-		GetMapWindow()->GetViewSize(&screensize_x, &screensize_y);
-		wxImage screenshot(screensize_x, screensize_y, screenshot_buffer);
-
-		time_t t = time(nullptr);
-		struct tm* current_time = localtime(&t);
-		ASSERT(current_time);
-
-		wxString date;
-		date << "screenshot_" << (1900 + current_time->tm_year);
-		if(current_time->tm_mon < 9)
-			date << "-" << "0" << current_time->tm_mon+1;
-		else
-			date << "-" << current_time->tm_mon+1;
-		date << "-" << current_time->tm_mday;
-		date << "-" << current_time->tm_hour;
-		date << "-" << current_time->tm_min;
-		date << "-" << current_time->tm_sec;
-
-		int type = 0;
-		path.SetName(date);
-		if(format == "bmp") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_BMP;
-		} else if(format == "png") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_PNG;
-		} else if(format == "jpg" || format == "jpeg") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_JPEG;
-		} else if(format == "tga") {
-			path.SetExt(format);
-			type = wxBITMAP_TYPE_TGA;
-		} else {
-			g_gui.SetStatusText("Unknown screenshot format \'" + format + "\", switching to default (png)");
-			path.SetExt("png");;
-			type = wxBITMAP_TYPE_PNG;
-		}
-
-		path.Mkdir(0755, wxPATH_MKDIR_FULL);
-		wxFileOutputStream of(path.GetFullPath());
-		if(of.IsOk()) {
-			if(screenshot.SaveFile(of, static_cast<wxBitmapType>(type)))
-				g_gui.SetStatusText("Took screenshot and saved as " + path.GetFullName());
-			else
-				g_gui.PopupDialog("File error", "Couldn't save image file correctly.", wxOK);
-		} else {
-			g_gui.PopupDialog("File error", "Couldn't open file " + path.GetFullPath() + " for writing.", wxOK);
-		}
-
+		return false;
 	}
 
+	int width, height;
+	GetMapWindow()->GetViewSize(&width, &height);
+	wxImage screenshot(width, height, screenshot_buffer);
+	screenshot_buffer = nullptr;
+
+	outImage = screenshot;
+	return true;
+}
+
+bool MapCanvas::SaveScreenshotImage(const wxImage& image, wxFileName path, const wxString& format, const wxString& prefix)
+{
+	time_t t = time(nullptr);
+	struct tm* current_time = localtime(&t);
+	if(!current_time) {
+		g_gui.PopupDialog("Capture failed", "Could not get current time for screenshot naming.", wxOK);
+		return false;
+	}
+
+	wxString date;
+	date << prefix << "_" << (1900 + current_time->tm_year);
+	if(current_time->tm_mon < 9)
+		date << "-" << "0" << current_time->tm_mon+1;
+	else
+		date << "-" << current_time->tm_mon+1;
+	date << "-" << current_time->tm_mday;
+	date << "-" << current_time->tm_hour;
+	date << "-" << current_time->tm_min;
+	date << "-" << current_time->tm_sec;
+
+	int type = 0;
+	path.SetName(date);
+	if(format == "bmp") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_BMP;
+	} else if(format == "png") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_PNG;
+	} else if(format == "jpg" || format == "jpeg") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_JPEG;
+	} else if(format == "tga") {
+		path.SetExt(format);
+		type = wxBITMAP_TYPE_TGA;
+	} else {
+		g_gui.SetStatusText("Unknown screenshot format '" + format + "', switching to default (png)");
+		path.SetExt("png");
+		type = wxBITMAP_TYPE_PNG;
+	}
+
+	path.Mkdir(0755, wxPATH_MKDIR_FULL);
+	wxFileOutputStream of(path.GetFullPath());
+	if(!of.IsOk()) {
+		g_gui.PopupDialog("File error", "Couldn't open file " + path.GetFullPath() + " for writing.", wxOK);
+		return false;
+	}
+
+	if(image.SaveFile(of, static_cast<wxBitmapType>(type))) {
+		g_gui.SetStatusText("Took screenshot and saved as " + path.GetFullName());
+		return true;
+	}
+
+	g_gui.PopupDialog("File error", "Couldn't save image file correctly.", wxOK);
+	return false;
+}
+
+void MapCanvas::TakeRegionScreenshot(wxFileName path, wxString format, const Position& fromPos, const Position& toPos)
+{
+	if(!fromPos.isValid() || !toPos.isValid())
+		return;
+
+	Position minPos(std::min(fromPos.x, toPos.x), std::min(fromPos.y, toPos.y), std::min(fromPos.z, toPos.z));
+	Position maxPos(std::max(fromPos.x, toPos.x), std::max(fromPos.y, toPos.y), std::max(fromPos.z, toPos.z));
+
+	if(minPos.z != maxPos.z) {
+		g_gui.PopupDialog("Area screenshot", "Please select tiles on the same floor before taking an area screenshot.", wxOK | wxICON_INFORMATION);
+		return;
+	}
+
+	MapWindow* window = GetMapWindow();
+	if(!window)
+		return;
+
+	int view_px_w = 0;
+	int view_px_h = 0;
+	window->GetViewSize(&view_px_w, &view_px_h);
+	const double current_zoom = g_gui.GetCurrentZoom();
+	const int view_world_w = std::max(1, static_cast<int>(std::round(view_px_w * current_zoom)));
+	const int view_world_h = std::max(1, static_cast<int>(std::round(view_px_h * current_zoom)));
+
+	const int floor_offset = (minPos.z < rme::MapGroundLayer) ? (rme::MapGroundLayer - minPos.z) * rme::TileSize : 0;
+	const int min_world_x = minPos.x * rme::TileSize - floor_offset;
+	const int min_world_y = minPos.y * rme::TileSize - floor_offset;
+
+	const int total_world_w = std::max(1, (maxPos.x - minPos.x + 1) * rme::TileSize);
+	const int total_world_h = std::max(1, (maxPos.y - minPos.y + 1) * rme::TileSize);
+
+	const int cols = std::max(1, (total_world_w + view_world_w - 1) / view_world_w);
+	const int rows = std::max(1, (total_world_h + view_world_h - 1) / view_world_h);
+
+	const Position original_center = window->GetScreenCenterPosition();
+	struct CapturedChunk {
+		wxImage image;
+		int origin_x;
+		int origin_y;
+	};
+	std::vector<CapturedChunk> captured_chunks;
+	captured_chunks.reserve(rows * cols);
+	int min_origin_x = std::numeric_limits<int>::max();
+	int min_origin_y = std::numeric_limits<int>::max();
+	int max_origin_x = std::numeric_limits<int>::min();
+	int max_origin_y = std::numeric_limits<int>::min();
+
+	for(int row = 0; row < rows; ++row) {
+		for(int col = 0; col < cols; ++col) {
+			const int chunk_world_x = min_world_x + col * view_world_w;
+			const int chunk_world_y = min_world_y + row * view_world_h;
+
+			const int center_tile_x = std::clamp((chunk_world_x + floor_offset + view_world_w / 2) / rme::TileSize, minPos.x, maxPos.x);
+			const int center_tile_y = std::clamp((chunk_world_y + floor_offset + view_world_h / 2) / rme::TileSize, minPos.y, maxPos.y);
+
+			window->SetScreenCenterPosition(Position(center_tile_x, center_tile_y, minPos.z), false);
+
+			wxImage chunk;
+			int view_origin_x = 0;
+			int view_origin_y = 0;
+			if(!CaptureScreenshot(chunk, &view_origin_x, &view_origin_y)) {
+				window->SetScreenCenterPosition(original_center, false);
+				Refresh();
+				return;
+			}
+
+			captured_chunks.push_back(CapturedChunk{chunk, view_origin_x, view_origin_y});
+			min_origin_x = std::min(min_origin_x, view_origin_x);
+			min_origin_y = std::min(min_origin_y, view_origin_y);
+			max_origin_x = std::max(max_origin_x, view_origin_x);
+			max_origin_y = std::max(max_origin_y, view_origin_y);
+		}
+	}
+
+	window->SetScreenCenterPosition(original_center, false);
 	Refresh();
 
-	screenshot_buffer = nullptr;
+	if(captured_chunks.empty())
+		return;
+
+	const int world_span_x = (max_origin_x - min_origin_x) + view_world_w;
+	const int world_span_y = (max_origin_y - min_origin_y) + view_world_h;
+	const int mosaic_px_w = std::max(1, static_cast<int>(std::ceil(world_span_x / current_zoom)));
+	const int mosaic_px_h = std::max(1, static_cast<int>(std::ceil(world_span_y / current_zoom)));
+	wxImage mosaic(mosaic_px_w, mosaic_px_h);
+	if(unsigned char* data = mosaic.GetData()) {
+		std::fill(data, data + (mosaic_px_w * mosaic_px_h * 3), 0);
+	}
+
+	for(const CapturedChunk& chunk : captured_chunks) {
+		const int dest_x = static_cast<int>(std::round((chunk.origin_x - min_origin_x) / current_zoom));
+		const int dest_y = static_cast<int>(std::round((chunk.origin_y - min_origin_y) / current_zoom));
+		mosaic.Paste(chunk.image, dest_x, dest_y);
+	}
+
+	const int output_px_w = std::max(1, static_cast<int>(std::ceil(total_world_w / current_zoom)));
+	const int output_px_h = std::max(1, static_cast<int>(std::ceil(total_world_h / current_zoom)));
+	const int left_crop = std::max(0, static_cast<int>(std::round((min_world_x - min_origin_x) / current_zoom)));
+	const int top_crop = std::max(0, static_cast<int>(std::round((min_world_y - min_origin_y) / current_zoom)));
+	const int crop_w = std::min(output_px_w, mosaic_px_w - left_crop);
+	const int crop_h = std::min(output_px_h, mosaic_px_h - top_crop);
+
+	wxImage final_image = mosaic.GetSubImage(wxRect(left_crop, top_crop, crop_w, crop_h));
+	SaveScreenshotImage(final_image, path, format, "screenshot_region");
 }
 
 bool MapCanvas::StartGifRecording(const wxFileName& path, int fps)
@@ -1079,15 +1213,24 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 	} else if(g_gui.GetCurrentBrush()) { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
 		g_gui.AddRecentBrush(brush);
-		if(event.ShiftDown() && brush->canDrag()) {
-			dragging_draw = true;
-		} else {
-			if(g_gui.GetBrushSize() == 0 && !brush->oneSizeFitsAll()) {
-				drawing = true;
+
+		bool handledSingleTile = false;
+		if(brush->isGround() && event.AltDown()) {
+			handledSingleTile = true;
+			replace_dragging = true;
+			editor.drawGroundSingleTile(Position(mouse_map_x, mouse_map_y, floor));
+		}
+
+		if(!handledSingleTile) {
+			if(event.ShiftDown() && brush->canDrag()) {
+				dragging_draw = true;
 			} else {
-				drawing = g_gui.GetCurrentBrush()->canSmear();
-			}
-			if(brush->isWall()) {
+				if(g_gui.GetBrushSize() == 0 && !brush->oneSizeFitsAll()) {
+					drawing = true;
+				} else {
+					drawing = g_gui.GetCurrentBrush()->canSmear();
+				}
+				if(brush->isWall()) {
 				if(event.AltDown() && g_gui.GetBrushSize() == 0) {
 					// z0mg, just clicked a tile, shift variaton.
 					if(event.ControlDown()) {
@@ -1168,16 +1311,6 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 					}
 				}
 			} else {
-				if(brush->isGround() && event.AltDown()) {
-					replace_dragging = true;
-					Tile* draw_tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
-					if(draw_tile) {
-						editor.replace_brush = draw_tile->getGroundBrush();
-					} else {
-						editor.replace_brush = nullptr;
-					}
-				}
-
 				if(brush->needBorders()) {
 					PositionVector tilestodraw;
 					PositionVector tilestoborder;
@@ -1214,8 +1347,9 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 					}
 				}
 			}
-			// Change the doodad layout brush
-			g_gui.FillDoodadPreviewBuffer();
+		}
+		// Change the doodad layout brush
+		g_gui.FillDoodadPreviewBuffer();
 		}
 	}
 	last_click_x = int(event.GetX()*zoom);
@@ -1417,114 +1551,116 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 		boundbox_select_creatures = false;
 	} else if(g_gui.GetCurrentBrush()){ // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
-		if(dragging_draw) {
-			if(brush->isSpawn()) {
-				int start_map_x = std::min(last_click_map_x, mouse_map_x);
-				int start_map_y = std::min(last_click_map_y, mouse_map_y);
-				int end_map_x   = std::max(last_click_map_x, mouse_map_x);
-				int end_map_y   = std::max(last_click_map_y, mouse_map_y);
-
-				int map_x = start_map_x + (end_map_x - start_map_x)/2;
-				int map_y = start_map_y + (end_map_y - start_map_y)/2;
-
-				int width = std::min(g_settings.getInteger(Config::MAX_SPAWN_RADIUS), ((end_map_x - start_map_x)/2 + (end_map_y - start_map_y)/2)/2);
-				int old = g_gui.GetBrushSize();
-				g_gui.SetBrushSize(width);
-				editor.draw(Position(map_x, map_y, floor), event.AltDown());
-				g_gui.SetBrushSize(old);
-			} else {
-				PositionVector tilestodraw;
-				PositionVector tilestoborder;
-				if(brush->isWall()) {
+		if(!replace_dragging) {
+			if(dragging_draw) {
+				if(brush->isSpawn()) {
 					int start_map_x = std::min(last_click_map_x, mouse_map_x);
 					int start_map_y = std::min(last_click_map_y, mouse_map_y);
 					int end_map_x   = std::max(last_click_map_x, mouse_map_x);
 					int end_map_y   = std::max(last_click_map_y, mouse_map_y);
 
-					for(int y = start_map_y-1; y <= end_map_y+1; y ++) {
-						for(int x = start_map_x-1; x <= end_map_x+1; x++) {
-							if((x <= start_map_x+1 || x >= end_map_x-1) || (y <= start_map_y+1 || y >= end_map_y-1)) {
-								tilestoborder.push_back(Position(x,y,floor));
-							}
-							if(((x == start_map_x || x == end_map_x) || (y == start_map_y || y == end_map_y)) &&
-								((x >= start_map_x && x <= end_map_x) && (y >= start_map_y && y <= end_map_y))) {
-								tilestodraw.push_back(Position(x,y,floor));
-							}
-						}
-					}
-				} else {
-					if(g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
-						if(last_click_map_x > mouse_map_x) {
-							int tmp = mouse_map_x; mouse_map_x = last_click_map_x; last_click_map_x = tmp;
-						}
-						if(last_click_map_y > mouse_map_y) {
-							int tmp = mouse_map_y; mouse_map_y = last_click_map_y; last_click_map_y = tmp;
-						}
+					int map_x = start_map_x + (end_map_x - start_map_x)/2;
+					int map_y = start_map_y + (end_map_y - start_map_y)/2;
 
-						for(int x = last_click_map_x-1; x <= mouse_map_x+1; x++) {
-							for(int y = last_click_map_y-1; y <= mouse_map_y+1; y ++) {
-								if((x <= last_click_map_x || x >= mouse_map_x) || (y <= last_click_map_y || y >= mouse_map_y)) {
+					int width = std::min(g_settings.getInteger(Config::MAX_SPAWN_RADIUS), ((end_map_x - start_map_x)/2 + (end_map_y - start_map_y)/2)/2);
+					int old = g_gui.GetBrushSize();
+					g_gui.SetBrushSize(width);
+					editor.draw(Position(map_x, map_y, floor), event.AltDown());
+					g_gui.SetBrushSize(old);
+				} else {
+					PositionVector tilestodraw;
+					PositionVector tilestoborder;
+					if(brush->isWall()) {
+						int start_map_x = std::min(last_click_map_x, mouse_map_x);
+						int start_map_y = std::min(last_click_map_y, mouse_map_y);
+						int end_map_x   = std::max(last_click_map_x, mouse_map_x);
+						int end_map_y   = std::max(last_click_map_y, mouse_map_y);
+
+						for(int y = start_map_y-1; y <= end_map_y+1; y ++) {
+							for(int x = start_map_x-1; x <= end_map_x+1; x++) {
+								if((x <= start_map_x+1 || x >= end_map_x-1) || (y <= start_map_y+1 || y >= end_map_y-1)) {
 									tilestoborder.push_back(Position(x,y,floor));
 								}
-								if((x >= last_click_map_x && x <= mouse_map_x) && (y >= last_click_map_y && y <= mouse_map_y)) {
+								if(((x == start_map_x || x == end_map_x) || (y == start_map_y || y == end_map_y)) &&
+									((x >= start_map_x && x <= end_map_x) && (y >= start_map_y && y <= end_map_y))) {
 									tilestodraw.push_back(Position(x,y,floor));
 								}
 							}
 						}
 					} else {
-						int start_x, end_x;
-						int start_y, end_y;
-						int width = std::max(
-							std::abs(
-							std::max(mouse_map_y, last_click_map_y) -
-							std::min(mouse_map_y, last_click_map_y)
-							),
-							std::abs(
-							std::max(mouse_map_x, last_click_map_x) -
-							std::min(mouse_map_x, last_click_map_x)
-							)
-							);
-						if(mouse_map_x < last_click_map_x) {
-							start_x = last_click_map_x - width;
-							end_x = last_click_map_x;
-						} else {
-							start_x = last_click_map_x;
-							end_x = last_click_map_x + width;
-						}
-						if(mouse_map_y < last_click_map_y) {
-							start_y = last_click_map_y - width;
-							end_y = last_click_map_y;
-						} else {
-							start_y = last_click_map_y;
-							end_y = last_click_map_y + width;
-						}
+						if(g_gui.GetBrushShape() == BRUSHSHAPE_SQUARE) {
+							if(last_click_map_x > mouse_map_x) {
+								int tmp = mouse_map_x; mouse_map_x = last_click_map_x; last_click_map_x = tmp;
+							}
+							if(last_click_map_y > mouse_map_y) {
+								int tmp = mouse_map_y; mouse_map_y = last_click_map_y; last_click_map_y = tmp;
+							}
 
-						int center_x = start_x + (end_x - start_x) / 2;
-						int center_y = start_y + (end_y - start_y) / 2;
-						float radii = width / 2.0f + 0.005f;
-
-						for(int y = start_y-1; y <= end_y+1; y++) {
-							float dy = center_y - y;
-							for(int x = start_x-1; x <= end_x+1; x++) {
-								float dx = center_x - x;
-								//printf("%f;%f\n", dx, dy);
-								float distance = sqrt(dx*dx + dy*dy);
-								if(distance < radii) {
-									tilestodraw.push_back(Position(x,y,floor));
+							for(int x = last_click_map_x-1; x <= mouse_map_x+1; x++) {
+								for(int y = last_click_map_y-1; y <= mouse_map_y+1; y ++) {
+									if((x <= last_click_map_x || x >= mouse_map_x) || (y <= last_click_map_y || y >= mouse_map_y)) {
+										tilestoborder.push_back(Position(x,y,floor));
+									}
+									if((x >= last_click_map_x && x <= mouse_map_x) && (y >= last_click_map_y && y <= mouse_map_y)) {
+										tilestodraw.push_back(Position(x,y,floor));
+									}
 								}
-								if(std::abs(distance - radii) < 1.5) {
-									tilestoborder.push_back(Position(x,y,floor));
+							}
+						} else {
+							int start_x, end_x;
+							int start_y, end_y;
+							int width = std::max(
+								std::abs(
+								std::max(mouse_map_y, last_click_map_y) -
+								std::min(mouse_map_y, last_click_map_y)
+								),
+								std::abs(
+								std::max(mouse_map_x, last_click_map_x) -
+								std::min(mouse_map_x, last_click_map_x)
+								)
+								);
+							if(mouse_map_x < last_click_map_x) {
+								start_x = last_click_map_x - width;
+								end_x = last_click_map_x;
+							} else {
+								start_x = last_click_map_x;
+								end_x = last_click_map_x + width;
+							}
+							if(mouse_map_y < last_click_map_y) {
+								start_y = last_click_map_y - width;
+								end_y = last_click_map_y;
+							} else {
+								start_y = last_click_map_y;
+								end_y = last_click_map_y + width;
+							}
+
+							int center_x = start_x + (end_x - start_x) / 2;
+							int center_y = start_y + (end_y - start_y) / 2;
+							float radii = width / 2.0f + 0.005f;
+
+							for(int y = start_y-1; y <= end_y+1; y++) {
+								float dy = center_y - y;
+								for(int x = start_x-1; x <= end_x+1; x++) {
+									float dx = center_x - x;
+									//printf("%f;%f\n", dx, dy);
+									float distance = sqrt(dx*dx + dy*dy);
+									if(distance < radii) {
+										tilestodraw.push_back(Position(x,y,floor));
+									}
+									if(std::abs(distance - radii) < 1.5) {
+										tilestoborder.push_back(Position(x,y,floor));
+									}
 								}
 							}
 						}
 					}
+					if(event.ControlDown()) {
+						editor.undraw(tilestodraw, tilestoborder, event.AltDown());
+					} else {
+						editor.draw(tilestodraw, tilestoborder, event.AltDown());
+					}
 				}
-				if(event.ControlDown()) {
-					editor.undraw(tilestodraw, tilestoborder, event.AltDown());
-				} else {
-					editor.draw(tilestodraw, tilestoborder, event.AltDown());
-				}
-			}
+		}
 		}
 		editor.resetActionsTimer();
 		editor.updateActions();
@@ -2928,3 +3064,4 @@ void AnimationTimer::Stop()
 		wxTimer::Stop();
 	}
 };
+
