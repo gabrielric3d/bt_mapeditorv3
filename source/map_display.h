@@ -51,10 +51,19 @@ public:
 	void OnMouseLeftRelease(wxMouseEvent& event);
 	void OnMouseLeftClick(wxMouseEvent& event);
 	void OnMouseLeftDoubleClick(wxMouseEvent& event);
+	void OnMouseMiddleDoubleClick(wxMouseEvent& event);
+	void OnMouseAux1DoubleClick(wxMouseEvent& event);
+	void OnMouseAux2DoubleClick(wxMouseEvent& event);
 	void OnMouseCenterClick(wxMouseEvent& event);
 	void OnMouseCenterRelease(wxMouseEvent& event);
 	void OnMouseRightClick(wxMouseEvent& event);
 	void OnMouseRightRelease(wxMouseEvent& event);
+	void OnMouseRightDoubleClick(wxMouseEvent& event);
+	void OnMouseAux1Click(wxMouseEvent& event);
+	void OnMouseAux1Release(wxMouseEvent& event);
+	void OnMouseAux2Click(wxMouseEvent& event);
+	void OnMouseAux2Release(wxMouseEvent& event);
+	void OnMouseAuxEvent(wxMouseEvent& event);
 
 	void OnKeyDown(wxKeyEvent& event);
 	void OnKeyUp(wxKeyEvent& event);
@@ -206,6 +215,8 @@ private:
 	wxStopWatch refresh_watch;
 	MapPopupMenu* popup_menu;
 	AnimationTimer* animation_timer;
+
+	void HandlePropertiesDoubleClick(wxMouseEvent& event);
 
 	friend class MapDrawer;
 

@@ -21,6 +21,7 @@
 #include "main.h"
 
 #include <string>
+#include <vector>
 #include <wx/event.h>
 
 struct HotkeyData
@@ -29,8 +30,39 @@ struct HotkeyData
 	int keycode = 0;
 };
 
+enum class MouseActionID
+{
+	PrimaryAction = 0,
+	Camera,
+	Properties,
+	Count,
+};
+
+enum class MouseButtonBinding
+{
+	Left = 0,
+	Middle = 1,
+	Right = 2,
+	Button4 = 3,
+	Button5 = 4,
+};
+
+struct MouseHotkeyEntry
+{
+	MouseActionID id;
+	std::string menu;
+	std::string action;
+	MouseButtonBinding defaultBinding;
+	MouseButtonBinding currentBinding;
+};
+
 bool ParseHotkeyText(const std::string& text, HotkeyData& out);
 std::string HotkeyToText(const HotkeyData& hotkey);
 bool EventToHotkey(const wxKeyEvent& event, HotkeyData& out);
+std::string MouseBindingToText(MouseButtonBinding binding);
+std::vector<MouseHotkeyEntry> GetMouseHotkeyEntries();
+void ApplyMouseHotkeys(const std::vector<MouseHotkeyEntry>& entries);
+MouseButtonBinding GetMouseBinding(MouseActionID id);
+void SetMouseBinding(MouseActionID id, MouseButtonBinding binding);
 
 #endif

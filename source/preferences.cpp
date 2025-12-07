@@ -25,6 +25,7 @@
 #include "editor.h"
 
 #include "gui.h"
+#include "hotkey_utils.h"
 
 #include "preferences.h"
 
@@ -531,8 +532,11 @@ wxNotebookPage* PreferencesWindow::CreateUIPage()
 	sizer->AddSpacer(10);
 
 	switch_mousebtn_chkbox = newd wxCheckBox(ui_page, wxID_ANY, "Switch mousebuttons");
-	switch_mousebtn_chkbox->SetValue(g_settings.getBoolean(Config::SWITCH_MOUSEBUTTONS));
-	switch_mousebtn_chkbox->SetToolTip("Switches the right and center mouse button.");
+	const bool swappedLayout = GetMouseBinding(MouseActionID::Camera) == MouseButtonBinding::Right &&
+		GetMouseBinding(MouseActionID::Properties) == MouseButtonBinding::Middle &&
+		GetMouseBinding(MouseActionID::PrimaryAction) == MouseButtonBinding::Left;
+	switch_mousebtn_chkbox->SetValue(swappedLayout);
+	switch_mousebtn_chkbox->SetToolTip("Swaps the camera (middle) and properties (right) mouse buttons.");
 	sizer->Add(switch_mousebtn_chkbox, 0, wxLEFT | wxTOP, 5);
 
 	doubleclick_properties_chkbox = newd wxCheckBox(ui_page, wxID_ANY, "Double click for properties");
@@ -811,7 +815,13 @@ void PreferencesWindow::Apply()
 	g_settings.setInteger(Config::SHOW_CURSOR_HIGHLIGHT, cursor_highlight_chkbox->GetValue());
 
 
-	g_settings.setInteger(Config::SWITCH_MOUSEBUTTONS, switch_mousebtn_chkbox->GetValue());
+	if(switch_mousebtn_chkbox->GetValue()) {
+		SetMouseBinding(MouseActionID::Camera, MouseButtonBinding::Right);
+		SetMouseBinding(MouseActionID::Properties, MouseButtonBinding::Middle);
+	} else {
+		SetMouseBinding(MouseActionID::Camera, MouseButtonBinding::Middle);
+		SetMouseBinding(MouseActionID::Properties, MouseButtonBinding::Right);
+	}
 	g_settings.setInteger(Config::DOUBLECLICK_PROPERTIES, doubleclick_properties_chkbox->GetValue());
 
 	float scroll_mul = 1.0;

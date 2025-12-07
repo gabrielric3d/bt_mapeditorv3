@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "hotkey_utils.h"
+#include "settings.h"
 
 #include <wx/accel.h>
 
@@ -302,4 +303,154 @@ bool EventToHotkey(const wxKeyEvent& event, HotkeyData& out)
 	out.flags = flags;
 	out.keycode = keycode;
 	return true;
+}
+
+namespace
+{
+	struct MouseActionInfo
+	{
+		MouseActionID id;
+		const char* action;
+		MouseButtonBinding defaultBinding;
+		Config::Key configKey;
+	};
+
+	const MouseActionInfo g_mouse_actions[] = {
+		{ MouseActionID::PrimaryAction, "Primary Action", MouseButtonBinding::Left, Config::MOUSE_ACTION_PRIMARY_BUTTON },
+		{ MouseActionID::Camera, "Camera Drag", MouseButtonBinding::Middle, Config::MOUSE_ACTION_CAMERA_BUTTON },
+		{ MouseActionID::Properties, "Properties Tool", MouseButtonBinding::Right, Config::MOUSE_ACTION_PROPERTIES_BUTTON },
+	};
+
+	MouseButtonBinding BindingFromInt(int value)
+	{
+		switch(value) {
+			case 0: return MouseButtonBinding::Left;
+			case 1: return MouseButtonBinding::Middle;
+			case 2: return MouseButtonBinding::Right;
+			case 3: return MouseButtonBinding::Button4;
+			case 4: return MouseButtonBinding::Button5;
+			default: return MouseButtonBinding::Left;
+		}
+	}
+
+	int BindingToInt(MouseButtonBinding binding)
+	{
+		switch(binding) {
+			case MouseButtonBinding::Left: return 0;
+			case MouseButtonBinding::Middle: return 1;
+			case MouseButtonBinding::Right: return 2;
+			case MouseButtonBinding::Button4: return 3;
+			case MouseButtonBinding::Button5: return 4;
+			default: return 0;
+		}
+	}
+
+	const MouseActionInfo* FindMouseAction(MouseActionID id)
+	{
+		for(const MouseActionInfo& info : g_mouse_actions) {
+			if(info.id == id)
+				return &info;
+		}
+		return nullptr;
+	}
+
+	void EnsureMouseBindingsInitialized()
+	{
+		const int version = g_settings.getInteger(Config::MOUSE_BINDINGS_VERSION);
+		if(version >= 2)
+			return;
+
+		if(version <= 0) {
+			const bool swapped = g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS) != 0;
+			g_settings.setInteger(Config::MOUSE_ACTION_PRIMARY_BUTTON, BindingToInt(MouseButtonBinding::Left));
+			g_settings.setInteger(Config::MOUSE_ACTION_CAMERA_BUTTON, BindingToInt(swapped ? MouseButtonBinding::Right : MouseButtonBinding::Middle));
+			g_settings.setInteger(Config::MOUSE_ACTION_PROPERTIES_BUTTON, BindingToInt(swapped ? MouseButtonBinding::Middle : MouseButtonBinding::Right));
+		}
+
+		g_settings.setInteger(Config::MOUSE_BINDINGS_VERSION, 2);
+	}
+
+	bool IsSwappedLayout()
+	{
+		const int action = g_settings.getInteger(Config::MOUSE_ACTION_PRIMARY_BUTTON);
+		const int camera = g_settings.getInteger(Config::MOUSE_ACTION_CAMERA_BUTTON);
+		const int properties = g_settings.getInteger(Config::MOUSE_ACTION_PROPERTIES_BUTTON);
+		return action == BindingToInt(MouseButtonBinding::Left) &&
+			camera == BindingToInt(MouseButtonBinding::Right) &&
+			properties == BindingToInt(MouseButtonBinding::Middle);
+	}
+
+	void SyncSwitchPreference()
+	{
+		EnsureMouseBindingsInitialized();
+		g_settings.setInteger(Config::SWITCH_MOUSEBUTTONS, IsSwappedLayout() ? 1 : 0);
+	}
+}
+
+std::string MouseBindingToText(MouseButtonBinding binding)
+{
+	switch(binding) {
+		case MouseButtonBinding::Left: return "Left Mouse Button";
+		case MouseButtonBinding::Middle: return "Middle Mouse Button";
+		case MouseButtonBinding::Right: return "Right Mouse Button";
+		case MouseButtonBinding::Button4: return "Mouse Button 4";
+		case MouseButtonBinding::Button5: return "Mouse Button 5";
+		default:
+			break;
+	}
+	return "";
+}
+
+std::vector<MouseHotkeyEntry> GetMouseHotkeyEntries()
+{
+	EnsureMouseBindingsInitialized();
+
+	std::vector<MouseHotkeyEntry> entries;
+	entries.reserve(sizeof(g_mouse_actions) / sizeof(g_mouse_actions[0]));
+
+	for(const MouseActionInfo& info : g_mouse_actions) {
+		MouseHotkeyEntry entry;
+		entry.id = info.id;
+		entry.menu = "Mouse";
+		entry.action = info.action;
+		entry.defaultBinding = info.defaultBinding;
+		entry.currentBinding = BindingFromInt(g_settings.getInteger(info.configKey));
+		entries.push_back(entry);
+	}
+
+	return entries;
+}
+
+void ApplyMouseHotkeys(const std::vector<MouseHotkeyEntry>& entries)
+{
+	EnsureMouseBindingsInitialized();
+
+	for(const MouseHotkeyEntry& entry : entries) {
+		const MouseActionInfo* info = FindMouseAction(entry.id);
+		if(!info)
+			continue;
+		g_settings.setInteger(info->configKey, BindingToInt(entry.currentBinding));
+	}
+
+	SyncSwitchPreference();
+}
+
+MouseButtonBinding GetMouseBinding(MouseActionID id)
+{
+	EnsureMouseBindingsInitialized();
+	const MouseActionInfo* info = FindMouseAction(id);
+	if(!info)
+		return MouseButtonBinding::Left;
+	return BindingFromInt(g_settings.getInteger(info->configKey));
+}
+
+void SetMouseBinding(MouseActionID id, MouseButtonBinding binding)
+{
+	EnsureMouseBindingsInitialized();
+	const MouseActionInfo* info = FindMouseAction(id);
+	if(!info)
+		return;
+
+	g_settings.setInteger(info->configKey, BindingToInt(binding));
+	SyncSwitchPreference();
 }

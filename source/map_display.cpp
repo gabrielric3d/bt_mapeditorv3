@@ -26,6 +26,7 @@
 #include <wx/filefn.h>
 
 #include "gui.h"
+#include "hotkey_utils.h"
 #include "editor.h"
 #include "brush.h"
 #include "sprites.h"
@@ -38,6 +39,7 @@
 #include "map_drawer.h"
 #include "application.h"
 #include "live_server.h"
+
 #include "browse_tile_window.h"
 #include "theme.h"
 
@@ -54,6 +56,54 @@
 #include "table_brush.h"
 #include "gif_recorder.h"
 
+namespace
+{
+MouseActionID ActionForButton(MouseButtonBinding button)
+{
+	if(GetMouseBinding(MouseActionID::PrimaryAction) == button)
+		return MouseActionID::PrimaryAction;
+	if(GetMouseBinding(MouseActionID::Camera) == button)
+		return MouseActionID::Camera;
+	if(GetMouseBinding(MouseActionID::Properties) == button)
+		return MouseActionID::Properties;
+	return MouseActionID::Count;
+}
+
+void DispatchMousePress(MouseButtonBinding button, MapCanvas& canvas, wxMouseEvent& event)
+{
+	switch(ActionForButton(button)) {
+		case MouseActionID::PrimaryAction:
+			canvas.OnMouseActionClick(event);
+			break;
+		case MouseActionID::Camera:
+			canvas.OnMouseCameraClick(event);
+			break;
+		case MouseActionID::Properties:
+			canvas.OnMousePropertiesClick(event);
+			break;
+		default:
+			break;
+	}
+}
+
+void DispatchMouseRelease(MouseButtonBinding button, MapCanvas& canvas, wxMouseEvent& event)
+{
+	switch(ActionForButton(button)) {
+		case MouseActionID::PrimaryAction:
+			canvas.OnMouseActionRelease(event);
+			break;
+		case MouseActionID::Camera:
+			canvas.OnMouseCameraRelease(event);
+			break;
+		case MouseActionID::Properties:
+			canvas.OnMousePropertiesRelease(event);
+			break;
+		default:
+			break;
+	}
+}
+}
+
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_KEY_DOWN(MapCanvas::OnKeyDown)
@@ -64,10 +114,19 @@ BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_LEFT_UP(MapCanvas::OnMouseLeftRelease)
 	EVT_LEFT_DOWN(MapCanvas::OnMouseLeftClick)
 	EVT_LEFT_DCLICK(MapCanvas::OnMouseLeftDoubleClick)
+	EVT_MOUSE_AUX1_DCLICK(MapCanvas::OnMouseAux1DoubleClick)
+	EVT_MOUSE_AUX2_DCLICK(MapCanvas::OnMouseAux2DoubleClick)
+	EVT_MIDDLE_DCLICK(MapCanvas::OnMouseMiddleDoubleClick)
 	EVT_MIDDLE_DOWN(MapCanvas::OnMouseCenterClick)
 	EVT_MIDDLE_UP(MapCanvas::OnMouseCenterRelease)
+	EVT_RIGHT_DCLICK(MapCanvas::OnMouseRightDoubleClick)
 	EVT_RIGHT_DOWN(MapCanvas::OnMouseRightClick)
 	EVT_RIGHT_UP(MapCanvas::OnMouseRightRelease)
+	EVT_MOUSE_AUX1_DOWN(MapCanvas::OnMouseAux1Click)
+	EVT_MOUSE_AUX1_UP(MapCanvas::OnMouseAux1Release)
+	EVT_MOUSE_AUX2_DOWN(MapCanvas::OnMouseAux2Click)
+	EVT_MOUSE_AUX2_UP(MapCanvas::OnMouseAux2Release)
+	EVT_MOUSE_EVENTS(MapCanvas::OnMouseAuxEvent)
 	EVT_MOUSEWHEEL(MapCanvas::OnWheel)
 	EVT_ENTER_WINDOW(MapCanvas::OnGainMouse)
 	EVT_LEAVE_WINDOW(MapCanvas::OnLoseMouse)
@@ -1024,15 +1083,128 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 
 void MapCanvas::OnMouseLeftRelease(wxMouseEvent& event)
 {
-	OnMouseActionRelease(event);
+	DispatchMouseRelease(MouseButtonBinding::Left, *this, event);
 }
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent& event)
 {
-	OnMouseActionClick(event);
+	DispatchMousePress(MouseButtonBinding::Left, *this, event);
 }
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event)
+{
+	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Left)
+		return;
+	HandlePropertiesDoubleClick(event);
+}
+
+void MapCanvas::OnMouseMiddleDoubleClick(wxMouseEvent& event)
+{
+	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Middle)
+		return;
+	HandlePropertiesDoubleClick(event);
+}
+
+void MapCanvas::OnMouseAux1DoubleClick(wxMouseEvent& event)
+{
+	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Button4)
+		return;
+	HandlePropertiesDoubleClick(event);
+}
+
+void MapCanvas::OnMouseAux2DoubleClick(wxMouseEvent& event)
+{
+	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Button5)
+		return;
+	HandlePropertiesDoubleClick(event);
+}
+
+void MapCanvas::OnMouseCenterClick(wxMouseEvent& event)
+{
+	DispatchMousePress(MouseButtonBinding::Middle, *this, event);
+}
+
+void MapCanvas::OnMouseCenterRelease(wxMouseEvent& event)
+{
+	DispatchMouseRelease(MouseButtonBinding::Middle, *this, event);
+}
+
+void MapCanvas::OnMouseRightClick(wxMouseEvent& event)
+{
+	DispatchMousePress(MouseButtonBinding::Right, *this, event);
+}
+
+void MapCanvas::OnMouseRightRelease(wxMouseEvent& event)
+{
+	DispatchMouseRelease(MouseButtonBinding::Right, *this, event);
+}
+
+void MapCanvas::OnMouseRightDoubleClick(wxMouseEvent& event)
+{
+	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Right)
+		return;
+	HandlePropertiesDoubleClick(event);
+}
+
+void MapCanvas::OnMouseAux1Click(wxMouseEvent& event)
+{
+	DispatchMousePress(MouseButtonBinding::Button4, *this, event);
+}
+
+void MapCanvas::OnMouseAux1Release(wxMouseEvent& event)
+{
+	DispatchMouseRelease(MouseButtonBinding::Button4, *this, event);
+}
+
+void MapCanvas::OnMouseAux2Click(wxMouseEvent& event)
+{
+	DispatchMousePress(MouseButtonBinding::Button5, *this, event);
+}
+
+void MapCanvas::OnMouseAux2Release(wxMouseEvent& event)
+{
+	DispatchMouseRelease(MouseButtonBinding::Button5, *this, event);
+}
+
+void MapCanvas::OnMouseAuxEvent(wxMouseEvent& event)
+{
+	switch(event.GetEventType()) {
+#ifdef wxEVT_AUX1_DOWN
+		case wxEVT_AUX1_DOWN:
+			OnMouseAux1Click(event);
+			return;
+#endif
+#ifdef wxEVT_AUX1_UP
+		case wxEVT_AUX1_UP:
+			OnMouseAux1Release(event);
+			return;
+#endif
+#ifdef wxEVT_AUX2_DOWN
+		case wxEVT_AUX2_DOWN:
+			OnMouseAux2Click(event);
+			return;
+#endif
+#ifdef wxEVT_AUX2_UP
+		case wxEVT_AUX2_UP:
+			OnMouseAux2Release(event);
+			return;
+#endif
+#ifdef wxEVT_AUX1_DCLICK
+		case wxEVT_AUX1_DCLICK:
+			OnMouseAux1DoubleClick(event);
+			return;
+#endif
+#ifdef wxEVT_AUX2_DCLICK
+		case wxEVT_AUX2_DCLICK:
+			OnMouseAux2DoubleClick(event);
+			return;
+#endif
+		default:
+			break;
+	}
+	event.Skip();
+}
+void MapCanvas::HandlePropertiesDoubleClick(wxMouseEvent& event)
 {
 	if(!g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
 		return;
@@ -1071,42 +1243,6 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event)
 			delete new_tile;
 		}
 		dialog->Destroy();
-	}
-}
-
-void MapCanvas::OnMouseCenterClick(wxMouseEvent& event)
-{
-	if(g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
-		OnMousePropertiesClick(event);
-	} else {
-		OnMouseCameraClick(event);
-	}
-}
-
-void MapCanvas::OnMouseCenterRelease(wxMouseEvent& event)
-{
-	if(g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
-		OnMousePropertiesRelease(event);
-	} else {
-		OnMouseCameraRelease(event);
-	}
-}
-
-void MapCanvas::OnMouseRightClick(wxMouseEvent& event)
-{
-	if(g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
-		OnMouseCameraClick(event);
-	} else {
-		OnMousePropertiesClick(event);
-	}
-}
-
-void MapCanvas::OnMouseRightRelease(wxMouseEvent& event)
-{
-	if(g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
-		OnMouseCameraRelease(event);
-	} else {
-		OnMousePropertiesRelease(event);
 	}
 }
 

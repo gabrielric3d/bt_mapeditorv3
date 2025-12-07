@@ -20,6 +20,7 @@
 
 #include "main.h"
 #include "main_menubar.h"
+#include "hotkey_utils.h"
 
 #include <vector>
 
@@ -28,6 +29,18 @@ class wxTextCtrl;
 class wxStaticText;
 class wxButton;
 class wxListEvent;
+
+enum class HotkeyRowType
+{
+	MenuAction,
+	MouseAction,
+};
+
+struct RowEntry
+{
+	HotkeyRowType type = HotkeyRowType::MenuAction;
+	int index = -1;
+};
 
 class HotkeysDialog : public wxDialog
 {
@@ -38,8 +51,16 @@ private:
 	void PopulateList();
 	void UpdateSelection(int index);
 	void StartCapture();
-	void ApplyHotkeyToSelection(const std::string& hotkey);
+	void StopCapture();
+	void ApplyMenuHotkey(const std::string& hotkey);
+	void ApplyMouseBinding(MouseButtonBinding binding);
+	void AddRow(const std::string& menu, const std::string& action, const std::string& hotkey, HotkeyRowType type, int index);
 	void UpdateButtonStates();
+	bool HasSelection() const;
+	bool IsMouseSelection() const;
+	void UpdateRowText(int row);
+	const RowEntry* GetRowEntry(int row) const;
+	int FindRowForEntry(HotkeyRowType type, int index) const;
 
 	void OnItemSelected(wxListEvent& event);
 	void OnItemDeselected(wxListEvent& event);
@@ -49,16 +70,27 @@ private:
 	void OnSave(wxCommandEvent& event);
 	void OnCancel(wxCommandEvent& event);
 	void OnHotkeyKeyDown(wxKeyEvent& event);
+	void OnHotkeyMouseDown(wxMouseEvent& event);
+
+	enum class CaptureMode
+	{
+		None,
+		Keyboard,
+		Mouse,
+	};
 
 	MainMenuBar& menu_bar;
-	std::vector<MenuHotkeyEntry> entries;
+	std::vector<MenuHotkeyEntry> menu_entries;
+	std::vector<MouseHotkeyEntry> mouse_entries;
+	std::vector<RowEntry> row_mapping;
 	wxListCtrl* list_ctrl;
 	wxTextCtrl* hotkey_ctrl;
 	wxStaticText* info_label;
 	wxButton* set_button;
 	wxButton* clear_button;
 	wxButton* reset_button;
-	bool capturing;
+	CaptureMode capture_mode;
+	HotkeyRowType selected_type;
 	int selected_index;
 	int selected_row;
 };
