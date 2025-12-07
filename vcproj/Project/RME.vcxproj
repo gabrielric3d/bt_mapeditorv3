@@ -305,7 +305,11 @@
     <ClInclude Include="..\..\source\table_brush.h" />
     <ClInclude Include="..\..\source\threads.h" />
     <ClInclude Include="..\..\source\graphics.h" />
+    <ClInclude Include="..\..\source\hotkey_utils.h" />
+    <ClInclude Include="..\..\source\hotkey_window.h" />
     <ClCompile Include="..\..\source\graphics.cpp" />
+    <ClCompile Include="..\..\source\hotkey_utils.cpp" />
+    <ClCompile Include="..\..\source\hotkey_window.cpp" />
     <ClInclude Include="..\..\source\pngfiles.h" />
     <ClInclude Include="..\..\source\sprites.h" />
     <ClInclude Include="..\..\source\application.h" />

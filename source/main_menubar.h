@@ -20,6 +20,8 @@
 #define RME_MAIN_BAR_H_
 
 #include <wx/docview.h>
+#include <vector>
+#include <string>
 
 namespace MenuBar
 {
@@ -39,6 +41,7 @@ namespace MenuBar
 		RELOAD_DATA,
 		RECENT_FILES,
 		PREFERENCES,
+		CONFIGURE_HOTKEYS,
 		EXIT,
 		UNDO,
 		REDO,
@@ -166,6 +169,15 @@ namespace MenuBar
 	};
 }
 
+struct MenuHotkeyEntry
+{
+	MenuBar::ActionID id;
+	std::string menu;
+	std::string action;
+	std::string defaultHotkey;
+	std::string currentHotkey;
+};
+
 class MainFrame;
 
 class MainMenuBar : public wxEvtHandler
@@ -175,6 +187,8 @@ public:
 	virtual ~MainMenuBar();
 
 	bool Load(const FileName&, wxArrayString& warnings, wxString& error);
+	std::vector<MenuHotkeyEntry> GetMenuHotkeys() const;
+	void ApplyMenuHotkeys(const std::vector<MenuHotkeyEntry>& entries);
 
 	// Update
 	// Turn on/off all buttons according to current editor state
@@ -202,6 +216,7 @@ public:
 	void OnSaveAs(wxCommandEvent& event);
 	void OnClose(wxCommandEvent& event);
 	void OnPreferences(wxCommandEvent& event);
+	void OnConfigureHotkeys(wxCommandEvent& event);
 	void OnQuit(wxCommandEvent& event);
 
 	// Import Menu
@@ -308,11 +323,17 @@ public:
 
 protected:
 	// Load and returns a menu item, also sets accelerator
-	wxObject* LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayString& warnings, wxString& error);
+	wxObject* LoadItem(pugi::xml_node node, wxMenu* parent, const std::string& topLevel, wxArrayString& warnings, wxString& error);
 	// Checks the items in the menus according to the settings (in config)
 	void LoadValues();
 	void SearchItems(bool unique, bool action, bool container, bool writable, bool onSelection = false);
 	void SearchDuplicatedItems(bool selection);
+	void LoadHotkeyOverrides();
+	std::string ResolveHotkeyValue(MenuBar::ActionID id, const std::string& defaultHotkey) const;
+	void UpdateMenuItemHotkey(MenuBar::ActionID id);
+	void RefreshAcceleratorTable();
+	void PersistHotkeyOverrides() const;
+	void UpdateAllMenuLabels();
 
 protected:
 	MainFrame* frame;
@@ -327,6 +348,10 @@ protected:
 	wxFileHistory recentFiles;
 
 	std::map<std::string, MenuBar::Action*> actions;
+	std::map<MenuBar::ActionID, MenuBar::Action*> actions_by_id;
+	std::map<MenuBar::ActionID, MenuHotkeyEntry> menu_hotkeys;
+	std::map<MenuBar::ActionID, std::string> stored_hotkey_overrides;
+	std::map<wxMenuItem*, std::string> base_menu_labels;
 
 	DECLARE_EVENT_TABLE();
 };

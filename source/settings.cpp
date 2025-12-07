@@ -327,9 +327,11 @@ void Settings::IO(IOMode mode)
 	Int(WINDOW_WIDTH, 700);
 	Int(WINDOW_MAXIMIZED, 0);
 	Int(WELCOME_DIALOG, 1);
+	Int(IGNORE_WARNINGS_ON_OPEN, 0);
 
 	section("Hotkeys");
 	String(NUMERICAL_HOTKEYS, "none:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\n");
+	String(MENU_ACTION_HOTKEYS, "");
 
 	Int(SHOW_TOOLBAR_STANDARD, 1);
 	Int(SHOW_TOOLBAR_BRUSHES, 0);

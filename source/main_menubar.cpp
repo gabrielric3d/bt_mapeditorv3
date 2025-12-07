@@ -32,6 +32,8 @@
 #include "brush_manager_window.h"
 #include "settings.h"
 #include "browse_tile_window.h"
+#include "hotkey_window.h"
+#include "hotkey_utils.h"
 
 #include "gui.h"
 
@@ -39,6 +41,10 @@
 #include <wx/numdlg.h>
 #include <wx/filename.h>
 #include <wx/filedlg.h>
+#include <sstream>
+#include <algorithm>
+#include <vector>
+#include <cctype>
 
 #include "items.h"
 #include "editor.h"
@@ -46,6 +52,55 @@
 #include "live_client.h"
 #include "live_server.h"
 #include "theme.h"
+
+namespace
+{
+	std::string TrimString(const std::string& text)
+	{
+		if(text.empty())
+			return text;
+
+		size_t start = 0;
+		while(start < text.size() && std::isspace(static_cast<unsigned char>(text[start]))) {
+			++start;
+		}
+		size_t end = text.size();
+		while(end > start && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+			--end;
+		}
+		return text.substr(start, end - start);
+	}
+
+	std::string ReplaceMnemonicMarkers(std::string text)
+	{
+		std::replace(text.begin(), text.end(), '$', '&');
+		return text;
+	}
+
+	std::string StripMenuFormatting(const std::string& text)
+	{
+		std::string cleaned;
+		cleaned.reserve(text.size());
+		for(char ch : text) {
+			if(ch == '&')
+				continue;
+			cleaned.push_back(ch);
+		}
+		cleaned = TrimString(cleaned);
+		if(cleaned.size() > 3 && cleaned.compare(cleaned.size() - 3, 3, "...") == 0) {
+			cleaned.erase(cleaned.size() - 3);
+			cleaned = TrimString(cleaned);
+		}
+		return cleaned;
+	}
+
+	std::string BuildMenuLabel(const std::string& base, const std::string& hotkey)
+	{
+		if(hotkey.empty())
+			return base;
+		return base + '\t' + hotkey;
+	}
+}
 
 BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 END_EVENT_TABLE()
@@ -55,8 +110,13 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	using namespace MenuBar;
 	checking_programmaticly = false;
 
-#define MAKE_ACTION(id, kind, handler) actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler))
-#define MAKE_SET_ACTION(id, kind, setting_, handler) actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler)); actions[#id].setting = setting_
+#define MAKE_ACTION(id, kind, handler) \
+	actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler)); \
+	actions_by_id[MenuBar::id] = actions[#id]
+#define MAKE_SET_ACTION(id, kind, setting_, handler) \
+	actions[#id] = new MenuBar::Action(#id, id, kind, wxCommandEventFunction(&MainMenuBar::handler)); \
+	actions[#id].setting = setting_; \
+	actions_by_id[MenuBar::id] = actions[#id]
 
 	MAKE_ACTION(NEW, wxITEM_NORMAL, OnNew);
 	MAKE_ACTION(OPEN, wxITEM_NORMAL, OnOpen);
@@ -74,6 +134,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(RELOAD_DATA, wxITEM_NORMAL, OnReloadDataFiles);
 	//MAKE_ACTION(RECENT_FILES, wxITEM_NORMAL, OnRecent);
 	MAKE_ACTION(PREFERENCES, wxITEM_NORMAL, OnPreferences);
+	MAKE_ACTION(CONFIGURE_HOTKEYS, wxITEM_NORMAL, OnConfigureHotkeys);
 	MAKE_ACTION(EXIT, wxITEM_NORMAL, OnQuit);
 
 	MAKE_ACTION(UNDO, wxITEM_NORMAL, OnUndo);
@@ -555,6 +616,11 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 		return false;
 	}
 
+	menu_hotkeys.clear();
+	base_menu_labels.clear();
+	stored_hotkey_overrides.clear();
+	LoadHotkeyOverrides();
+
 	// Clear the menu
 	while(menubar->GetMenuCount() > 0) {
 		menubar->Remove(0);
@@ -563,7 +629,10 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	// Load succeded
 	for(pugi::xml_node menuNode = node.first_child(); menuNode; menuNode = menuNode.next_sibling()) {
 		// For each child node, load it
-		wxObject* i = LoadItem(menuNode, nullptr, warnings, error);
+		pugi::xml_attribute attribute = menuNode.attribute("name");
+		std::string menuName = attribute ? ReplaceMnemonicMarkers(attribute.as_string()) : std::string();
+		std::string topLevelName = StripMenuFormatting(menuName);
+		wxObject* i = LoadItem(menuNode, nullptr, topLevelName, warnings, error);
 		wxMenu* m = dynamic_cast<wxMenu*>(i);
 		if(m) {
 			menubar->Append(m, m->GetTitle());
@@ -578,69 +647,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 		}
 	}
 
-#ifdef __LINUX__
-	const int count = 44;
-	wxAcceleratorEntry entries[count];
-	// Edit
-	entries[0].Set(wxACCEL_CTRL, (int)'Z', MAIN_FRAME_MENU + MenuBar::UNDO);
-	entries[1].Set(wxACCEL_CTRL | wxACCEL_SHIFT, (int)'Z', MAIN_FRAME_MENU + MenuBar::REDO);
-	entries[2].Set(wxACCEL_CTRL, (int)'F', MAIN_FRAME_MENU + MenuBar::FIND_ITEM);
-	entries[3].Set(wxACCEL_CTRL | wxACCEL_SHIFT, (int)'F', MAIN_FRAME_MENU + MenuBar::REPLACE_ITEMS);
-	entries[4].Set(wxACCEL_NORMAL, (int)'A', MAIN_FRAME_MENU + MenuBar::AUTOMAGIC);
-	entries[5].Set(wxACCEL_CTRL, (int)'B', MAIN_FRAME_MENU + MenuBar::BORDERIZE_SELECTION);
-	entries[6].Set(wxACCEL_NORMAL, (int)'P', MAIN_FRAME_MENU + MenuBar::GOTO_PREVIOUS_POSITION);
-	entries[7].Set(wxACCEL_CTRL, (int)'G', MAIN_FRAME_MENU + MenuBar::GOTO_POSITION);
-	entries[8].Set(wxACCEL_NORMAL, (int)'J', MAIN_FRAME_MENU + MenuBar::JUMP_TO_BRUSH);
-	entries[9].Set(wxACCEL_CTRL, (int)'X', MAIN_FRAME_MENU + MenuBar::CUT);
-	entries[10].Set(wxACCEL_CTRL, (int)'C', MAIN_FRAME_MENU + MenuBar::COPY);
-	entries[11].Set(wxACCEL_CTRL, (int)'V', MAIN_FRAME_MENU + MenuBar::PASTE);
-	// Select
-	entries[12].Set(wxACCEL_CTRL, (int)'R', MAIN_FRAME_MENU + MenuBar::SEARCH_ON_SELECTION_DUPLICATED_ITEMS);
-	// View
-	entries[13].Set(wxACCEL_CTRL, (int)'=', MAIN_FRAME_MENU + MenuBar::ZOOM_IN);
-	entries[14].Set(wxACCEL_CTRL, (int)'-', MAIN_FRAME_MENU + MenuBar::ZOOM_OUT);
-	entries[15].Set(wxACCEL_CTRL, (int)'0', MAIN_FRAME_MENU + MenuBar::ZOOM_NORMAL);
-	entries[16].Set(wxACCEL_NORMAL, (int)'Q', MAIN_FRAME_MENU + MenuBar::SHOW_SHADE);
-	entries[17].Set(wxACCEL_CTRL, (int)'W', MAIN_FRAME_MENU + MenuBar::SHOW_ALL_FLOORS);
-	entries[18].Set(wxACCEL_NORMAL, (int)'Q', MAIN_FRAME_MENU + MenuBar::GHOST_ITEMS);
-	entries[19].Set(wxACCEL_CTRL, (int)'L', MAIN_FRAME_MENU + MenuBar::GHOST_HIGHER_FLOORS);
-	entries[20].Set(wxACCEL_SHIFT, (int)'I', MAIN_FRAME_MENU + MenuBar::SHOW_INGAME_BOX);
-	entries[21].Set(wxACCEL_SHIFT, (int)'L', MAIN_FRAME_MENU + MenuBar::SHOW_LIGHTS);
-	entries[22].Set(wxACCEL_SHIFT, (int)'G', MAIN_FRAME_MENU + MenuBar::SHOW_GRID);
-	entries[23].Set(wxACCEL_NORMAL, (int)'V', MAIN_FRAME_MENU + MenuBar::HIGHLIGHT_ITEMS);
-	entries[24].Set(wxACCEL_NORMAL, (int)'F', MAIN_FRAME_MENU + MenuBar::SHOW_CREATURES);
-	entries[25].Set(wxACCEL_NORMAL, (int)'S', MAIN_FRAME_MENU + MenuBar::SHOW_SPAWNS);
-	entries[26].Set(wxACCEL_NORMAL, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_SPECIAL);
-	entries[27].Set(wxACCEL_SHIFT, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_AS_MINIMAP);
-	entries[28].Set(wxACCEL_CTRL, (int)'E', MAIN_FRAME_MENU + MenuBar::SHOW_ONLY_COLORS);
-	entries[29].Set(wxACCEL_CTRL, (int)'M', MAIN_FRAME_MENU + MenuBar::SHOW_ONLY_MODIFIED);
-	entries[30].Set(wxACCEL_CTRL, (int)'H', MAIN_FRAME_MENU + MenuBar::SHOW_HOUSES);
-	entries[31].Set(wxACCEL_NORMAL, (int)'O', MAIN_FRAME_MENU + MenuBar::SHOW_PATHING);
-	entries[32].Set(wxACCEL_NORMAL, (int)'Y', MAIN_FRAME_MENU + MenuBar::SHOW_TOOLTIPS);
-	entries[33].Set(wxACCEL_NORMAL, (int)'L', MAIN_FRAME_MENU + MenuBar::SHOW_PREVIEW);
-	entries[34].Set(wxACCEL_NORMAL, (int)'K', MAIN_FRAME_MENU + MenuBar::SHOW_WALL_HOOKS);
-	// Window
-	entries[35].Set(wxACCEL_NORMAL, (int)'M', MAIN_FRAME_MENU + MenuBar::WIN_MINIMAP);
-	entries[36].Set(wxACCEL_NORMAL, (int)'T', MAIN_FRAME_MENU + MenuBar::SELECT_TERRAIN);
-	entries[37].Set(wxACCEL_NORMAL, (int)'D', MAIN_FRAME_MENU + MenuBar::SELECT_DOODAD);
-	entries[38].Set(wxACCEL_NORMAL, (int)'I', MAIN_FRAME_MENU + MenuBar::SELECT_ITEM);
-	entries[39].Set(wxACCEL_NORMAL, (int)'H', MAIN_FRAME_MENU + MenuBar::SELECT_HOUSE);
-	entries[40].Set(wxACCEL_NORMAL, (int)'C', MAIN_FRAME_MENU + MenuBar::SELECT_CREATURE);
-	entries[41].Set(wxACCEL_NORMAL, (int)'W', MAIN_FRAME_MENU + MenuBar::SELECT_WAYPOINT);
-	entries[42].Set(wxACCEL_NORMAL, (int)'R', MAIN_FRAME_MENU + MenuBar::SELECT_RAW);
-	entries[43].Set(wxACCEL_CTRL, WXK_F10, MAIN_FRAME_MENU + MenuBar::TAKE_REGION_SCREENSHOT);
-
-	wxAcceleratorTable accelerator(count, entries);
-	frame->SetAcceleratorTable(accelerator);
-#endif
-
-	/*
-	// Create accelerator table
-	accelerator_table = newd wxAcceleratorTable(accelerators.size(), &accelerators[0]);
-
-	// Tell all clients of the renewed accelerators
-	RenewClients();
-	*/
+	RefreshAcceleratorTable();
 
 	recentFiles.AddFilesToMenu();
 	Update();
@@ -649,7 +656,7 @@ bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& 
 	return true;
 }
 
-wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayString& warnings, wxString& error)
+wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, const std::string& topLevel, wxArrayString& warnings, wxString& error)
 {
 	pugi::xml_attribute attribute;
 
@@ -659,16 +666,16 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 			return nullptr;
 		}
 
-		std::string name = attribute.as_string();
-		std::replace(name.begin(), name.end(), '$', '&');
+		std::string name = ReplaceMnemonicMarkers(attribute.as_string());
 
 		wxMenu* menu = newd wxMenu;
 		if((attribute = node.attribute("special")) && std::string(attribute.as_string()) == "RECENT_FILES") {
 			recentFiles.UseMenu(menu);
 		} else {
+			std::string nextTopLevel = parent ? topLevel : StripMenuFormatting(name);
 			for(pugi::xml_node menuNode = node.first_child(); menuNode; menuNode = menuNode.next_sibling()) {
 				// Load an add each item in order
-				LoadItem(menuNode, menu, warnings, error);
+				LoadItem(menuNode, menu, nextTopLevel, warnings, error);
 			}
 		}
 
@@ -689,20 +696,15 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 			return nullptr;
 		}
 
-		std::string name = attribute.as_string();
-		std::replace(name.begin(), name.end(), '$', '&');
+		std::string name = ReplaceMnemonicMarkers(attribute.as_string());
 		if(!(attribute = node.attribute("action"))) {
 			return nullptr;
 		}
 
 		const std::string& action = attribute.as_string();
 		std::string hotkey = node.attribute("hotkey").as_string();
-		if(!hotkey.empty()) {
-			hotkey = '\t' + hotkey;
-		}
 
 		const std::string& help = node.attribute("help").as_string();
-		name += hotkey;
 
 		auto it = actions.find(action);
 		if(it == actions.end()) {
@@ -711,19 +713,28 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 		}
 
 		const MenuBar::Action& act = *it->second;
-		wxAcceleratorEntry* entry = wxAcceleratorEntry::Create(wxstr(hotkey));
-		if(entry) {
-			delete entry; // accelerators.push_back(entry);
-		} else {
-			warnings.push_back("Invalid hotkey.");
+		MenuBar::ActionID actionId = static_cast<MenuBar::ActionID>(act.id);
+		MenuHotkeyEntry& info = menu_hotkeys[actionId];
+		if(info.action.empty()) {
+			info.id = actionId;
+			info.menu = topLevel.empty() ? StripMenuFormatting(name) : topLevel;
+			info.action = StripMenuFormatting(name);
+			info.defaultHotkey = hotkey;
+			info.currentHotkey = ResolveHotkeyValue(actionId, hotkey);
+		} else if(info.defaultHotkey.empty() && !hotkey.empty()) {
+			info.defaultHotkey = hotkey;
+			if(stored_hotkey_overrides.find(actionId) == stored_hotkey_overrides.end()) {
+				info.currentHotkey = hotkey;
+			}
 		}
 
 		wxMenuItem* tmp = parent->Append(
 			MAIN_FRAME_MENU + act.id, // ID
-			wxstr(name), // Title of button
+			wxstr(BuildMenuLabel(name, info.currentHotkey)), // Title of button
 			wxstr(help), // Help text
 			act.kind // Kind of item
 		);
+		base_menu_labels[tmp] = name;
 		items[MenuBar::ActionID(act.id)].push_back(tmp);
 		return tmp;
 	} else if(nodeName == "separator") {
@@ -734,6 +745,145 @@ wxObject* MainMenuBar::LoadItem(pugi::xml_node node, wxMenu* parent, wxArrayStri
 		return parent->AppendSeparator();
 	}
 	return nullptr;
+}
+
+void MainMenuBar::LoadHotkeyOverrides()
+{
+	const std::string serialized = g_settings.getString(Config::MENU_ACTION_HOTKEYS);
+	std::istringstream stream(serialized);
+	std::string line;
+	while(std::getline(stream, line)) {
+		line = TrimString(line);
+		if(line.empty())
+			continue;
+		size_t delimiter = line.find('=');
+		if(delimiter == std::string::npos)
+			continue;
+
+		std::string actionName = TrimString(line.substr(0, delimiter));
+		std::string hotkey = line.substr(delimiter + 1);
+
+		auto it = actions.find(actionName);
+		if(it == actions.end())
+			continue;
+
+		stored_hotkey_overrides[MenuBar::ActionID(it->second->id)] = hotkey;
+	}
+}
+
+std::string MainMenuBar::ResolveHotkeyValue(MenuBar::ActionID id, const std::string& defaultHotkey) const
+{
+	auto it = stored_hotkey_overrides.find(id);
+	if(it != stored_hotkey_overrides.end())
+		return it->second;
+	return defaultHotkey;
+}
+
+void MainMenuBar::UpdateMenuItemHotkey(MenuBar::ActionID id)
+{
+	auto entryIt = menu_hotkeys.find(id);
+	if(entryIt == menu_hotkeys.end())
+		return;
+
+	auto menuItems = items.find(id);
+	if(menuItems == items.end())
+		return;
+
+	const std::string& hotkey = entryIt->second.currentHotkey;
+
+	for(wxMenuItem* item : menuItems->second) {
+		std::string base;
+		auto baseIt = base_menu_labels.find(item);
+		if(baseIt != base_menu_labels.end())
+			base = baseIt->second;
+		else
+			base = nstr(item->GetItemLabel());
+
+		item->SetItemLabel(wxstr(BuildMenuLabel(base, hotkey)));
+	}
+}
+
+void MainMenuBar::UpdateAllMenuLabels()
+{
+	for(const auto& entry : menu_hotkeys) {
+		UpdateMenuItemHotkey(entry.first);
+	}
+}
+
+void MainMenuBar::RefreshAcceleratorTable()
+{
+	std::vector<wxAcceleratorEntry> entries;
+	for(const auto& pair : menu_hotkeys) {
+		const std::string& hotkey = pair.second.currentHotkey;
+		if(hotkey.empty())
+			continue;
+
+		HotkeyData parsed;
+		if(!ParseHotkeyText(hotkey, parsed))
+			continue;
+
+		entries.emplace_back(parsed.flags, parsed.keycode, MAIN_FRAME_MENU + pair.first);
+	}
+
+	if(entries.empty()) {
+		frame->SetAcceleratorTable(wxAcceleratorTable());
+	} else {
+		frame->SetAcceleratorTable(wxAcceleratorTable(entries.size(), entries.data()));
+	}
+}
+
+void MainMenuBar::PersistHotkeyOverrides() const
+{
+	std::ostringstream output;
+	for(const auto& pair : menu_hotkeys) {
+		const MenuHotkeyEntry& entry = pair.second;
+		if(entry.action.empty())
+			continue;
+
+		if(entry.currentHotkey == entry.defaultHotkey)
+			continue;
+
+		auto actionIt = actions_by_id.find(pair.first);
+		if(actionIt == actions_by_id.end() || !actionIt->second)
+			continue;
+
+		output << actionIt->second->name << '=' << entry.currentHotkey << '\n';
+	}
+
+	g_settings.setString(Config::MENU_ACTION_HOTKEYS, output.str());
+}
+
+std::vector<MenuHotkeyEntry> MainMenuBar::GetMenuHotkeys() const
+{
+	std::vector<MenuHotkeyEntry> entries;
+	entries.reserve(menu_hotkeys.size());
+	for(const auto& pair : menu_hotkeys) {
+		if(pair.second.action.empty())
+			continue;
+		entries.push_back(pair.second);
+	}
+
+	std::sort(entries.begin(), entries.end(), [](const MenuHotkeyEntry& a, const MenuHotkeyEntry& b) {
+		if(a.menu == b.menu)
+			return a.action < b.action;
+		return a.menu < b.menu;
+	});
+
+	return entries;
+}
+
+void MainMenuBar::ApplyMenuHotkeys(const std::vector<MenuHotkeyEntry>& entries)
+{
+	for(const auto& entry : entries) {
+		auto it = menu_hotkeys.find(entry.id);
+		if(it == menu_hotkeys.end())
+			continue;
+		it->second.currentHotkey = entry.currentHotkey;
+	}
+
+	PersistHotkeyOverrides();
+	UpdateAllMenuLabels();
+	RefreshAcceleratorTable();
 }
 
 void MainMenuBar::OnNew(wxCommandEvent& WXUNUSED(event))
@@ -794,6 +944,12 @@ void MainMenuBar::OnPreferences(wxCommandEvent& WXUNUSED(event))
 	PreferencesWindow dialog(frame);
 	dialog.ShowModal();
 	dialog.Destroy();
+}
+
+void MainMenuBar::OnConfigureHotkeys(wxCommandEvent& WXUNUSED(event))
+{
+	HotkeysDialog dialog(frame, *this);
+	dialog.ShowModal();
 }
 
 void MainMenuBar::OnQuit(wxCommandEvent& WXUNUSED(event))
@@ -1816,19 +1972,24 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event))
 
 
     wxDialog* dg = newd wxDialog(frame, wxID_ANY, "Map Statistics", wxDefaultPosition, wxDefaultSize, wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+	dg->SetBackgroundColour(wxColour(5, 20, 50));
+	dg->SetForegroundColour(*wxWHITE);
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	wxTextCtrl* text_field = newd wxTextCtrl(dg, wxID_ANY, wxstr(os.str()), wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
 	text_field->SetMinSize(wxSize(400, 300));
+	text_field->SetBackgroundColour(wxColour(5, 20, 50));
+	text_field->SetForegroundColour(*wxWHITE);
 	topsizer->Add(text_field, wxSizerFlags(5).Expand());
 
 	wxSizer* choicesizer = newd wxBoxSizer(wxHORIZONTAL);
 	wxButton* export_button = newd wxButton(dg, wxID_OK, "Export as XML");
 	choicesizer->Add(export_button, wxSizerFlags(1).Center());
 	export_button->Enable(false);
-	choicesizer->Add(newd wxButton(dg, wxID_CANCEL, "OK"), wxSizerFlags(1).Center());
+	wxButton* ok_button = newd wxButton(dg, wxID_CANCEL, "OK");
+	choicesizer->Add(ok_button, wxSizerFlags(1).Center());
 	topsizer->Add(choicesizer, wxSizerFlags(1).Center());
 	dg->SetSizerAndFit(topsizer);
-	dg->Centre(wxBOTH);
+	dg->CentreOnParent();
 
 	int ret = dg->ShowModal();
 

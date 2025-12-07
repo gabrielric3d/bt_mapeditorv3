@@ -36,6 +36,7 @@ public:
             const std::vector<wxString> &recentFiles);
     void OnButtonClicked(const wxMouseEvent& event);
     void OnCheckboxClicked(const wxCommandEvent& event);
+    void OnIgnoreWarningsCheckbox(const wxCommandEvent& event);
     void OnRecentItemClicked(const wxMouseEvent& event);
 private:
     WelcomeDialogPanel* m_welcome_dialog_panel;
@@ -61,6 +62,7 @@ private:
     wxColour m_text_colour;
     wxColour m_background_colour;
     wxCheckBox* m_show_welcome_dialog_checkbox;
+    wxCheckBox* m_ignore_warnings_checkbox;
 };
 
 class WelcomeDialogButton : public wxPanel

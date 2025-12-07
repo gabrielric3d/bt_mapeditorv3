@@ -59,7 +59,9 @@ Editor::Editor(CopyBuffer& copybuffer) :
 		if(g_gui.CloseAllEditors()) {
 			ok = g_gui.LoadVersion(defaultVersion, error, warnings);
 			g_gui.PopupDialog("Error", error, wxOK);
-			g_gui.ListDialog("Warnings", warnings);
+			if(!warnings.empty() && g_settings.getInteger(Config::IGNORE_WARNINGS_ON_OPEN) == 0) {
+				g_gui.ListDialog("Warnings", warnings);
+			}
 		} else {
 			throw std::runtime_error("All maps of different versions were not closed.");
 		}
@@ -120,7 +122,7 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 			success = g_gui.LoadVersion(ver.client, error, warnings);
 			if(!success)
 				g_gui.PopupDialog("Error", error, wxOK);
-			else
+			else if(!warnings.empty() && g_settings.getInteger(Config::IGNORE_WARNINGS_ON_OPEN) == 0)
 				g_gui.ListDialog("Warnings", warnings);
 		} else {
 			throw std::runtime_error("All maps of different versions were not closed.");

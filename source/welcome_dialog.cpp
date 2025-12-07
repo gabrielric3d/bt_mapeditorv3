@@ -75,6 +75,10 @@ void WelcomeDialog::OnCheckboxClicked(const wxCommandEvent &event) {
     g_settings.setInteger(Config::WELCOME_DIALOG, event.GetInt());
 }
 
+void WelcomeDialog::OnIgnoreWarningsCheckbox(const wxCommandEvent& event) {
+    g_settings.setInteger(Config::IGNORE_WARNINGS_ON_OPEN, event.GetInt());
+}
+
 void WelcomeDialog::OnRecentItemClicked(const wxMouseEvent &event) {
     auto *recent_item = dynamic_cast<RecentItem *>(event.GetEventObject());
     wxSize button_size = recent_item->GetSize();
@@ -100,7 +104,9 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog *dialog,
           m_title_text(title_text),
           m_version_text(version_text),
           m_text_colour(theme.text),
-          m_background_colour(theme.surface) {
+          m_background_colour(theme.surface),
+          m_show_welcome_dialog_checkbox(nullptr),
+          m_ignore_warnings_checkbox(nullptr) {
 
     SetBackgroundColour(m_background_colour);
 
@@ -151,13 +157,23 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog *dialog,
 
     wxSizer *vertical_sizer = newd wxBoxSizer(wxVERTICAL);
     wxSizer *horizontal_sizer = newd wxBoxSizer(wxHORIZONTAL);
+    wxSizer *checkbox_sizer = newd wxBoxSizer(wxVERTICAL);
+
+    m_ignore_warnings_checkbox = newd wxCheckBox(this, wxID_ANY, "Do not show warnings when opening maps");
+    m_ignore_warnings_checkbox->SetValue(g_settings.getInteger(Config::IGNORE_WARNINGS_ON_OPEN) == 1);
+    m_ignore_warnings_checkbox->Bind(wxEVT_CHECKBOX, &WelcomeDialog::OnIgnoreWarningsCheckbox, dialog);
+    m_ignore_warnings_checkbox->SetBackgroundColour(m_background_colour);
+    m_ignore_warnings_checkbox->SetForegroundColour(m_theme.textMuted);
+    checkbox_sizer->Add(m_ignore_warnings_checkbox, 0, wxBOTTOM, FROM_DIP(this, 4));
 
     m_show_welcome_dialog_checkbox = newd wxCheckBox(this, wxID_ANY, "Show this dialog on startup");
     m_show_welcome_dialog_checkbox->SetValue(g_settings.getInteger(Config::WELCOME_DIALOG) == 1);
     m_show_welcome_dialog_checkbox->Bind(wxEVT_CHECKBOX, &WelcomeDialog::OnCheckboxClicked, dialog);
     m_show_welcome_dialog_checkbox->SetBackgroundColour(m_background_colour);
     m_show_welcome_dialog_checkbox->SetForegroundColour(m_theme.textMuted);
-    horizontal_sizer->Add(m_show_welcome_dialog_checkbox, 0, wxALIGN_BOTTOM | wxALL, FROM_DIP(this, 10));
+    checkbox_sizer->Add(m_show_welcome_dialog_checkbox, 0, wxTOP, FROM_DIP(this, 4));
+
+    horizontal_sizer->Add(checkbox_sizer, 0, wxALIGN_BOTTOM | wxALL, FROM_DIP(this, 10));
     vertical_sizer->Add(buttons_sizer, 1, wxEXPAND);
     vertical_sizer->Add(horizontal_sizer, 1, wxEXPAND);
 
@@ -168,6 +184,9 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog *dialog,
 
 void WelcomeDialogPanel::updateInputs() {
     m_show_welcome_dialog_checkbox->SetValue(g_settings.getInteger(Config::WELCOME_DIALOG) == 1);
+    if(m_ignore_warnings_checkbox) {
+        m_ignore_warnings_checkbox->SetValue(g_settings.getInteger(Config::IGNORE_WARNINGS_ON_OPEN) == 1);
+    }
 }
 
 void WelcomeDialogPanel::OnPaint(const wxPaintEvent &event) {

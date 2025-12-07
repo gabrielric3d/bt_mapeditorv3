@@ -23,6 +23,7 @@
         <separator/>
         <menu name="Recent $Files" special="RECENT_FILES"/>
         <item name="$Preferences" action="PREFERENCES" help="Configure the map editor."/>
+        <item name="Hotkey $Configuration..." action="CONFIGURE_HOTKEYS" help="Customize the keyboard shortcuts used throughout the editor."/>
         <item name="E$xit" action="EXIT" help="Close the editor."/>
     </menu>
     <menu name="$Edit">
