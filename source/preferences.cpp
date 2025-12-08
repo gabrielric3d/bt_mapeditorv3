@@ -226,6 +226,38 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(use_memcached_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(use_memcached_chkbox, "When this is checked, sprites will be loaded into memory at startup and unpacked at runtime. This is faster but consumes more memory.\nIf it is not checked, the editor will use less memory but there will be a performance decrease due to reading sprites from the disk.");
 
+	wxStaticBoxSizer* performance_sizer = newd wxStaticBoxSizer(wxVERTICAL, graphics_page, "Performance Optimization");
+	
+	use_lazy_loading_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use lazy loading sprites");
+	use_lazy_loading_chkbox->SetValue(g_settings.getBoolean(Config::USE_LAZY_LOADING_SPRITES));
+	performance_sizer->Add(use_lazy_loading_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(use_lazy_loading_chkbox, "Load sprites from disk only when they are needed.\nSignificantly speeds up startup time and reduces memory usage, but may cause small stutters when viewing new items.");
+
+	use_sprite_cache_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use sprite cache (LRU)");
+	use_sprite_cache_chkbox->SetValue(g_settings.getBoolean(Config::USE_SPRITE_CACHE));
+	performance_sizer->Add(use_sprite_cache_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(use_sprite_cache_chkbox, "Keep frequently used sprites in memory and unload others.\nHelps reduce memory usage while keeping performance high for common items.");
+
+	wxBoxSizer* cache_size_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	cache_size_sizer->Add(newd wxStaticText(graphics_page, wxID_ANY, "Cache size (sprites):"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	sprite_cache_size_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::SPRITE_CACHE_SIZE)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, 100000);
+	cache_size_sizer->Add(sprite_cache_size_spin, 0);
+	performance_sizer->Add(cache_size_sizer, 0, wxLEFT | wxTOP | wxBOTTOM, 5);
+	SetWindowToolTip(sprite_cache_size_spin, "Maximum number of sprites to keep in memory when using the sprite cache.");
+
+	use_optimized_map_loading_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use optimized map loading");
+	use_optimized_map_loading_chkbox->SetValue(g_settings.getBoolean(Config::USE_OPTIMIZED_MAP_LOADING));
+	performance_sizer->Add(use_optimized_map_loading_chkbox, 0, wxLEFT | wxBOTTOM, 5);
+	SetWindowToolTip(use_optimized_map_loading_chkbox, "Reduces GUI update frequency during map loading to significantly improve speed.\nRecommended to keep this enabled.");
+
+	sprite_cache_size_spin->Enable(use_sprite_cache_chkbox->GetValue());
+	use_sprite_cache_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) {
+		sprite_cache_size_spin->Enable(event.IsChecked());
+		event.Skip();
+	});
+
+	sizer->Add(performance_sizer, 0, wxEXPAND | wxALL, 5);
+
 	wxStaticBoxSizer* client_box_sizer = newd wxStaticBoxSizer(wxVERTICAL, graphics_page, "Client Box Customization");
 
 	custom_client_box_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Enable custom client box size");
@@ -732,6 +764,19 @@ void PreferencesWindow::Apply()
 		must_restart = true;
 	}
 	g_settings.setInteger(Config::USE_MEMCACHED_SPRITES_TO_SAVE, use_memcached_chkbox->GetValue());
+
+	if(g_settings.getBoolean(Config::USE_LAZY_LOADING_SPRITES) != use_lazy_loading_chkbox->GetValue()) {
+		must_restart = true;
+	}
+	g_settings.setInteger(Config::USE_LAZY_LOADING_SPRITES, use_lazy_loading_chkbox->GetValue());
+
+	if(g_settings.getBoolean(Config::USE_SPRITE_CACHE) != use_sprite_cache_chkbox->GetValue()) {
+		must_restart = true;
+	}
+	g_settings.setInteger(Config::USE_SPRITE_CACHE, use_sprite_cache_chkbox->GetValue());
+	
+	g_settings.setInteger(Config::SPRITE_CACHE_SIZE, sprite_cache_size_spin->GetValue());
+	g_settings.setInteger(Config::USE_OPTIMIZED_MAP_LOADING, use_optimized_map_loading_chkbox->GetValue());
 	if(icon_background_choice->GetSelection() == 0) {
 		if(g_settings.getInteger(Config::ICON_BACKGROUND) != 0) {
 			g_gui.gfx.cleanSoftwareSprites();

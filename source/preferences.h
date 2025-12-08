@@ -74,6 +74,10 @@ protected:
 	wxCheckBox* icon_selection_shadow_chkbox;
 	wxChoice* icon_background_choice;
 	wxCheckBox* use_memcached_chkbox;
+	wxCheckBox* use_lazy_loading_chkbox;
+	wxCheckBox* use_sprite_cache_chkbox;
+	wxSpinCtrl* sprite_cache_size_spin;
+	wxCheckBox* use_optimized_map_loading_chkbox;
 	wxDirPickerCtrl* screenshot_directory_picker;
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;

@@ -430,6 +430,10 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	}
 
 	uint16_t id = minID;
+	uint32_t total_ids = maxID - minID + 1;
+	uint32_t ids_loaded = 0;
+	uint32_t metadata_update_interval = std::max(1u, total_ids / 10); // Update every 10%
+	
 	// loop through all ItemDatabase until we reach the end of file
 	while(id <= maxID) {
 		GameSprite* sType = newd GameSprite();
@@ -523,6 +527,13 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 			}
 		}
 		++id;
+		
+		// Update progress every metadata_update_interval items
+		ids_loaded++;
+		if(ids_loaded % metadata_update_interval == 0) {
+			int sub_progress = static_cast<int>((ids_loaded * 10) / total_ids);
+			g_gui.SetLoadDone(sub_progress, wxString::Format("Loading metadata (%u/%u)...", ids_loaded, total_ids));
+		}
 	}
 
 	return true;
@@ -760,14 +771,18 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 	}
 
 	std::vector<uint32_t> sprite_indexes;
+	sprite_indexes.reserve(total_pics); // Pre-allocate to avoid reallocations
 	for(uint32_t i = 0; i < total_pics; ++i) {
 		uint32_t index;
 		safe_get(U32, index);
 		sprite_indexes.push_back(index);
 	}
 
-	// Now read individual sprites
+	// Now read individual sprites with progress reporting
 	int id = 1;
+	uint32_t sprites_loaded = 0;
+	uint32_t update_interval = std::max(1u, total_pics / 50); // Update every 2% for smooth progress
+	
 	for(std::vector<uint32_t>::iterator sprite_iter = sprite_indexes.begin(); sprite_iter != sprite_indexes.end(); ++sprite_iter, ++id) {
 		uint32_t index = *sprite_iter + 3;
 		fh.seek(index);
@@ -785,16 +800,32 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 					fh.skip(size);
 				} else {
 					spr->id = id;
-					spr->size = size;
-					spr->dump = newd uint8_t[size];
-					if(!fh.getRAW(spr->dump, size)) {
-						error = wxstr(fh.getErrorMessage()); \
-						return false;
+					spr->fileOffset = index; // Always store offset for cache reloading
+					
+					if (g_settings.getBoolean(Config::USE_LAZY_LOADING_SPRITES)) {
+						spr->size = size;        // Store size
+						spr->dump = nullptr;     // No dump
+						fh.skip(size);           // Skip data
+					} else {
+						spr->size = size;
+						spr->dump = newd uint8_t[size];
+						if(!fh.getRAW(spr->dump, size)) {
+							error = wxstr(fh.getErrorMessage()); \
+							return false;
+						}
 					}
 				}
 			}
 		} else {
 			fh.skip(size);
+		}
+		
+		// Update progress every update_interval sprites
+		sprites_loaded++;
+		if(sprites_loaded % update_interval == 0) {
+			// Calculate progress within the sprite loading phase (10-20%)
+			int sub_progress = 10 + static_cast<int>((sprites_loaded * 10) / total_pics);
+			g_gui.SetLoadDone(sub_progress, wxString::Format("Loading sprites (%u/%u)...", sprites_loaded, total_pics));
 		}
 	}
 #undef safe_get
@@ -1190,13 +1221,19 @@ void GameSprite::Image::clean(int time)
 GameSprite::NormalImage::NormalImage() :
 	id(0),
 	size(0),
-	dump(nullptr)
+	dump(nullptr),
+	fileOffset(0),
+	in_cache(false)
 {
 	////
 }
 
 GameSprite::NormalImage::~NormalImage()
 {
+	if(in_cache) {
+		g_gui.gfx.sprite_cache.erase(cache_iterator);
+		in_cache = false;
+	}
 	delete[] dump;
 }
 
@@ -1212,14 +1249,32 @@ void GameSprite::NormalImage::clean(int time)
 uint8_t* GameSprite::NormalImage::getRGBData()
 {
 	if(!dump) {
-		if(g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
-			return nullptr;
+		if(g_settings.getBoolean(Config::USE_LAZY_LOADING_SPRITES) && fileOffset > 0) {
+			FileReadHandle fh(nstr(g_gui.gfx.getSpritesFileName().GetFullPath()));
+			if(fh.isOk()) {
+				fh.seek(fileOffset);
+				uint16_t readSize;
+				if(fh.getU16(readSize) && readSize == size) {
+					dump = newd uint8_t[size];
+					if(!fh.getRAW(dump, size)) {
+						delete[] dump;
+						dump = nullptr;
+					}
+				}
+			}
 		}
 
-		if(!g_gui.gfx.loadSpriteDump(dump, size, id)) {
-			return nullptr;
+		if(g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
+			if(!dump) {
+				return nullptr;
+			}
+		} else if(!dump) {
+			if(!g_gui.gfx.loadSpriteDump(dump, size, id)) {
+				return nullptr;
+			}
 		}
 	}
+	g_gui.gfx.touchSpriteCache(this);
 
 	const int pixels_data_size = rme::SpritePixels * rme::SpritePixels * 3;
 	uint8_t* data = newd uint8_t[pixels_data_size];
@@ -1262,14 +1317,32 @@ uint8_t* GameSprite::NormalImage::getRGBData()
 uint8_t* GameSprite::NormalImage::getRGBAData()
 {
 	if(!dump) {
-		if(g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
-			return nullptr;
+		if(g_settings.getBoolean(Config::USE_LAZY_LOADING_SPRITES) && fileOffset > 0) {
+			FileReadHandle fh(nstr(g_gui.gfx.getSpritesFileName().GetFullPath()));
+			if(fh.isOk()) {
+				fh.seek(fileOffset);
+				uint16_t readSize;
+				if(fh.getU16(readSize) && readSize == size) {
+					dump = newd uint8_t[size];
+					if(!fh.getRAW(dump, size)) {
+						delete[] dump;
+						dump = nullptr;
+					}
+				}
+			}
 		}
 
-		if(!g_gui.gfx.loadSpriteDump(dump, size, id)) {
-			return nullptr;
+		if(g_settings.getInteger(Config::USE_MEMCACHED_SPRITES)) {
+			if(!dump) {
+				return nullptr;
+			}
+		} else if(!dump) {
+			if(!g_gui.gfx.loadSpriteDump(dump, size, id)) {
+				return nullptr;
+			}
 		}
 	}
+	g_gui.gfx.touchSpriteCache(this);
 
 	const int pixels_data_size = rme::SpritePixelsSize * 4;
 	uint8_t* data = newd uint8_t[pixels_data_size];
@@ -1737,5 +1810,43 @@ void Animator::calculateSynchronous()
 			total_time += duration;
 		}
 		last_time = time;
+	}
+}
+
+void GameSprite::NormalImage::unload()
+{
+	// Free memory but keep fileOffset
+	if(dump) {
+		delete[] dump;
+		dump = nullptr;
+		// Do not reset size or fileOffset!
+	}
+}
+
+void GraphicManager::touchSpriteCache(GameSprite::NormalImage* sprite)
+{
+	if(!g_settings.getBoolean(Config::USE_SPRITE_CACHE)) {
+		return;
+	}
+
+	if(sprite->in_cache) {
+		// Move to front (most recently used)
+		sprite_cache.splice(sprite_cache.begin(), sprite_cache, sprite->cache_iterator);
+	} else {
+		// Add to front
+		sprite_cache.push_front(sprite);
+		sprite->cache_iterator = sprite_cache.begin();
+		sprite->in_cache = true;
+	}
+
+	// Evict if too big
+	size_t cache_size = g_settings.getInteger(Config::SPRITE_CACHE_SIZE);
+	if(cache_size < 100) cache_size = 100; // Safety minimum
+
+	while(sprite_cache.size() > cache_size) {
+		GameSprite::NormalImage* last = sprite_cache.back();
+		last->unload();
+		last->in_cache = false;
+		sprite_cache.pop_back();
 	}
 }

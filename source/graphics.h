@@ -138,6 +138,7 @@ protected:
 
 		// We use the sprite id as GL texture id
 		uint32_t id;
+        uint32_t fileOffset; // For lazy loading
 
 		// This contains the pixel data
 		uint16_t size;
@@ -148,6 +149,12 @@ protected:
 		virtual GLuint getHardwareID();
 		virtual uint8_t* getRGBData();
 		virtual uint8_t* getRGBAData();
+
+		// LRU Cache
+		std::list<NormalImage*>::iterator cache_iterator;
+		bool in_cache;
+		void unload(); // Frees dump property
+
 
 	protected:
 		virtual void createGLTexture(GLuint textureId = 0);
@@ -311,6 +318,10 @@ public:
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
 	void addSpriteToCleanup(GameSprite* spr);
+	
+	// LRU Cache
+	std::list<GameSprite::NormalImage*> sprite_cache;
+	void touchSpriteCache(GameSprite::NormalImage* sprite);
 
 	wxFileName getMetadataFileName() const { return metadata_file; }
 	wxFileName getSpritesFileName() const { return sprites_file; }

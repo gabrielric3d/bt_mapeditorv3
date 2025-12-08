@@ -397,6 +397,7 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.CreateLoadBar("Loading asset files");
+	GUI::LoadingStats stats;
 	g_gui.SetLoadDone(0, "Loading metadata file...");
 
 	wxFileName metadata_path = g_gui.gfx.getMetadataFileName();
@@ -408,8 +409,12 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(10, "Loading sprites file...");
-
+	
 	wxFileName sprites_path = g_gui.gfx.getSpritesFileName();
+	
+	// Update stats with sprite count
+	stats.current_file = sprites_path.GetFullName();
+	g_gui.SetLoadingStats(stats);
 	if(!g_gui.gfx.loadSpriteData(sprites_path.GetFullPath(), error, warnings)) {
 		error = "Couldn't load sprites: " + error;
 		g_gui.DestroyLoadBar();
@@ -418,6 +423,9 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(20, "Loading items.otb file...");
+	stats.current_file = "items.otb";
+	stats.total_sprites = g_gui.gfx.getItemSpriteMaxID(); // Get sprite count
+	g_gui.SetLoadingStats(stats);
 	if(!g_items.loadFromOtb(wxString(items_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
 		error = "Couldn't load items.otb: " + error;
 		g_gui.DestroyLoadBar();
@@ -426,16 +434,28 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(30, "Loading items.xml ...");
+	stats.current_file = "items.xml";
+	stats.total_items = g_items.getMaxID(); // Use maxItemId from items database
+	g_gui.SetLoadingStats(stats);
 	if(!g_items.loadFromGameXml(wxString(items_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.xml"), error, warnings)) {
 		warnings.push_back("Couldn't load items.xml: " + error);
 	}
 
 	g_gui.SetLoadDone(45, "Loading creatures.xml ...");
+	stats.current_file = "creatures.xml";
+	g_gui.SetLoadingStats(stats);
 	if(!g_creatures.loadFromXML(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "creatures.xml"), true, error, warnings)) {
 		warnings.push_back("Couldn't load creatures.xml: " + error);
 	}
 
 	g_gui.SetLoadDone(45, "Loading user creatures.xml ...");
+	// Count creatures by iterating the map
+	uint32_t creature_count = 0;
+	for(auto it = g_creatures.begin(); it != g_creatures.end(); ++it) {
+		creature_count++;
+	}
+	stats.total_creatures = creature_count;
+	g_gui.SetLoadingStats(stats);
 	{
 		FileName cdb = getLoadedVersion()->getLocalDataPath();
 		cdb.SetFullName("creatures.xml");
@@ -445,11 +465,15 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(50, "Loading materials.xml ...");
+	stats.current_file = "materials.xml";
+	g_gui.SetLoadingStats(stats);
 	if(!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "materials.xml"), error, warnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
 
 	g_gui.SetLoadDone(70, "Loading extensions...");
+	stats.current_file = "extensions";
+	g_gui.SetLoadingStats(stats);
 	if(!g_materials.loadExtensions(extension_path, error, warnings)) {
 		//warnings.push_back("Couldn't load extensions: " + error);
 	}
@@ -1331,15 +1355,30 @@ void GUI::RefreshView()
 void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */ )
 {
 	progressText = message;
+	loadingStats.Reset();
 
 	progressFrom = 0;
 	progressTo = 100;
 	currentProgress = -1;
 
-	progressBar = newd wxGenericProgressDialog("Loading", progressText + " (0%)", 100, root,
-		wxPD_APP_MODAL | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0)
+	// Create progress dialog with improved appearance
+	wxString initialMessage = progressText + "\n";
+	progressBar = newd wxGenericProgressDialog(
+		"Remere's Map Editor - Loading Assets",
+		initialMessage + "Please wait...",
+		100,
+		root,
+		wxPD_APP_MODAL | wxPD_SMOOTH | wxPD_ELAPSED_TIME | (canCancel ? wxPD_CAN_ABORT : 0)
 	);
-	progressBar->SetSize(280, -1);
+	
+	// Set larger size for better visibility
+	progressBar->SetSize(450, -1);
+	
+	// Try to set icon (same as main window if available)
+	if(root && root->GetIcon().IsOk()) {
+		progressBar->SetIcon(root->GetIcon());
+	}
+	
 	progressBar->Show(true);
 
 	for(int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
@@ -1374,9 +1413,30 @@ bool GUI::SetLoadDone(int32_t done, const wxString& newMessage)
 
 	bool skip = false;
 	if(progressBar) {
+		// Build detailed message
+		wxString detailedMessage = progressText;
+		
+		// Add statistics if available
+		if(loadingStats.total_sprites > 0 || loadingStats.total_items > 0 || loadingStats.total_creatures > 0) {
+			detailedMessage += "\n";
+			if(loadingStats.total_sprites > 0) {
+				detailedMessage += wxString::Format("Sprites: %u  ", loadingStats.total_sprites);
+			}
+			if(loadingStats.total_items > 0) {
+				detailedMessage += wxString::Format("Items: %u  ", loadingStats.total_items);
+			}
+			if(loadingStats.total_creatures > 0) {
+				detailedMessage += wxString::Format("Creatures: %u", loadingStats.total_creatures);
+			}
+		}
+		
+		if(!loadingStats.current_file.empty()) {
+			detailedMessage += "\n" + loadingStats.current_file;
+		}
+		
 		progressBar->Update(
 			newProgress,
-			wxString::Format("%s (%d%%)", progressText, newProgress),
+			detailedMessage,
 			&skip
 		);
 		currentProgress = newProgress;
@@ -1410,7 +1470,18 @@ void GUI::DestroyLoadBar()
 			root->RequestUserAttention();
 		}
 	}
+	loadingStats.Reset();
 }
+
+void GUI::SetLoadingStats(const LoadingStats& stats)
+{
+	loadingStats = stats;
+	// Force refresh of progress bar with updated stats
+	if(progressBar && currentProgress >= 0) {
+		SetLoadDone(currentProgress * 100 / std::max(1, progressTo - progressFrom), wxEmptyString);
+	}
+}
+
 
 void GUI::ShowWelcomeDialog(const wxBitmap &icon) {
     std::vector<wxString> recent_files = root->GetRecentFiles();

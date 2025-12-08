@@ -714,11 +714,21 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f)
 	}
 
 	int nodes_loaded = 0;
+	uint32_t tiles_loaded = 0;
+	uint32_t items_loaded = 0;
+	int last_progress = -1;
 
 	for(BinaryNode* mapNode = mapHeaderNode->getChild(); mapNode != nullptr; mapNode = mapNode->advance()) {
 		++nodes_loaded;
-		if(nodes_loaded % 15 == 0) {
-			g_gui.SetLoadDone(static_cast<int32_t>(100.0 * f.tell() / f.size()));
+		
+		// Reduce GUI update frequency for better performance (every 100 nodes instead of 15)
+		const int update_frequency = g_settings.getBoolean(Config::USE_OPTIMIZED_MAP_LOADING) ? 100 : 15;
+		if(nodes_loaded % update_frequency == 0) {
+			int current_progress = static_cast<int32_t>(100.0 * f.tell() / f.size());
+			if(current_progress != last_progress) {
+				g_gui.SetLoadDone(current_progress, wxString::Format("Loading tiles (%u tiles, %u items)...", tiles_loaded, items_loaded));
+				last_progress = current_progress;
+			}
 		}
 
 		uint8_t node_type;
@@ -795,6 +805,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f)
 									warning("Invalid item at tile %d:%d:%d", pos.x, pos.y, pos.z);
 								}
 								tile->addItem(item);
+								items_loaded++;
 								break;
 							}
 							default: {
@@ -821,6 +832,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f)
 								}
 								//reform(&map, tile, item);
 								tile->addItem(item);
+								items_loaded++;
 							}
 						} else {
 							warning("Unknown type of tile child node");
@@ -832,6 +844,7 @@ bool IOMapOTBM::loadMap(Map& map, NodeFileReadHandle& f)
 						house->addTile(tile);
 
 					map.setTile(pos.x, pos.y, pos.z, tile);
+					tiles_loaded++;
 				} else {
 					warning("Unknown type of tile node");
 				}
