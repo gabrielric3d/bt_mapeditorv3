@@ -40,14 +40,20 @@ public:
 	void OnClickCancel(wxCommandEvent&);
 	void OnClickMoveUp(wxCommandEvent&);
 	void OnClickMoveDown(wxCommandEvent&);
+	void OnToggleAutoApply(wxCommandEvent&);
 
 protected:
+	void TriggerAutoApply();
+
 	BrowseTileListBox* item_list;
 	wxStaticText* item_count_txt;
 	wxButton* delete_button;
 	wxButton* select_raw_button;
 	wxButton* moveup_button;
 	wxButton* movedown_button;
+	wxCheckBox* auto_apply_checkbox;
+	Tile* edit_tile;
+	bool auto_apply_enabled;
 
 	DECLARE_EVENT_TABLE();
 };
@@ -69,6 +75,7 @@ private:
 	void OnClickMoveDown(wxCommandEvent&);
 	void OnClickApply(wxCommandEvent&);
 	void OnClickLoadSelection(wxCommandEvent&);
+	void OnToggleAutoApply(wxCommandEvent&);
 	void OnToggleAutoLoad(wxCommandEvent&);
 	void OnAutoLoadTimer(wxTimerEvent&);
 
@@ -94,6 +101,7 @@ private:
 	wxButton* apply_button;
 	wxButton* load_selection_button;
 	wxCheckBox* auto_load_checkbox;
+	wxCheckBox* auto_apply_checkbox;
 
 	Tile* working_tile;
 	Editor* source_editor;
@@ -102,6 +110,9 @@ private:
 
 	wxTimer* auto_load_timer;
 	bool auto_load_enabled;
+	bool auto_apply_enabled;
+
+	void TriggerAutoApply();
 };
 
 #endif

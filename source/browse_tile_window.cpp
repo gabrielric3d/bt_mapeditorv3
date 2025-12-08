@@ -193,7 +193,9 @@ BEGIN_EVENT_TABLE(BrowseTileWindow, wxDialog)
 END_EVENT_TABLE()
 
 BrowseTileWindow::BrowseTileWindow(wxWindow* parent, Tile* tile, wxPoint position /* = wxDefaultPosition */) :
-wxDialog(parent, wxID_ANY, "Browse Field", position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER)
+wxDialog(parent, wxID_ANY, "Browse Field", position, wxSize(600, 400), wxCAPTION | wxCLOSE_BOX | wxRESIZE_BORDER),
+edit_tile(tile),
+auto_apply_enabled(false)
 {
 	SetBackgroundColour(kBrowseTileBackgroundColour);
 
@@ -244,6 +246,12 @@ wxDialog(parent, wxID_ANY, "Browse Field", position, wxSize(600, 400), wxCAPTION
 
 	sizer->Add(infoSizer, wxSizerFlags(0).Left().DoubleBorder());
 
+	// Auto-apply checkbox
+	auto_apply_checkbox = newd wxCheckBox(this, wxID_ANY, "Auto Apply");
+	auto_apply_checkbox->SetForegroundColour(kBrowseTileTextColour);
+	auto_apply_checkbox->SetToolTip("Automatically apply changes after delete or move operations");
+	sizer->Add(auto_apply_checkbox, wxSizerFlags(0).Left().Border(wxLEFT | wxBOTTOM, 10));
+
 	// OK/Cancel buttons
 	wxSizer* btnSizer = newd wxBoxSizer(wxHORIZONTAL);
 	btnSizer->Add(newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(0).Center());
@@ -254,6 +262,7 @@ wxDialog(parent, wxID_ANY, "Browse Field", position, wxSize(600, 400), wxCAPTION
 
 	// Connect Events
 	item_list->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(BrowseTileWindow::OnItemSelected), NULL, this);
+	auto_apply_checkbox->Bind(wxEVT_CHECKBOX, &BrowseTileWindow::OnToggleAutoApply, this);
 }
 
 BrowseTileWindow::~BrowseTileWindow()
@@ -285,6 +294,7 @@ void BrowseTileWindow::OnClickDelete(wxCommandEvent& WXUNUSED(event))
 {
 	item_list->RemoveSelected();
 	item_count_txt->SetLabelText("Item count:  " + i2ws(item_list->GetItemCount()));
+	TriggerAutoApply();
 }
 
 void BrowseTileWindow::OnClickSelectRaw(wxCommandEvent& WXUNUSED(event))
@@ -311,6 +321,7 @@ void BrowseTileWindow::OnClickMoveUp(wxCommandEvent& WXUNUSED(event))
 	Item* item = item_list->GetSelectedItem();
 	if(item) {
 		item_list->changeIndex(item, true);
+		TriggerAutoApply();
 	}
 }
 
@@ -319,7 +330,29 @@ void BrowseTileWindow::OnClickMoveDown(wxCommandEvent& WXUNUSED(event))
 	Item* item = item_list->GetSelectedItem();
 	if(item) {
 		item_list->changeIndex(item, false);
+		TriggerAutoApply();
 	}
+}
+
+void BrowseTileWindow::OnToggleAutoApply(wxCommandEvent& event)
+{
+	auto_apply_enabled = event.IsChecked();
+}
+
+void BrowseTileWindow::TriggerAutoApply()
+{
+	if(!auto_apply_enabled || !edit_tile)
+		return;
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor)
+		return;
+
+	Tile* commit_tile = edit_tile->deepCopy(editor->getMap());
+	Action* action = editor->createAction(ACTION_DELETE_TILES);
+	action->addChange(newd Change(commit_tile));
+	editor->addAction(action);
+	editor->updateActions();
 }
 
 // ============================================================================
@@ -358,11 +391,13 @@ BrowseTilePanel::BrowseTilePanel(wxWindow* parent) :
 	apply_button(nullptr),
 	load_selection_button(nullptr),
 	auto_load_checkbox(nullptr),
+	auto_apply_checkbox(nullptr),
 	working_tile(nullptr),
 	source_editor(nullptr),
 	working_position_valid(false),
 	auto_load_timer(newd wxTimer(this)),
-	auto_load_enabled(false)
+	auto_load_enabled(false),
+	auto_apply_enabled(false)
 {
 	SetBackgroundColour(kBrowseTileBackgroundColour);
 
@@ -424,7 +459,13 @@ BrowseTilePanel::BrowseTilePanel(wxWindow* parent) :
 	root_sizer->Add(actionSizer, 0, wxEXPAND | wxALL, 5);
 
 	auto_load_checkbox = newd wxCheckBox(this, wxID_ANY, "Auto load from selection");
+	auto_load_checkbox->SetForegroundColour(kBrowseTileTextColour);
 	root_sizer->Add(auto_load_checkbox, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+	auto_apply_checkbox = newd wxCheckBox(this, wxID_ANY, "Auto Apply");
+	auto_apply_checkbox->SetForegroundColour(kBrowseTileTextColour);
+	auto_apply_checkbox->SetToolTip("Automatically apply changes after delete or move operations");
+	root_sizer->Add(auto_apply_checkbox, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
 
 	SetSizer(root_sizer);
 
@@ -436,6 +477,7 @@ BrowseTilePanel::BrowseTilePanel(wxWindow* parent) :
 	apply_button->Bind(wxEVT_BUTTON, &BrowseTilePanel::OnClickApply, this);
 	load_selection_button->Bind(wxEVT_BUTTON, &BrowseTilePanel::OnClickLoadSelection, this);
 	auto_load_checkbox->Bind(wxEVT_CHECKBOX, &BrowseTilePanel::OnToggleAutoLoad, this);
+	auto_apply_checkbox->Bind(wxEVT_CHECKBOX, &BrowseTilePanel::OnToggleAutoApply, this);
 	Bind(wxEVT_TIMER, &BrowseTilePanel::OnAutoLoadTimer, this, auto_load_timer->GetId());
 
 	UpdateControlStates();
@@ -525,6 +567,7 @@ void BrowseTilePanel::OnClickDelete(wxCommandEvent& WXUNUSED(event))
 	item_count_txt->SetLabel("Item count:  " + i2ws(item_list->GetItemCount()));
 	UpdateTileInfo();
 	UpdateControlStates();
+	TriggerAutoApply();
 }
 
 void BrowseTilePanel::OnClickSelectRaw(wxCommandEvent& WXUNUSED(event))
@@ -545,6 +588,7 @@ void BrowseTilePanel::OnClickMoveUp(wxCommandEvent& WXUNUSED(event))
 	Item* item = item_list->GetSelectedItem();
 	if(item) {
 		item_list->changeIndex(item, true);
+		TriggerAutoApply();
 	}
 }
 
@@ -556,6 +600,7 @@ void BrowseTilePanel::OnClickMoveDown(wxCommandEvent& WXUNUSED(event))
 	Item* item = item_list->GetSelectedItem();
 	if(item) {
 		item_list->changeIndex(item, false);
+		TriggerAutoApply();
 	}
 }
 
@@ -676,3 +721,21 @@ void BrowseTilePanel::RefreshFromSourceTile()
 	UpdateControlStates();
 }
 
+void BrowseTilePanel::OnToggleAutoApply(wxCommandEvent& event)
+{
+	auto_apply_enabled = event.IsChecked();
+}
+
+void BrowseTilePanel::TriggerAutoApply()
+{
+	if(!auto_apply_enabled || !HasTile() || !source_editor)
+		return;
+
+	Tile* commit_tile = working_tile->deepCopy(source_editor->getMap());
+	Action* action = source_editor->createAction(ACTION_DELETE_TILES);
+	action->addChange(newd Change(commit_tile));
+	source_editor->addAction(action);
+	source_editor->updateActions();
+
+	RefreshFromSourceTile();
+}
