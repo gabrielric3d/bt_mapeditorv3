@@ -107,25 +107,19 @@ void DispatchMouseRelease(MouseButtonBinding button, MapCanvas& canvas, wxMouseE
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_KEY_DOWN(MapCanvas::OnKeyDown)
-	EVT_KEY_DOWN(MapCanvas::OnKeyUp)
+	EVT_KEY_UP(MapCanvas::OnKeyUp)
 
 	// Mouse events
 	EVT_MOTION(MapCanvas::OnMouseMove)
 	EVT_LEFT_UP(MapCanvas::OnMouseLeftRelease)
 	EVT_LEFT_DOWN(MapCanvas::OnMouseLeftClick)
 	EVT_LEFT_DCLICK(MapCanvas::OnMouseLeftDoubleClick)
-	EVT_MOUSE_AUX1_DCLICK(MapCanvas::OnMouseAux1DoubleClick)
-	EVT_MOUSE_AUX2_DCLICK(MapCanvas::OnMouseAux2DoubleClick)
 	EVT_MIDDLE_DCLICK(MapCanvas::OnMouseMiddleDoubleClick)
 	EVT_MIDDLE_DOWN(MapCanvas::OnMouseCenterClick)
 	EVT_MIDDLE_UP(MapCanvas::OnMouseCenterRelease)
 	EVT_RIGHT_DCLICK(MapCanvas::OnMouseRightDoubleClick)
 	EVT_RIGHT_DOWN(MapCanvas::OnMouseRightClick)
 	EVT_RIGHT_UP(MapCanvas::OnMouseRightRelease)
-	EVT_MOUSE_AUX1_DOWN(MapCanvas::OnMouseAux1Click)
-	EVT_MOUSE_AUX1_UP(MapCanvas::OnMouseAux1Release)
-	EVT_MOUSE_AUX2_DOWN(MapCanvas::OnMouseAux2Click)
-	EVT_MOUSE_AUX2_UP(MapCanvas::OnMouseAux2Release)
 	EVT_MOUSE_EVENTS(MapCanvas::OnMouseAuxEvent)
 	EVT_MOUSEWHEEL(MapCanvas::OnWheel)
 	EVT_ENTER_WINDOW(MapCanvas::OnGainMouse)
@@ -1204,6 +1198,87 @@ void MapCanvas::OnMouseAuxEvent(wxMouseEvent& event)
 	}
 	event.Skip();
 }
+
+bool MapCanvas::HandleMouseKeyboardHotkey(wxKeyEvent& event, bool keyDown)
+{
+	HotkeyData hotkeyData;
+	if(!EventToHotkey(event, hotkeyData))
+		return false;
+
+	MouseActionID action;
+	if(!MatchMouseKeyboardHotkey(hotkeyData, action))
+		return false;
+
+	if(keyDown) {
+		if(active_keyboard_mouse_actions.find(action) != active_keyboard_mouse_actions.end())
+			return true;
+		active_keyboard_mouse_actions.insert(action);
+	} else {
+		auto it = active_keyboard_mouse_actions.find(action);
+		if(it == active_keyboard_mouse_actions.end())
+			return true;
+		active_keyboard_mouse_actions.erase(it);
+	}
+
+	DispatchKeyboardMouseAction(action, keyDown, event);
+	return true;
+}
+
+void MapCanvas::DispatchKeyboardMouseAction(MouseActionID action, bool keyDown, const wxKeyEvent& source)
+{
+	wxMouseEvent mouseEvent(keyDown ? wxEVT_LEFT_DOWN : wxEVT_LEFT_UP);
+	switch(action) {
+		case MouseActionID::PrimaryAction:
+			mouseEvent.SetEventType(keyDown ? wxEVT_LEFT_DOWN : wxEVT_LEFT_UP);
+			break;
+		case MouseActionID::Camera:
+			mouseEvent.SetEventType(keyDown ? wxEVT_MIDDLE_DOWN : wxEVT_MIDDLE_UP);
+			break;
+		case MouseActionID::Properties:
+			mouseEvent.SetEventType(keyDown ? wxEVT_RIGHT_DOWN : wxEVT_RIGHT_UP);
+			break;
+		default:
+			return;
+	}
+
+	mouseEvent.SetPosition(wxPoint(cursor_x, cursor_y));
+	mouseEvent.SetControlDown(source.ControlDown());
+	mouseEvent.SetAltDown(source.AltDown());
+	mouseEvent.SetShiftDown(source.ShiftDown());
+#ifdef __APPLE__
+	mouseEvent.SetMetaDown(source.MetaDown());
+#endif
+
+	if(keyDown) {
+		switch(action) {
+			case MouseActionID::PrimaryAction:
+				OnMouseActionClick(mouseEvent);
+				break;
+			case MouseActionID::Camera:
+				OnMouseCameraClick(mouseEvent);
+				break;
+			case MouseActionID::Properties:
+				OnMousePropertiesClick(mouseEvent);
+				break;
+			default:
+				break;
+		}
+	} else {
+		switch(action) {
+			case MouseActionID::PrimaryAction:
+				OnMouseActionRelease(mouseEvent);
+				break;
+			case MouseActionID::Camera:
+				OnMouseCameraRelease(mouseEvent);
+				break;
+			case MouseActionID::Properties:
+				OnMousePropertiesRelease(mouseEvent);
+				break;
+			default:
+				break;
+		}
+	}
+}
 void MapCanvas::HandlePropertiesDoubleClick(wxMouseEvent& event)
 {
 	if(!g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
@@ -2138,6 +2213,9 @@ void MapCanvas::OnGainMouse(wxMouseEvent& event)
 
 void MapCanvas::OnKeyDown(wxKeyEvent& event)
 {
+	if(HandleMouseKeyboardHotkey(event, true))
+		return;
+
 	MapWindow* window = GetMapWindow();
 
 	//char keycode = event.GetKeyCode();
@@ -2402,6 +2480,11 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event)
 
 void MapCanvas::OnKeyUp(wxKeyEvent& event)
 {
+	if(HandleMouseKeyboardHotkey(event, false)) {
+		keyCode = WXK_NONE;
+		return;
+	}
+
 	keyCode = WXK_NONE;
 }
 

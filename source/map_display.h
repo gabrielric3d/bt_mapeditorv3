@@ -21,10 +21,12 @@
 #include <chrono>
 #include <memory>
 #include <vector>
+#include <set>
 
 #include <wx/filename.h>
 
 #include "action.h"
+#include "hotkey_utils.h"
 #include "tile.h"
 #include "creature.h"
 
@@ -64,6 +66,8 @@ public:
 	void OnMouseAux2Click(wxMouseEvent& event);
 	void OnMouseAux2Release(wxMouseEvent& event);
 	void OnMouseAuxEvent(wxMouseEvent& event);
+	bool HandleMouseKeyboardHotkey(wxKeyEvent& event, bool keyDown);
+	void DispatchKeyboardMouseAction(MouseActionID action, bool keyDown, const wxKeyEvent& source);
 
 	void OnKeyDown(wxKeyEvent& event);
 	void OnKeyUp(wxKeyEvent& event);
@@ -215,6 +219,7 @@ private:
 	wxStopWatch refresh_watch;
 	MapPopupMenu* popup_menu;
 	AnimationTimer* animation_timer;
+	std::set<MouseActionID> active_keyboard_mouse_actions;
 
 	void HandlePropertiesDoubleClick(wxMouseEvent& event);
 

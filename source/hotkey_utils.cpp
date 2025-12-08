@@ -24,6 +24,9 @@
 #include <algorithm>
 #include <cctype>
 #include <vector>
+#include <map>
+#include <set>
+#include <sstream>
 
 namespace
 {
@@ -253,8 +256,10 @@ std::string HotkeyToText(const HotkeyData& hotkey)
 		parts.emplace_back("Alt");
 	if(hotkey.flags & wxACCEL_SHIFT)
 		parts.emplace_back("Shift");
+#ifdef __APPLE__
 	if(hotkey.flags & wxACCEL_CMD)
 		parts.emplace_back("Cmd");
+#endif
 
 	std::string key = KeyToString(hotkey.keycode);
 	if(key.empty())
@@ -313,13 +318,17 @@ namespace
 		const char* action;
 		MouseButtonBinding defaultBinding;
 		Config::Key configKey;
+		const char* defaultKeyboardHotkey;
 	};
 
 	const MouseActionInfo g_mouse_actions[] = {
-		{ MouseActionID::PrimaryAction, "Primary Action", MouseButtonBinding::Left, Config::MOUSE_ACTION_PRIMARY_BUTTON },
-		{ MouseActionID::Camera, "Camera Drag", MouseButtonBinding::Middle, Config::MOUSE_ACTION_CAMERA_BUTTON },
-		{ MouseActionID::Properties, "Properties Tool", MouseButtonBinding::Right, Config::MOUSE_ACTION_PROPERTIES_BUTTON },
+		{ MouseActionID::PrimaryAction, "Primary Action", MouseButtonBinding::Left, Config::MOUSE_ACTION_PRIMARY_BUTTON, "" },
+		{ MouseActionID::Camera, "Camera Drag", MouseButtonBinding::Middle, Config::MOUSE_ACTION_CAMERA_BUTTON, "" },
+		{ MouseActionID::Properties, "Properties Tool", MouseButtonBinding::Right, Config::MOUSE_ACTION_PROPERTIES_BUTTON, "" },
 	};
+
+	std::map<MouseActionID, std::string> stored_mouse_keyboard_hotkeys;
+	bool mouse_keyboard_hotkeys_loaded = false;
 
 	MouseButtonBinding BindingFromInt(int value)
 	{
@@ -333,19 +342,19 @@ namespace
 		}
 	}
 
-	int BindingToInt(MouseButtonBinding binding)
-	{
-		switch(binding) {
-			case MouseButtonBinding::Left: return 0;
-			case MouseButtonBinding::Middle: return 1;
-			case MouseButtonBinding::Right: return 2;
-			case MouseButtonBinding::Button4: return 3;
-			case MouseButtonBinding::Button5: return 4;
-			default: return 0;
-		}
+int BindingToInt(MouseButtonBinding binding)
+{
+	switch(binding) {
+		case MouseButtonBinding::Left: return 0;
+		case MouseButtonBinding::Middle: return 1;
+		case MouseButtonBinding::Right: return 2;
+		case MouseButtonBinding::Button4: return 3;
+		case MouseButtonBinding::Button5: return 4;
+		default: return 0;
 	}
+}
 
-	const MouseActionInfo* FindMouseAction(MouseActionID id)
+const MouseActionInfo* FindMouseAction(MouseActionID id)
 	{
 		for(const MouseActionInfo& info : g_mouse_actions) {
 			if(info.id == id)
@@ -368,6 +377,64 @@ namespace
 		}
 
 		g_settings.setInteger(Config::MOUSE_BINDINGS_VERSION, 2);
+	}
+
+	void LoadMouseKeyboardHotkeys()
+	{
+		if(mouse_keyboard_hotkeys_loaded)
+			return;
+
+		mouse_keyboard_hotkeys_loaded = true;
+		const std::string serialized = g_settings.getString(Config::MOUSE_ACTION_KEYBOARD_HOTKEYS);
+		std::istringstream stream(serialized);
+		std::string line;
+		while(std::getline(stream, line)) {
+			line = Trim(line);
+			if(line.empty())
+				continue;
+			size_t delimiter = line.find('=');
+			if(delimiter == std::string::npos)
+				continue;
+
+			std::string actionName = Trim(line.substr(0, delimiter));
+			std::string hotkey = Trim(line.substr(delimiter + 1));
+
+			for(const MouseActionInfo& info : g_mouse_actions) {
+				if(actionName == info.action) {
+					stored_mouse_keyboard_hotkeys[info.id] = hotkey;
+					break;
+				}
+			}
+		}
+	}
+
+	void SaveMouseKeyboardHotkeys()
+	{
+		std::ostringstream output;
+		for(const MouseActionInfo& info : g_mouse_actions) {
+			auto it = stored_mouse_keyboard_hotkeys.find(info.id);
+			if(it == stored_mouse_keyboard_hotkeys.end())
+				continue;
+			if(it->second.empty())
+				continue;
+
+			output << info.action << '=' << it->second << '\n';
+		}
+
+		g_settings.setString(Config::MOUSE_ACTION_KEYBOARD_HOTKEYS, output.str());
+	}
+
+	std::string ResolveMouseKeyboardHotkey(MouseActionID id)
+	{
+		LoadMouseKeyboardHotkeys();
+		auto it = stored_mouse_keyboard_hotkeys.find(id);
+		if(it != stored_mouse_keyboard_hotkeys.end())
+			return it->second;
+
+		const MouseActionInfo* info = FindMouseAction(id);
+		if(info && info->defaultKeyboardHotkey)
+			return info->defaultKeyboardHotkey;
+		return "";
 	}
 
 	bool IsSwappedLayout()
@@ -415,6 +482,8 @@ std::vector<MouseHotkeyEntry> GetMouseHotkeyEntries()
 		entry.action = info.action;
 		entry.defaultBinding = info.defaultBinding;
 		entry.currentBinding = BindingFromInt(g_settings.getInteger(info.configKey));
+		entry.defaultKeyboardHotkey = info.defaultKeyboardHotkey ? info.defaultKeyboardHotkey : "";
+		entry.currentKeyboardHotkey = ResolveMouseKeyboardHotkey(info.id);
 		entries.push_back(entry);
 	}
 
@@ -424,14 +493,20 @@ std::vector<MouseHotkeyEntry> GetMouseHotkeyEntries()
 void ApplyMouseHotkeys(const std::vector<MouseHotkeyEntry>& entries)
 {
 	EnsureMouseBindingsInitialized();
+	LoadMouseKeyboardHotkeys();
 
 	for(const MouseHotkeyEntry& entry : entries) {
 		const MouseActionInfo* info = FindMouseAction(entry.id);
 		if(!info)
 			continue;
 		g_settings.setInteger(info->configKey, BindingToInt(entry.currentBinding));
+		if(entry.currentKeyboardHotkey.empty())
+			stored_mouse_keyboard_hotkeys.erase(entry.id);
+		else
+			stored_mouse_keyboard_hotkeys[entry.id] = entry.currentKeyboardHotkey;
 	}
 
+	SaveMouseKeyboardHotkeys();
 	SyncSwitchPreference();
 }
 
@@ -453,4 +528,38 @@ void SetMouseBinding(MouseActionID id, MouseButtonBinding binding)
 
 	g_settings.setInteger(info->configKey, BindingToInt(binding));
 	SyncSwitchPreference();
+}
+
+std::string GetMouseKeyboardHotkey(MouseActionID id)
+{
+	return ResolveMouseKeyboardHotkey(id);
+}
+
+bool MatchMouseKeyboardHotkey(const HotkeyData& hotkey, MouseActionID& outAction)
+{
+	LoadMouseKeyboardHotkeys();
+	std::string text = HotkeyToText(hotkey);
+	if(text.empty())
+		return false;
+
+	for(const MouseActionInfo& info : g_mouse_actions) {
+		std::string current = ResolveMouseKeyboardHotkey(info.id);
+		if(current.empty())
+			continue;
+		if(current == text) {
+			outAction = info.id;
+			return true;
+		}
+	}
+	return false;
+}
+
+int MouseBindingToIndex(MouseButtonBinding binding)
+{
+	return BindingToInt(binding);
+}
+
+MouseButtonBinding MouseBindingFromIndex(int value)
+{
+	return BindingFromInt(value);
 }

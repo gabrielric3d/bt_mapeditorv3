@@ -48,13 +48,22 @@ public:
 	HotkeysDialog(wxWindow* parent, MainMenuBar& menubar);
 
 private:
+	enum class CaptureMode
+	{
+		None,
+		Keyboard,
+		Mouse,
+	};
+
 	void PopulateList();
 	void UpdateSelection(int index);
-	void StartCapture();
+	void StartCapture(CaptureMode mode);
 	void StopCapture();
-	void ApplyMenuHotkey(const std::string& hotkey);
+	void ApplyKeyboardHotkey(const std::string& hotkey);
 	void ApplyMouseBinding(MouseButtonBinding binding);
-	void AddRow(const std::string& menu, const std::string& action, const std::string& hotkey, HotkeyRowType type, int index);
+	void AddRow(const std::string& menu, const std::string& action, const std::string& mouseBinding, const std::string& hotkey, HotkeyRowType type, int index);
+	bool RowMatchesFilter(const std::string& menu, const std::string& action, const std::string& mouseBinding, const std::string& hotkey) const;
+	bool FindHotkeyConflict(const std::string& hotkey, HotkeyRowType currentType, int currentIndex, std::string& outConflict) const;
 	void UpdateButtonStates();
 	bool HasSelection() const;
 	bool IsMouseSelection() const;
@@ -65,34 +74,40 @@ private:
 	void OnItemSelected(wxListEvent& event);
 	void OnItemDeselected(wxListEvent& event);
 	void OnSetHotkey(wxCommandEvent& event);
+	void OnSetMouseButton(wxCommandEvent& event);
 	void OnClearHotkey(wxCommandEvent& event);
 	void OnResetHotkey(wxCommandEvent& event);
+	void OnResetAllHotkeys(wxCommandEvent& event);
+	void OnExportHotkeys(wxCommandEvent& event);
+	void OnImportHotkeys(wxCommandEvent& event);
 	void OnSave(wxCommandEvent& event);
 	void OnCancel(wxCommandEvent& event);
+	void OnSearchChanged(wxCommandEvent& event);
 	void OnHotkeyKeyDown(wxKeyEvent& event);
 	void OnHotkeyMouseDown(wxMouseEvent& event);
-
-	enum class CaptureMode
-	{
-		None,
-		Keyboard,
-		Mouse,
-	};
+	bool SaveHotkeysToFile(const wxString& path);
+	bool LoadHotkeysFromFile(const wxString& path);
 
 	MainMenuBar& menu_bar;
 	std::vector<MenuHotkeyEntry> menu_entries;
 	std::vector<MouseHotkeyEntry> mouse_entries;
 	std::vector<RowEntry> row_mapping;
+	wxTextCtrl* search_ctrl;
 	wxListCtrl* list_ctrl;
 	wxTextCtrl* hotkey_ctrl;
 	wxStaticText* info_label;
 	wxButton* set_button;
+	wxButton* set_mouse_button;
 	wxButton* clear_button;
 	wxButton* reset_button;
+	wxButton* reset_all_button;
+	wxButton* export_button;
+	wxButton* import_button;
 	CaptureMode capture_mode;
 	HotkeyRowType selected_type;
 	int selected_index;
 	int selected_row;
+	std::string search_query;
 };
 
 #endif

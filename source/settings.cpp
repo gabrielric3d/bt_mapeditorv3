@@ -336,6 +336,7 @@ void Settings::IO(IOMode mode)
 	section("Hotkeys");
 	String(NUMERICAL_HOTKEYS, "none:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\n");
 	String(MENU_ACTION_HOTKEYS, "");
+	String(MOUSE_ACTION_KEYBOARD_HOTKEYS, "");
 
 	Int(SHOW_TOOLBAR_STANDARD, 1);
 	Int(SHOW_TOOLBAR_BRUSHES, 0);

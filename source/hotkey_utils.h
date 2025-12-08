@@ -54,6 +54,8 @@ struct MouseHotkeyEntry
 	std::string action;
 	MouseButtonBinding defaultBinding;
 	MouseButtonBinding currentBinding;
+	std::string defaultKeyboardHotkey;
+	std::string currentKeyboardHotkey;
 };
 
 bool ParseHotkeyText(const std::string& text, HotkeyData& out);
@@ -64,5 +66,9 @@ std::vector<MouseHotkeyEntry> GetMouseHotkeyEntries();
 void ApplyMouseHotkeys(const std::vector<MouseHotkeyEntry>& entries);
 MouseButtonBinding GetMouseBinding(MouseActionID id);
 void SetMouseBinding(MouseActionID id, MouseButtonBinding binding);
+std::string GetMouseKeyboardHotkey(MouseActionID id);
+bool MatchMouseKeyboardHotkey(const HotkeyData& hotkey, MouseActionID& outAction);
+int MouseBindingToIndex(MouseButtonBinding binding);
+MouseButtonBinding MouseBindingFromIndex(int value);
 
 #endif
