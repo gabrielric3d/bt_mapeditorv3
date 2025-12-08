@@ -125,6 +125,13 @@ protected:
 	wxStopWatch selection_indicator_timer;
 	Position pos_indicator;
 
+	// FPS and stats overlay
+	wxStopWatch fps_timer;
+	int frame_count;
+	double current_fps;
+	int tiles_rendered;
+
+
 public:
 	MapDrawer(MapCanvas* canvas);
 	~MapDrawer();
@@ -151,6 +158,7 @@ public:
 	void DrawGrid();
 	void DrawLights();
 	void DrawTooltips();
+	void DrawStatsOverlay();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 

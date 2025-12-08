@@ -176,10 +176,12 @@ uint8_t CalculateAmbientBrightness(int hour)
 }
 }
 
-MapDrawer::MapDrawer(MapCanvas* canvas) : canvas(canvas), editor(canvas->editor)
+MapDrawer::MapDrawer(MapCanvas* canvas) : canvas(canvas), editor(canvas->editor),
+	frame_count(0), current_fps(0.0), tiles_rendered(0)
 {
 	light_drawer = std::make_shared<LightDrawer>();
 	selection_indicator_timer.Start();
+	fps_timer.Start();
 }
 
 MapDrawer::~MapDrawer()
@@ -280,6 +282,7 @@ void MapDrawer::Draw()
 		DrawIngameBox();
 	if(options.isTooltips())
 		DrawTooltips();
+	DrawStatsOverlay();
 }
 
 void MapDrawer::DrawBackground()
@@ -329,6 +332,7 @@ void MapDrawer::DrawShade(int map_z)
 
 void MapDrawer::DrawMap()
 {
+	tiles_rendered = 0; // Reset tile counter
 	bool live_client = editor.IsLiveClient();
 
 	Brush* brush = g_gui.GetCurrentBrush();
@@ -374,6 +378,7 @@ void MapDrawer::DrawMap()
 							for(int map_y = 0; map_y < 4; ++map_y) {
 								TileLocation* location = nd->getTile(map_x, map_y, map_z);
 								DrawTile(location);
+								if(location) tiles_rendered++;
 								AddLight(location);
 							}
 						}
@@ -2206,4 +2211,47 @@ void MapDrawer::getDrawPosition(const Position& position, int& x, int& y)
 
 	x = ((position.x * rme::TileSize) - view_scroll_x) - offset;
 	y = ((position.y * rme::TileSize) - view_scroll_y) - offset;
+}
+
+void MapDrawer::DrawStatsOverlay()
+{
+	// Calculate FPS
+	frame_count++;
+	long elapsed = fps_timer.Time();
+	if(elapsed >= 1000) {
+		current_fps = frame_count * 1000.0 / elapsed;
+		frame_count = 0;
+		fps_timer.Start();
+	}
+
+	// Format text
+	char buffer[64];
+	snprintf(buffer, sizeof(buffer), "%.0f FPS  %d tiles", current_fps, tiles_rendered);
+
+	// Calculate position (top-right corner) - scale by zoom to stay fixed on screen
+	int text_len = strlen(buffer);
+	float box_width = (text_len * 8 + 16) * zoom;
+	float box_height = 24 * zoom;
+	float margin = 10 * zoom;
+	float box_x = screensize_x * zoom - box_width - margin;
+	float box_y = margin;
+
+	// Draw background box
+	glDisable(GL_TEXTURE_2D);
+	glColor4ub(30, 30, 40, 200);
+	glBegin(GL_QUADS);
+		glVertex2f(box_x, box_y);
+		glVertex2f(box_x + box_width, box_y);
+		glVertex2f(box_x + box_width, box_y + box_height);
+		glVertex2f(box_x, box_y + box_height);
+	glEnd();
+
+	// Draw text
+	glColor4ub(200, 200, 220, 255);
+	glRasterPos2f(box_x + 8 * zoom, box_y + 16 * zoom);
+	for(const char* c = buffer; *c != '\0'; c++) {
+		glutBitmapCharacter(GLUT_BITMAP_8_BY_13, *c);
+	}
+
+	glEnable(GL_TEXTURE_2D);
 }
