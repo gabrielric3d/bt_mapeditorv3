@@ -272,6 +272,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(EXTENSIONS, wxITEM_NORMAL, OnListExtensions);
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
+	MAKE_ACTION(SHOW_WARNINGS, wxITEM_NORMAL, OnShowWarnings);
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -1060,6 +1061,11 @@ void MainMenuBar::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
 	AboutWindow about(frame);
 	about.ShowModal();
+}
+
+void MainMenuBar::OnShowWarnings(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.ShowStartupWarnings();
 }
 
 void MainMenuBar::OnUndo(wxCommandEvent& WXUNUSED(event))

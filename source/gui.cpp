@@ -323,8 +323,10 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 		}
 
 		bool ret = LoadDataFiles(error, warnings);
-		if(ret)
+		if(ret) {
 			g_gui.LoadPerspective();
+			g_gui.SetStartupWarnings(warnings);
+		}
 		else
 			loaded_version = CLIENT_VERSION_NONE;
 
@@ -2213,6 +2215,15 @@ void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString& para
 	// Show the window
 	dlg->ShowModal();
 	delete dlg;
+}
+
+void GUI::ShowStartupWarnings()
+{
+	if(startup_warnings.empty()) {
+		PopupDialog("Warnings", "No warnings to display.", wxOK);
+		return;
+	}
+	ListDialog("Startup Warnings", startup_warnings);
 }
 
 void GUI::ShowTextBox(wxWindow* parent, wxString title, wxString content)

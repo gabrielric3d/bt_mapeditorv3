@@ -165,6 +165,7 @@ namespace MenuBar
 		EXTENSIONS,
 		GOTO_WEBSITE,
 		ABOUT,
+		SHOW_WARNINGS,
 		IMPORT_MONSTERSJSON,
 	};
 }
@@ -320,6 +321,7 @@ public:
 	void OnListExtensions(wxCommandEvent& event);
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnShowWarnings(wxCommandEvent& event);
 
 protected:
 	// Load and returns a menu item, also sets accelerator

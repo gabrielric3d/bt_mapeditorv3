@@ -138,6 +138,15 @@ public:
 	 * Creates a loading bar with the specified message, title is always "Loading"
 	 * The default scale is 0 - 100
 	 */
+	// Statistics structure for loading progress
+	struct LoadingStats {
+		uint32_t total_sprites = 0;
+		uint32_t total_items = 0;
+		uint32_t total_creatures = 0;
+		wxString current_file;
+		void Reset() { total_sprites = 0; total_items = 0; total_creatures = 0; current_file = ""; }
+	};
+
 	void CreateLoadBar(wxString message, bool canCancel = false);
 
 	/**
@@ -147,6 +156,11 @@ public:
 	 * abort the loading.
 	 */
 	bool SetLoadDone(int32_t done, const wxString& newMessage = "");
+
+	/**
+	 * Updates loading statistics and refreshes progress bar message
+	 */
+	void SetLoadingStats(const LoadingStats& stats);
 
 	/**
 	 * Sets the scale of the loading bar.
@@ -199,6 +213,9 @@ public:
 
 	void ListDialog(wxWindow* parent, wxString title, const wxArrayString& vec);
 	void ListDialog(const wxString& title, const wxArrayString& vec) { ListDialog(nullptr, title, vec); }
+
+	void SetStartupWarnings(const wxArrayString& warnings) { startup_warnings = warnings; }
+	void ShowStartupWarnings();
 
 	void ShowTextBox(wxWindow* parent, wxString title, wxString contents);
 	void ShowTextBox(const wxString& title, const wxString& contents) { ShowTextBox(nullptr, title, contents); }
@@ -464,9 +481,12 @@ protected:
 	int32_t progressFrom;
 	int32_t progressTo;
 	int32_t currentProgress;
+	LoadingStats loadingStats;
 
 	wxWindowDisabler* winDisabler;
 	int disabled_counter;
+
+	wxArrayString startup_warnings;
 
 	friend class RenderingLock;
 	friend MapTab::MapTab(MapTabbook*, Editor*);
