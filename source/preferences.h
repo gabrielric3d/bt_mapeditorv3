@@ -78,6 +78,7 @@ protected:
 	wxCheckBox* use_sprite_cache_chkbox;
 	wxSpinCtrl* sprite_cache_size_spin;
 	wxCheckBox* use_optimized_map_loading_chkbox;
+	wxSpinCtrl* refresh_rate_spin;
 	wxDirPickerCtrl* screenshot_directory_picker;
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;

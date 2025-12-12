@@ -31,6 +31,7 @@
 #include "copybuffer.h"
 #include "live_socket.h"
 #include "graphics.h"
+#include "complexitem.h"
 
 #include "doodad_brush.h"
 #include "creature_brush.h"
@@ -263,8 +264,28 @@ void MapDrawer::Release()
 	glPopMatrix();
 }
 
+int MapDrawer::GetLODLevel() const
+{
+	// LOD Level 0: Full detail (zoom <= 2.0)
+	// LOD Level 1: Medium detail (2.0 < zoom <= 6.0)
+	// LOD Level 2: Low detail (6.0 < zoom <= 10.0)
+	// LOD Level 3: Minimal detail (zoom > 10.0)
+	
+	if(zoom <= 2.0f) {
+		return 0;
+	} else if(zoom <= 6.0f) {
+		return 1;
+	} else if(zoom <= 10.0f) {
+		return 2;
+	} else {
+		return 3;
+	}
+}
+
 void MapDrawer::Draw()
 {
+	int lod_level = GetLODLevel();
+	
 	DrawBackground();
 	DrawMap();
 	DrawDraggingShadow();
@@ -274,14 +295,22 @@ void MapDrawer::Draw()
 	DrawLiveCursors();
 	DrawBrush();
 	DrawCursorTile();
-	if(options.show_grid && zoom <= 10.f)
+	
+	// Skip grid in high LOD levels
+	if(options.show_grid && zoom <= 10.f && lod_level < 3)
 		DrawGrid();
-	if(options.isDrawLight())
+	
+	// Skip lights in medium/high LOD levels
+	if(options.isDrawLight() && lod_level < 2)
 		DrawLights();
+	
 	if(options.show_ingame_box)
 		DrawIngameBox();
-	if(options.isTooltips())
+	
+	// Skip tooltips in high LOD levels
+	if(options.isTooltips() && lod_level < 3)
 		DrawTooltips();
+	
 	DrawStatsOverlay();
 }
 
@@ -1501,7 +1530,10 @@ void MapDrawer::WriteTooltip(const Item* item, std::ostringstream& stream)
 	const uint16_t unique = item->getUniqueID();
 	const uint16_t action = item->getActionID();
 	const std::string& text = item->getText();
-	if(unique == 0 && action == 0 && text.empty())
+	const Teleport* teleport = dynamic_cast<const Teleport*>(item);
+	const bool has_destination = teleport && teleport->hasDestination();
+
+	if(unique == 0 && action == 0 && text.empty() && !has_destination)
 		return;
 
 	if(stream.tellp() > 0)
@@ -1515,6 +1547,10 @@ void MapDrawer::WriteTooltip(const Item* item, std::ostringstream& stream)
 		stream << "uid: " << unique << "\n";
 	if(!text.empty())
 		stream << "text: " << text << "\n";
+	if(has_destination) {
+		const Position& destination = teleport->getDestination();
+		stream << "dest: " << destination.x << ", " << destination.y << ", " << destination.z << "\n";
+	}
 }
 
 void MapDrawer::WriteTooltip(const Waypoint* waypoint, std::ostringstream& stream)
@@ -1535,7 +1571,22 @@ void MapDrawer::DrawTile(TileLocation* location)
 		return;
 
 	const Position& position = location->getPosition();
-	bool show_tooltips = options.isTooltips();
+	int lod_level = GetLODLevel();
+	
+	// LOD Level 3 (zoom > 10): Ultra simplified - just minimap colors
+	if(lod_level >= 3) {
+		int draw_x, draw_y;
+		getDrawPosition(position, draw_x, draw_y);
+		if(tile->hasGround()) {
+			glDisable(GL_TEXTURE_2D);
+			wxColor color = colorFromEightBit(tile->getMiniMapColor());
+			glBlitSquare(draw_x, draw_y, color);
+			glEnable(GL_TEXTURE_2D);
+		}
+		return;
+	}
+	
+	bool show_tooltips = options.isTooltips() && lod_level < 3;
 
 	if(show_tooltips && location->getWaypointCount() > 0) {
 		Waypoint* waypoint = canvas->editor.getMap().waypoints.getWaypoint(position);
@@ -1618,7 +1669,8 @@ void MapDrawer::DrawTile(TileLocation* location)
 			}
 			glEnable(GL_TEXTURE_2D);
 		} else {
-			if(options.show_preview && zoom <= 2.0)
+		// LOD Level 0: Enable animations
+			if(lod_level == 0 && options.show_preview && zoom <= 2.0)
 				tile->ground->animate();
 
 			BlitItem(draw_x, draw_y, tile, tile->ground, false, r, g, b);
@@ -1629,13 +1681,19 @@ void MapDrawer::DrawTile(TileLocation* location)
 	}
 
 	bool hidden = only_colors || (options.hide_items_when_zoomed && zoom > 10.f);
+	
+	// LOD Level 2+ (zoom > 6): Skip items entirely
+	if(lod_level >= 2) {
+		hidden = true;
+	}
 
 	if(!hidden && !tile->items.empty()) {
 		for(Item* item : tile->items) {
 			if(show_tooltips && position.z == floor)
 				WriteTooltip(item, tooltip);
 
-			if(options.show_preview && zoom <= 2.0)
+		// LOD Level 0: Enable animations
+			if(lod_level == 0 && options.show_preview && zoom <= 2.0)
 				item->animate();
 
 			if(item->isBorder()) {
@@ -1646,7 +1704,8 @@ void MapDrawer::DrawTile(TileLocation* location)
 		}
 	}
 
-	if(!hidden && options.show_creatures && tile->creature) {
+	// LOD Level 2+ (zoom > 6): Skip creatures
+	if(!hidden && options.show_creatures && tile->creature && lod_level < 2) {
 		BlitCreature(draw_x, draw_y, tile->creature);
 	}
 

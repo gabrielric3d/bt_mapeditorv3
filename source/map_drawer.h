@@ -173,6 +173,8 @@ public:
 
 	DrawingOptions& getOptions() noexcept { return options; }
 	bool HasActiveSelectionIndicator() const;
+	
+	int GetLODLevel() const;
 
 protected:
 	void BlitItem(int& screenx, int& screeny, const Tile* tile, const Item* item, bool ephemeral = false, int red = 255, int green = 255, int blue = 255, int alpha = 255);

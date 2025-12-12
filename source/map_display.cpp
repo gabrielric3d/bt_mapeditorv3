@@ -179,6 +179,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	drawing(false),
 	dragging_draw(false),
 	replace_dragging(false),
+	alt_ground_mode(false),
 
 	screenshot_buffer(nullptr),
 	gif_writer(nullptr),
@@ -984,6 +985,10 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 		}
 	} else { // Drawing mode
 		Brush* brush = g_gui.GetCurrentBrush();
+		if(alt_ground_mode && !event.AltDown()) {
+			alt_ground_mode = false;
+		}
+
 		if(map_update && drawing && brush) {
 			g_gui.AddRecentBrush(brush);
 			if(brush->isDoodad()) {
@@ -1087,8 +1092,6 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent& event)
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent& event)
 {
-	if(GetMouseBinding(MouseActionID::Properties) != MouseButtonBinding::Left)
-		return;
 	HandlePropertiesDoubleClick(event);
 }
 
@@ -1425,12 +1428,19 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 		Brush* brush = g_gui.GetCurrentBrush();
 		g_gui.AddRecentBrush(brush);
 
-		bool handledSingleTile = false;
-		if(brush->isGround() && event.AltDown()) {
-			handledSingleTile = true;
-			replace_dragging = true;
-			editor.drawGroundSingleTile(Position(mouse_map_x, mouse_map_y, floor));
+
+		alt_ground_mode = brush->isGround() && event.AltDown();
+		if(alt_ground_mode) {
+			alt_ground_reference = nullptr;
+			Tile* clicked_tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
+			if(clicked_tile) {
+				alt_ground_reference = clicked_tile->getGroundBrush();
+			}
+			editor.replace_brush = alt_ground_reference;
 		}
+
+		bool handledSingleTile = false;
+
 
 		if(!handledSingleTile) {
 			if(event.ShiftDown() && brush->canDrag()) {
@@ -1586,6 +1596,8 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 	int move_x = last_click_map_x - mouse_map_x;
 	int move_y = last_click_map_y - mouse_map_y;
 	int move_z = last_click_map_z - floor;
+
+	alt_ground_mode = false;
 
 	if(g_gui.IsSelectionMode()) {
 		if(dragging && (move_x != 0 || move_y != 0 || move_z != 0)) {
@@ -2194,6 +2206,7 @@ void MapCanvas::OnWheel(wxMouseEvent& event)
 void MapCanvas::OnLoseMouse(wxMouseEvent& event)
 {
 	cursor_in_window = false;
+	alt_ground_mode = false;
 	Refresh();
 }
 
@@ -3283,4 +3296,3 @@ void AnimationTimer::Stop()
 		wxTimer::Stop();
 	}
 };
-

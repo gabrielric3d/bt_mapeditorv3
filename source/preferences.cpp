@@ -250,6 +250,13 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	performance_sizer->Add(use_optimized_map_loading_chkbox, 0, wxLEFT | wxBOTTOM, 5);
 	SetWindowToolTip(use_optimized_map_loading_chkbox, "Reduces GUI update frequency during map loading to significantly improve speed.\nRecommended to keep this enabled.");
 
+	wxBoxSizer* refresh_rate_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	refresh_rate_sizer->Add(newd wxStaticText(graphics_page, wxID_ANY, "Refresh rate (ms):"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	refresh_rate_spin = newd wxSpinCtrl(graphics_page, wxID_ANY, i2ws(g_settings.getInteger(Config::HARD_REFRESH_RATE)), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 1000);
+	refresh_rate_sizer->Add(refresh_rate_spin, 0);
+	performance_sizer->Add(refresh_rate_sizer, 0, wxLEFT | wxBOTTOM, 5);
+	SetWindowToolTip(refresh_rate_spin, "Minimum time between screen refreshes in milliseconds.\nLower values = higher FPS but more CPU usage.\n0 = No limit, 16 = ~60 FPS, 8 = ~120 FPS");
+
 	sprite_cache_size_spin->Enable(use_sprite_cache_chkbox->GetValue());
 	use_sprite_cache_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) {
 		sprite_cache_size_spin->Enable(event.IsChecked());
@@ -777,6 +784,7 @@ void PreferencesWindow::Apply()
 	
 	g_settings.setInteger(Config::SPRITE_CACHE_SIZE, sprite_cache_size_spin->GetValue());
 	g_settings.setInteger(Config::USE_OPTIMIZED_MAP_LOADING, use_optimized_map_loading_chkbox->GetValue());
+	g_settings.setInteger(Config::HARD_REFRESH_RATE, refresh_rate_spin->GetValue());
 	if(icon_background_choice->GetSelection() == 0) {
 		if(g_settings.getInteger(Config::ICON_BACKGROUND) != 0) {
 			g_gui.gfx.cleanSoftwareSprites();

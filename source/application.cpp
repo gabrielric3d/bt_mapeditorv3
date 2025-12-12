@@ -42,7 +42,7 @@
 #include <GL/glut.h>
 #endif
 
-#include "../brushes/icon/rme_icon.xpm"
+#include "../brushes/icon/bt_rme_icon.xpm"
 
 #include <wx/dcbuffer.h>
 
@@ -246,7 +246,7 @@ bool Application::OnInit()
 	// Load palette
 	g_gui.LoadPerspective();
 
-    wxIcon icon(rme_icon);
+    wxIcon icon(bt_rme_icon);
     g_gui.root->SetIcon(icon);
 
     if(g_settings.getInteger(Config::WELCOME_DIALOG) == 1 && m_file_to_open == wxEmptyString) {

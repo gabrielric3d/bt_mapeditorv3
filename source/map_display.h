@@ -179,6 +179,8 @@ private:
 	bool drawing;
 	bool dragging_draw;
 	bool replace_dragging;
+	bool alt_ground_mode;
+	GroundBrush* alt_ground_reference;
 
 	uint8_t* screenshot_buffer;
 	std::unique_ptr<AnimatedGifWriter> gif_writer;
