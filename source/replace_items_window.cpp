@@ -22,6 +22,7 @@
 #include "gui.h"
 #include "artprovider.h"
 #include "items.h"
+#include "theme.h"
 
 // ============================================================================
 // ReplaceItemsButton
@@ -69,6 +70,10 @@ ReplaceItemsListBox::ReplaceItemsListBox(wxWindow* parent) :
 {
 	m_arrow_bitmap = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, wxSize(16, 16));
 	m_flag_bitmap = wxArtProvider::GetBitmap(ART_PZ_BRUSH, wxART_TOOLBAR, wxSize(16, 16));
+
+	const ThemeColors& theme = Theme::Dark();
+	SetBackgroundColour(theme.surface);
+	SetForegroundColour(theme.text);
 }
 
 bool ReplaceItemsListBox::AddItem(const ReplacingItem& item)
@@ -129,12 +134,20 @@ void ReplaceItemsListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t index)
 	const ItemType& type2 = g_items.getItemType(item.withId);
 	Sprite* sprite2 = g_gui.gfx.getSprite(type2.clientID);
 
+	const ThemeColors& theme = Theme::Dark();
+	wxColour text_colour = theme.text;
+	if(IsSelected(index)) {
+		text_colour = HasFocus() ? theme.text : theme.accent;
+	}
+	dc.SetTextForeground(text_colour);
+
 	if(sprite1 && sprite2) {
 		int x = rect.GetX();
 		int y = rect.GetY();
-		sprite1->DrawTo(&dc, SPRITE_SIZE_32x32, x + 4, y + 4, rect.GetWidth(), rect.GetHeight());
+		constexpr int icon_size = 32;
+		sprite1->DrawTo(&dc, SPRITE_SIZE_32x32, x + 4, y + 4, icon_size, icon_size);
 		dc.DrawBitmap(m_arrow_bitmap, x + 38, y + 10, true);
-		sprite2->DrawTo(&dc, SPRITE_SIZE_32x32, x + 56, y + 4, rect.GetWidth(), rect.GetHeight());
+		sprite2->DrawTo(&dc, SPRITE_SIZE_32x32, x + 56, y + 4, icon_size, icon_size);
 		dc.DrawText(wxString::Format("Replace: %d With: %d", item.replaceId, item.withId), x + 104, y + 10);
 
 		if(item.complete) {
@@ -142,15 +155,6 @@ void ReplaceItemsListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t index)
 			dc.DrawBitmap(m_flag_bitmap, x + 70, y + 10, true);
 			dc.DrawText(wxString::Format("Total: %d", item.total), x, y + 10);
 		}
-	}
-
-	if(IsSelected(index)) {
-		if(HasFocus())
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		else
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-	} else {
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
 	}
 }
 

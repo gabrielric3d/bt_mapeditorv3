@@ -34,6 +34,7 @@
 #include "positionctrl.h"
 
 #include "iominimap.h"
+#include "theme.h"
 
 #ifdef _MSC_VER
 	#pragma warning(disable:4018) // signed/unsigned mismatch
@@ -906,6 +907,9 @@ FindDialogListBox::FindDialogListBox(wxWindow* parent, wxWindowID id) :
 	cleared(false),
 	no_matches(false)
 {
+	const ThemeColors& theme = Theme::Dark();
+	SetBackgroundColour(theme.surface);
+	SetForegroundColour(theme.text);
 	Clear();
 }
 
@@ -952,9 +956,20 @@ Brush* FindDialogListBox::GetSelectedBrush()
 
 void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 {
+	const ThemeColors& theme = Theme::Dark();
+	auto setTextColour = [&](bool selected) {
+		if(selected) {
+			dc.SetTextForeground(HasFocus() ? theme.text : theme.accent);
+		} else {
+			dc.SetTextForeground(theme.text);
+		}
+	};
+
 	if(no_matches) {
+		dc.SetTextForeground(theme.textMuted);
 		dc.DrawText("No matches for your search.", rect.GetX() + 40, rect.GetY() + 6);
 	} else if(cleared) {
+		dc.SetTextForeground(theme.textMuted);
 		dc.DrawText("Please enter your search string.", rect.GetX() + 40, rect.GetY() + 6);
 	} else {
 		ASSERT(n < brushlist.size());
@@ -979,14 +994,7 @@ void FindDialogListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 			}
 		}
 
-		if(IsSelected(n)) {
-			if(HasFocus())
-				dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-			else
-				dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
-		}
+		setTextColour(IsSelected(n));
 
 		const int text_x = icon_rect.GetRight() + icon_padding;
 		dc.DrawText(wxstr(brushlist[n]->getName()), text_x, rect.GetY() + 6);
