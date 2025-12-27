@@ -373,6 +373,8 @@
 			<brush name="pink sand"/>
 			<brush name="dark sand"/>
 			<brush name="new sand"/>
+			<brush name="sunken sand"/>
+			<brush name="sunken desert sand"/>
 			<brush name="dry earth"/>
 			<brush name="mud sand"/>
 			<brush name="sand gravel"/>
@@ -449,6 +451,7 @@
 			<brush name="vortex floor2"/>
 			<brush name="vortex floor3"/>
 			<brush name="vortex floor4"/>
+			<brush name="void ground"/>
 			<brush name="void"/>
 			<brush name="hoard of gold"/>
 			<brush name="green hoard of gold"/>
@@ -1067,6 +1070,7 @@
 			<brush name="sand slim (tiny)"/>
 			<brush name="sand thick (tiny)"/>
 			<brush name="pink sand (tiny)"/>
+			<brush name="sunken sand (sediment)"/>
 			<brush name="dark sand (tiny)"/>
 			<brush name="mud sand (tiny)"/>
 			<brush name="mud sand spray (tiny)"/>
@@ -7983,6 +7987,8 @@
 			<brush name="enormous deepling statue (non elevated)"/>
 			<brush name="enormous deepling statue (elevated)"/>
 			<brush name="enormous deepling statue (non elevated) - red gem"/>
+			<brush name="coral1"/>
+			<item fromid="51644" toid="51779"/>
 		</doodad>
 	</tileset>
 </materials>

@@ -44,12 +44,6 @@
 		<borderitem edge="dse" item="4553"/>
 	</border>
 	
-	<border id="3"> -- mountain inner border --
-		<borderitem edge="e"   item="4826"/>
-		<borderitem edge="s"   item="4827"/>
-		<borderitem edge="dse" item="877"/>
-	</border>
-	
 	<border id="4"> -- Flat roof border --
 		<borderitem edge="n"   item="5052"/>
 		<borderitem edge="w"   item="5049"/>
@@ -185,7 +179,7 @@
 		<borderitem edge="dse" item="4607"/>
 	</border>
 	
-	<border id="13" group="1"> -- dirt border --
+	<!-- <border id="13" group="1"> -- dirt border --
 		<borderitem edge="n"   item="4667"/>
 		<borderitem edge="e"   item="4668"/>
 		<borderitem edge="s"   item="4669"/>
@@ -198,7 +192,7 @@
 		<borderitem edge="dne" item="4676"/>
 		<borderitem edge="dsw" item="4677"/>
 		<borderitem edge="dse" item="4678"/>
-	</border>
+	</border> -->
 	
 	<border id="14" group="1"> -- light dirt border --
 		<borderitem edge="n"   item="4679"/>
@@ -245,7 +239,7 @@
 		<borderitem edge="dse" item="4783"/>
 	</border>
 	
-	<!-- <border id="17"> -- beach sand border --
+	<border id="17"> -- beach sand border --
 		<borderitem edge="n"   item="4760"/>
 		<borderitem edge="e"   item="4761"/>
 		<borderitem edge="s"   item="4762"/>
@@ -258,7 +252,7 @@
 		<borderitem edge="dne" item="4769"/>
 		<borderitem edge="dsw" item="4770"/>
 		<borderitem edge="dse" item="4771"/>
-	</border> -->
+	</border>
 	
 	<border id="18"> -- lava border --
 		<borderitem edge="n"   item="4808"/>
@@ -383,7 +377,7 @@
 		<borderitem edge="s" item="935"/>
 	</border>
 	
-	<border id="29" type="optional"> -- normal mountain gravel border --
+	<!-- <border id="29" type="optional"> -- normal mountain gravel border --
 		<borderitem edge="n"   item="4471"/>
 		<borderitem edge="e"   item="4468"/>
 		<borderitem edge="s"   item="4469"/>
@@ -398,7 +392,20 @@
 		<borderitem edge="dse" item="4479"/>
 	</border>
 
-	<border id="59">
+	<border id="51"> -- partial mountain gravel border --
+		<borderitem edge="e"   item="4468"/>
+		<borderitem edge="s"   item="4469"/>
+		<borderitem edge="cse" item="4470"/>
+		<borderitem edge="dse" item="4479"/>
+	</border>
+
+	<border id="3"> -- mountain inner border --
+		<borderitem edge="e"   item="4826"/>
+		<borderitem edge="s"   item="4827"/>
+		<borderitem edge="dse" item="877"/>
+	</border> -->
+
+	<!-- <border id="59">
 		<borderitem edge="n"   item="7989"/>
 		<borderitem edge="e"   item="8168"/>
 		<borderitem edge="s"   item="8169"/>
@@ -408,7 +415,7 @@
 		<borderitem edge="dne" item="8137"/>
 		<borderitem edge="dsw" item="8136"/>
 		<borderitem edge="dse" item="8138"/>
-	</border>
+	</border> -->
 	
 	<border id="60">
 		<borderitem edge="n"   item="15069"/>
@@ -870,12 +877,6 @@
 		<borderitem edge="cse" item="87"/>
 	</border>
 	
-	<border id="51"> -- partial mountain gravel border --
-		<borderitem edge="e"   item="4468"/>
-		<borderitem edge="s"   item="4469"/>
-		<borderitem edge="cse" item="4470"/>
-		<borderitem edge="dse" item="4479"/>
-	</border>
 	
 	<border id="52" type="optional"> -- snowy mountain gravel border --
 		<borderitem edge="n"   item="6720"/>
@@ -1083,7 +1084,7 @@
 		<borderitem edge="dse" item="8346"/>
 	</border>
 
-	<border id="130" type="optional"> -- normal dirt mountain gravel --
+	<!-- <border id="130" type="optional"> -- normal dirt mountain gravel --
 		<borderitem edge="n"   item="7989"/>
 		<borderitem edge="e"   item="8168"/>
 		<borderitem edge="s"   item="8169"/>
@@ -1096,7 +1097,7 @@
 		<borderitem edge="dne" item="7996"/>
 		<borderitem edge="dsw" item="7994"/>
 		<borderitem edge="dse" item="8138"/>
-	</border>
+	</border> -->
 		
 	<border id="132"> -- thick sand border --
 		<borderitem edge="n"   item="8021"/>
@@ -2837,5 +2838,81 @@
 		<borderitem edge="dne" item="45726"/>
 		<borderitem edge="dsw" item="45727"/>
 		<borderitem edge="dse" item="45728"/>
+	</border>
+
+	
+	<border id="256"> -- sunken sand packed --
+		<!-- Bordas retas -->
+		<borderitem edge="n" item="45082"/>
+		<borderitem edge="s" item="45081"/>
+		<borderitem edge="w" item="45080"/>
+		<borderitem edge="e" item="45079"/>
+
+		<!-- Cantos externos -->
+		<borderitem edge="cnw" item="45076"/>
+		<borderitem edge="cne" item="45077"/>
+		<borderitem edge="csw" item="45075"/>
+		<borderitem edge="cse" item="45074"/>
+
+		<!-- Cantos internos -->
+		<borderitem edge="dnw" item="45072"/>
+		<borderitem edge="dne" item="45073"/>
+		<borderitem edge="dsw" item="45071"/>
+		<borderitem edge="dse" item="45070"/>
+	</border>
+
+	<border id="257"> -- sunken sand sediment --
+		<!-- Bordas retas -->
+		<borderitem edge="n" item="45094"/>
+		<borderitem edge="s" item="45093"/>
+		<borderitem edge="w" item="45092"/>
+		<borderitem edge="e" item="45091"/>
+
+		<!-- Cantos externos -->
+		<borderitem edge="cnw" item="45089"/>
+		<borderitem edge="cne" item="45090"/>
+		<borderitem edge="csw" item="45088"/>
+		<borderitem edge="cse" item="45087"/>
+
+		<!-- Cantos internos -->
+		<borderitem edge="dnw" item="45085"/>
+		<borderitem edge="dne" item="45086"/>
+		<borderitem edge="dsw" item="45084"/>
+		<borderitem edge="dse" item="45083"/>
+	</border>
+
+	<border id="258"> -- sunken sand sediment 2 --
+		<!-- Bordas retas -->
+		<borderitem edge="n" item="51799"/>
+		<borderitem edge="s" item="51798"/>
+		<borderitem edge="w" item="51801"/>
+		<borderitem edge="e" item="51800"/>
+
+		<!-- Cantos externos -->
+		<borderitem edge="cnw" item="51808"/>
+		<borderitem edge="cne" item="51809"/>
+		<borderitem edge="csw" item="51807"/>
+		<borderitem edge="cse" item="51806"/>
+
+		<!-- Cantos internos -->
+		<borderitem edge="dnw" item="51804"/>
+		<borderitem edge="dne" item="51805"/>
+		<borderitem edge="dsw" item="51803"/>
+		<borderitem edge="dse" item="51802"/>
+	</border>
+
+	<border id="259" type="optional"> -- desert mountain border
+		<borderitem edge="n"   item="43476"/>
+		<borderitem edge="e"   item="43506"/>
+		<borderitem edge="s"   item="43507"/>
+		<borderitem edge="w"   item="43481"/>
+
+		<borderitem edge="cnw" item="43474"/>
+		<borderitem edge="cse" item="43482"/>
+
+		<borderitem edge="dnw" item="43502"/>
+		<borderitem edge="dne" item="43504"/>
+		<borderitem edge="dsw" item="43503"/>
+		<borderitem edge="dse" item="43505"/>
 	</border>
 </materials>

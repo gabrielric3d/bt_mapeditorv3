@@ -18,7 +18,8 @@
             <item name="$Export Minimap..." action="EXPORT_MINIMAP" help="Export minimap to an image file."/>
         </menu>
         <menu name="$Reload">
-            <item name="$Reload" hotkey="F5" action="RELOAD_DATA" help="Reloads all data files."/>
+            <item name="Reload $All" hotkey="F5" action="RELOAD_DATA" help="Reloads all data files (sprites, items, brushes)."/>
+            <item name="Reload $Brushes" hotkey="F6" action="RELOAD_BRUSHES" help="Reloads only brush files (grounds, doodads, walls, etc). Faster and safer."/>
         </menu>
         <separator/>
         <menu name="Recent $Files" special="RECENT_FILES"/>
@@ -203,5 +204,7 @@
         <item name="$Extensions..." hotkey="F2" action="EXTENSIONS" help=""/>
         <item name="Goto $Website" hotkey="F3" action="GOTO_WEBSITE" help=""/>
         <item name="$About..." hotkey="F1" action="ABOUT" help=""/>
+        <separator/>
+        <item name="Show $Warnings..." hotkey="F4" action="SHOW_WARNINGS" help="Show startup warnings and errors."/>
     </menu>
 </menubar>

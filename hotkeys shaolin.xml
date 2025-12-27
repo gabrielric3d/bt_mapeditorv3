@@ -1,0 +1,141 @@
+<?xml version="1.0"?>
+<hotkeys>
+  <menu>
+    <entry menu="About" action="About" hotkey="F1" />
+    <entry menu="About" action="Extensions" hotkey="F2" />
+    <entry menu="About" action="Goto Website" hotkey="F3" />
+    <entry menu="Edit" action="Border Automagic" hotkey="A" />
+    <entry menu="Edit" action="Borderize Map" hotkey="" />
+    <entry menu="Edit" action="Borderize Selection" hotkey="Ctrl+B" />
+    <entry menu="Edit" action="Clear Invalid Houses" hotkey="" />
+    <entry menu="Edit" action="Clear Modified State" hotkey="" />
+    <entry menu="Edit" action="Copy" hotkey="Ctrl+C" />
+    <entry menu="Edit" action="Cut" hotkey="Ctrl+X" />
+    <entry menu="Edit" action="Find Action" hotkey="" />
+    <entry menu="Edit" action="Find Container" hotkey="" />
+    <entry menu="Edit" action="Find Duplicated" hotkey="" />
+    <entry menu="Edit" action="Find Everything" hotkey="" />
+    <entry menu="Edit" action="Find Item" hotkey="Ctrl+F" />
+    <entry menu="Edit" action="Find Unique" hotkey="" />
+    <entry menu="Edit" action="Find Writeable" hotkey="" />
+    <entry menu="Edit" action="Go To Position" hotkey="Ctrl+G" />
+    <entry menu="Edit" action="Go To Previous Position" hotkey="P" />
+    <entry menu="Edit" action="Jump to Brush" hotkey="J" />
+    <entry menu="Edit" action="Jump to Item" hotkey="Ctrl+J" />
+    <entry menu="Edit" action="Paste" hotkey="Ctrl+V" />
+    <entry menu="Edit" action="Randomize Map" hotkey="" />
+    <entry menu="Edit" action="Randomize Selection" hotkey="" />
+    <entry menu="Edit" action="Redo" hotkey="Ctrl+Shift+Z" />
+    <entry menu="Edit" action="Remove Items by ID" hotkey="Ctrl+Shift+D" />
+    <entry menu="Edit" action="Remove all corpses" hotkey="" />
+    <entry menu="Edit" action="Remove all unreachable tiles" hotkey="" />
+    <entry menu="Edit" action="Remove empty spawns" hotkey="" />
+    <entry menu="Edit" action="Replace Items" hotkey="Ctrl+Shift+F" />
+    <entry menu="Edit" action="Undo" hotkey="Ctrl+Z" />
+    <entry menu="File" action="Close" hotkey="Ctrl+Q" />
+    <entry menu="File" action="Exit" hotkey="" />
+    <entry menu="File" action="Export Minimap" hotkey="" />
+    <entry menu="File" action="Generate Map" hotkey="" />
+    <entry menu="File" action="Hotkey Configuration" hotkey="" />
+    <entry menu="File" action="Import Map" hotkey="" />
+    <entry menu="File" action="Import Minimap" hotkey="" />
+    <entry menu="File" action="Import Monsters json" hotkey="" />
+    <entry menu="File" action="Import Monsters/NPC" hotkey="" />
+    <entry menu="File" action="New" hotkey="Ctrl+N" />
+    <entry menu="File" action="Open" hotkey="Ctrl+O" />
+    <entry menu="File" action="Preferences" hotkey="" />
+    <entry menu="File" action="Reload" hotkey="F5" />
+    <entry menu="File" action="Save" hotkey="Ctrl+S" />
+    <entry menu="File" action="Save As" hotkey="Ctrl+Alt+S" />
+    <entry menu="Floor" action="Floor 0" hotkey="" />
+    <entry menu="Floor" action="Floor 1" hotkey="" />
+    <entry menu="Floor" action="Floor 10" hotkey="" />
+    <entry menu="Floor" action="Floor 11" hotkey="" />
+    <entry menu="Floor" action="Floor 12" hotkey="" />
+    <entry menu="Floor" action="Floor 13" hotkey="" />
+    <entry menu="Floor" action="Floor 14" hotkey="" />
+    <entry menu="Floor" action="Floor 15" hotkey="" />
+    <entry menu="Floor" action="Floor 2" hotkey="" />
+    <entry menu="Floor" action="Floor 3" hotkey="" />
+    <entry menu="Floor" action="Floor 4" hotkey="" />
+    <entry menu="Floor" action="Floor 5" hotkey="" />
+    <entry menu="Floor" action="Floor 6" hotkey="" />
+    <entry menu="Floor" action="Floor 7" hotkey="" />
+    <entry menu="Floor" action="Floor 8" hotkey="" />
+    <entry menu="Floor" action="Floor 9" hotkey="" />
+    <entry menu="Map" action="Cleanup" hotkey="" />
+    <entry menu="Map" action="Edit Items" hotkey="Ctrl+I" />
+    <entry menu="Map" action="Edit Monsters" hotkey="" />
+    <entry menu="Map" action="Edit Towns" hotkey="Ctrl+T" />
+    <entry menu="Map" action="Properties" hotkey="Ctrl+P" />
+    <entry menu="Map" action="Statistics" hotkey="F8" />
+    <entry menu="Select" action="Compensate Selection" hotkey="" />
+    <entry menu="Select" action="Current Floor" hotkey="" />
+    <entry menu="Select" action="Find Action" hotkey="" />
+    <entry menu="Select" action="Find Container" hotkey="" />
+    <entry menu="Select" action="Find Duplicated" hotkey="Ctrl+R" />
+    <entry menu="Select" action="Find Everything" hotkey="" />
+    <entry menu="Select" action="Find Item on Selection" hotkey="" />
+    <entry menu="Select" action="Find Unique" hotkey="" />
+    <entry menu="Select" action="Find Writeable" hotkey="" />
+    <entry menu="Select" action="Lower Floors" hotkey="" />
+    <entry menu="Select" action="Remove Item on Selection" hotkey="" />
+    <entry menu="Select" action="Replace Items on Selection" hotkey="" />
+    <entry menu="Select" action="Visible Floors" hotkey="" />
+    <entry menu="View" action="Brushes" hotkey="" />
+    <entry menu="View" action="Enter Fullscreen" hotkey="F11" />
+    <entry menu="View" action="Ghost higher floors" hotkey="Ctrl+L" />
+    <entry menu="View" action="Ghost loose items" hotkey="G" />
+    <entry menu="View" action="Highlight items" hotkey="V" />
+    <entry menu="View" action="Indicators" hotkey="" />
+    <entry menu="View" action="New View" hotkey="Ctrl+Shift+N" />
+    <entry menu="View" action="Only show colors" hotkey="Ctrl+E" />
+    <entry menu="View" action="Only show modified" hotkey="Ctrl+M" />
+    <entry menu="View" action="Position" hotkey="" />
+    <entry menu="View" action="Record GIF" hotkey="F12" />
+    <entry menu="View" action="Set light hour" hotkey="" />
+    <entry menu="View" action="Show Grid" hotkey="Shift+G" />
+    <entry menu="View" action="Show Moveables" hotkey="" />
+    <entry menu="View" action="Show Pickupables" hotkey="" />
+    <entry menu="View" action="Show Preview" hotkey="L" />
+    <entry menu="View" action="Show Technical Items" hotkey="Shift+T" />
+    <entry menu="View" action="Show Tooltips" hotkey="Y" />
+    <entry menu="View" action="Show Wall Hooks" hotkey="K" />
+    <entry menu="View" action="Show all floors" hotkey="Ctrl+W" />
+    <entry menu="View" action="Show as minimap" hotkey="Shift+E" />
+    <entry menu="View" action="Show client box" hotkey="Shift+I" />
+    <entry menu="View" action="Show creatures" hotkey="F" />
+    <entry menu="View" action="Show houses" hotkey="Ctrl+H" />
+    <entry menu="View" action="Show lights" hotkey="Shift+L" />
+    <entry menu="View" action="Show pathing" hotkey="O" />
+    <entry menu="View" action="Show shade" hotkey="Q" />
+    <entry menu="View" action="Show spawn creature list" hotkey="Shift+S" />
+    <entry menu="View" action="Show spawns" hotkey="S" />
+    <entry menu="View" action="Show special" hotkey="E" />
+    <entry menu="View" action="Sizes" hotkey="" />
+    <entry menu="View" action="Standard" hotkey="" />
+    <entry menu="View" action="Take Area Screenshot" hotkey="Ctrl+F10" />
+    <entry menu="View" action="Take Screenshot" hotkey="F10" />
+    <entry menu="View" action="Zoom In" hotkey="Ctrl++" />
+    <entry menu="View" action="Zoom Normal" hotkey="Ctrl+0" />
+    <entry menu="View" action="Zoom Out" hotkey="Ctrl+-" />
+    <entry menu="Window" action="Actions History" hotkey="" />
+    <entry menu="Window" action="Browse Field Panel" hotkey="" />
+    <entry menu="Window" action="Brush Manager" hotkey="" />
+    <entry menu="Window" action="Creature Palette" hotkey="C" />
+    <entry menu="Window" action="Doodad Palette" hotkey="D" />
+    <entry menu="Window" action="House Palette" hotkey="H" />
+    <entry menu="Window" action="Item Palette" hotkey="I" />
+    <entry menu="Window" action="Minimap" hotkey="M" />
+    <entry menu="Window" action="New Palette" hotkey="" />
+    <entry menu="Window" action="RAW Palette" hotkey="R" />
+    <entry menu="Window" action="Recent Brushes" hotkey="" />
+    <entry menu="Window" action="Terrain Palette" hotkey="T" />
+    <entry menu="Window" action="Waypoint Palette" hotkey="W" />
+  </menu>
+  <mouse>
+    <entry action="Primary Action" button="0" hotkey="" />
+    <entry action="Camera Drag" button="1" hotkey="" />
+    <entry action="Properties Tool" button="2" hotkey="" />
+  </mouse>
+</hotkeys>

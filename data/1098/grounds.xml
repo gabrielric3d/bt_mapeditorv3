@@ -778,7 +778,7 @@
 	
 	<brush name="sand (thick border)" type="ground"/>
 	
-	<brush name="sand" type="ground" server_lookid="231" z-order="4650">
+	<brush name="sand" type="ground" server_lookid="231" z-order="100">
 		<item id="231" chance="1"/>
 		<item id="8315" chance="0"/> 
 		<item id="8316" chance="0"/> 
@@ -790,114 +790,8 @@
 		<item id="8322" chance="0"/> 
 		
 		<border align="outer" id="16"/>
-		<border align="inner" to="sea" ground_equivalent="231">
-			<borderitem edge="n"   item="4632"/>
-			<borderitem edge="e"   item="4635"/>
-			<borderitem edge="s"   item="4634"/>
-			<borderitem edge="w"   item="4633"/>
-			<borderitem edge="cnw" item="4643"/>
-			<borderitem edge="cne" item="4642"/>
-			<borderitem edge="csw" item="4641"/>
-			<borderitem edge="cse" item="4640"/>
-			<borderitem edge="dnw" item="4639"/>
-			<borderitem edge="dne" item="4638"/>
-			<borderitem edge="dsw" item="4637"/>
-			<borderitem edge="dse" item="4636"/>
-			
-			-- Handles for the 8 different specific cases which might occur with water/sand borders --
-			<specific>
-				<conditions>
-					<match_item id="4634"/>
-					<match_border id="2"  edge="e"/>
-				</conditions>
-				<actions>
-					<replace_item id="4634" with="4661"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4632"/>
-					<match_border id="2"  edge="e"/>
-				</conditions>
-				<actions>
-					<replace_item id="4632" with="4660"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4633"/>
-					<match_border id="2"  edge="s"/>
-				</conditions>
-				<actions>
-					<replace_item id="4633" with="4662"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4635"/>
-					<match_border id="2"  edge="s"/>
-				</conditions>
-				<actions>
-					<replace_item id="4635" with="4663"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4634"/>
-					<match_border id="2"  edge="e"/>
-				</conditions>
-				<actions>
-					<replace_item id="4634" with="4661"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4632"/>
-					<match_border id="2"  edge="w"/>
-				</conditions>
-				<actions>
-					<replace_item id="4632" with="4656"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4634"/>
-					<match_border id="2"  edge="w"/>
-				</conditions>
-				<actions>
-					<replace_item id="4634" with="4657"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4635"/>
-					<match_border id="2"  edge="n"/>
-				</conditions>
-				<actions>
-					<replace_item id="4635" with="4659"/>
-				</actions>
-			</specific>
-			
-			<specific>
-				<conditions>
-					<match_item id="4633"/>
-					<match_border id="2"  edge="n"/>
-				</conditions>
-				<actions>
-					<replace_item id="4633" with="4658"/>
-				</actions>
-			</specific>
-		</border>
-		<border align="inner" to="none" id="1"/>
-		
-		<friend name="sand (thick border)"/>
+		<!-- <border align="inner" to="sandstone" id="17"/> -->
+	
 	</brush>
 	
 	<brush name="sand (thick border)" type="ground" server_lookid="231" z-order="4700">
@@ -1371,8 +1265,8 @@
 		<item id="34832" chance="1"/>
 		<item id="34833" chance="1"/>
 		
-		<border align="outer" id="20"/>
-		<border align="inner" to="none" id="58"/>
+		<!-- <border align="outer" id="20"/> -->
+		<border align="inner" to="none" id="1"/>
 	</brush>
 
 	<brush name="rotten ground" type="ground" server_lookid="42243" z-order="5">
@@ -1878,13 +1772,13 @@
 	<brush name="mountain" type="ground" server_lookid="918" z-order="9900">
 		<item id="919" chance="1"/>
 		
-		<border align="inner" to="icy mountain" id="53"/>
+		<!-- <border align="inner" to="icy mountain" id="53"/>
 		<border align="inner" to="snowy mountain" id="53"/>
 		<border align="inner" to="none" id="3"/>
 		<border align="outer" to="none" id="51"/>
 		<border align="outer" id="10"/>
 		<border align="inner" id="3"/>
-		<optional id="29"/>
+		<optional id="29"/> -->
 	</brush>
 
 	<brush name="rotten mountain" type="ground" server_lookid="42267" z-order="119900">
@@ -2425,41 +2319,12 @@
 	<brush name="dark sandstone" type="ground" server_lookid="790" z-order="500">
 		<item id="790" chance="1"/>
 		
-		<friend name="all"/>
+		<!-- <friend name="all"/> -->
 	</brush>
 	
 	<brush name="sandstone" type="ground" server_lookid="777" z-order="8600">
 		<item id="777" chance="1"/>
 		
-		<border super="true" align="inner" ground_equivalent="777">
-			<borderitem edge="n"   item="778"/>
-			<borderitem edge="e"   item="781"/>
-			<borderitem edge="s"   item="779"/>
-			<borderitem edge="w"   item="780"/>
-			<borderitem edge="cnw" item="786"/>
-			<borderitem edge="cne" item="787"/>
-			<borderitem edge="csw" item="789"/>
-			<borderitem edge="cse" item="788"/>
-			<borderitem edge="dnw" item="782"/>
-			<borderitem edge="dne" item="783"/>
-			<borderitem edge="dsw" item="785"/>
-			<borderitem edge="dse" item="784"/>
-		</border>
-		
-		<border super="true" align="inner" to="none" ground_equivalent="777">
-			<borderitem edge="n"   item="778"/>
-			<borderitem edge="e"   item="781"/>
-			<borderitem edge="s"   item="779"/>
-			<borderitem edge="w"   item="780"/>
-			<borderitem edge="cnw" item="786"/>
-			<borderitem edge="cne" item="787"/>
-			<borderitem edge="csw" item="789"/>
-			<borderitem edge="cse" item="788"/>
-			<borderitem edge="dnw" item="782"/>
-			<borderitem edge="dne" item="783"/>
-			<borderitem edge="dsw" item="785"/>
-			<borderitem edge="dse" item="784"/>
-		</border>
 	</brush>
 	
 	<brush name="stairs" type="ground" server_lookid="459" z-order="7950">
@@ -2958,7 +2823,7 @@
 		<item id="9231" chance="150"/>
 		<item id="9232" chance="20"/>
 		
-		<border align="outer" to="none" id="186"/>
+		<!-- <border align="outer" to="none" id="186"/> -->
 	</brush>
 	
 	<brush name="red hive structure" type="ground" server_lookid="14527" z-order="6200">
@@ -3052,10 +2917,10 @@
 		<item id="23949" chance="2500"/>
 		
 		<border align="outer" id="170"/>
-		<border align="inner" to="none" id="1"/>
+		<!-- <border align="inner" to="none" id="1"/> -->
 	</brush>
 	
-	<brush name="ocean floor" type="ground" server_lookid="5405" z-order="2300">
+	<brush name="ocean floor" type="ground" server_lookid="5405" z-order="4">
 		<item id="5405" chance="800"/>
 		<item id="5406" chance="200"/>
 		<item id="5407" chance="2500"/>
@@ -3063,7 +2928,7 @@
 		<item id="5409" chance="2500"/>
 		<item id="5410" chance="2500"/>
 		
-		<border align="outer" id="201"/>
+		<!-- <border align="outer" id="201"/> -->
 		<border align="inner" to="none" id="1"/>
 	</brush>
 	
@@ -3520,8 +3385,8 @@
 		<item id="21948" chance="1000"/>
 		<item id="21949" chance="1000"/>
 		
-		<border align="outer" id="176"/>
-		<border align="inner" to="none" id="1"/>
+		<!-- <border align="outer" id="176"/>
+		<border align="inner" to="none" id="1"/> -->
 	</brush>
 	
 	<brush name="unknown4" type="ground" server_lookid="22167" z-order="2100">
@@ -3622,11 +3487,11 @@
 		<border align="inner" to="none" id="1"/>
 	</brush>
 	
-	<brush name="mud sand" type="ground" server_lookid="11077" z-order="100">
+	<brush name="mud sand" type="ground" server_lookid="11077" z-order="2500">
 		<item id="11077" chance="10000"/>
 		
-		<border align="outer" id="144"/>
-		<border align="inner" to="none" id="1"/>
+		<border align="outer" id="145"/>
+		<!-- <border align="inner" to="none" id="1"/> -->
 	</brush>
 	
 	<brush name="muddy floor" type="ground" server_lookid="11561" z-order="1100">
@@ -3955,8 +3820,11 @@
 		<item id="43461" chance="1000"/>
 	</brush>
 
-	<brush name="highdesert mountain" type="ground" server_lookid="43501" z-order="1">
+	<brush name="highdesert mountain" type="ground" server_lookid="43501" z-order="9000">
 		<item id="43501" chance="1000"/>
+
+		<border align="outer" id="259"/>
+		<border align="outer" to="none" id="259"/>
 	</brush>
 
 	<brush name="new sand" type="ground" server_lookid="44198" z-order="1">
@@ -4183,7 +4051,7 @@
 		<item id="47108" chance="100"/>
 
 		<border align="outer" id="248"/>
-		<border align="outer" to="none" id="248"/>
+		<!-- <border align="outer" to="none" id="248"/> -->
 	</brush>
 
 	<brush name="elvish green stone floor" type="ground" server_lookid="31753" z-order="1">
@@ -4293,6 +4161,40 @@
 		
 		<border align="outer" id="13"/>
 		<border align="inner" to="none" id="1"/>
+	</brush>
+
+	<brush name="rock soil v2" type="ground" server_lookid="7356" z-order="1">
+		<item id="7356" chance="100"/>
+	</brush>
+
+	<brush name="void ground" type="ground" server_lookid="51606" z-order="7600">
+		<item id="51606" chance="20"/>
+
+		<item id="51604" chance="5"/>
+		<item id="51605" chance="5"/>
+		<item id="51607" chance="5"/>
+		<item id="51608" chance="3"/>
+		<item id="51609" chance="3"/>
+		<item id="51610" chance="3"/>
+		<item id="51611" chance="3"/>
+		
+		<border align="outer" id="252"/>
+		<border align="outer" to="none" id="252"/>
+	</brush>
+
+	<brush name="sunken sand" type="ground" server_lookid="45069" z-order="4700">
+		<item id="45069" chance="1"/>
+		
+		<!-- <border align="outer" id="258"/> -->
+		<border align="inner" to="none" id="1"/>
+
+	</brush>
+
+	<brush name="sunken desert sand" type="ground" server_lookid="45111" z-order="4700">
+		<item id="45111" chance="1"/>
+
+		<border align="outer" id="257"/>
+
 	</brush>
 
 </materials>

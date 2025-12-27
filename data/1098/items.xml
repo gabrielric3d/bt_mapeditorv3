@@ -13,7 +13,7 @@ depois no terminal do client:
 e o newmarketitems.json vai estar em appdata 
 -->
 
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <items>
 	<item id="100" name="void" />
 	<item id="101" name="earth" />
@@ -8694,6 +8694,7 @@ e o newmarketitems.json vai estar em appdata
 	<item id="5786" name="wooden whistle">
 	</item>
 	<item fromid="5787" toid="5788" name="training dummy" />
+	<item fromid="31278" toid="31284" name="training dummy" />
 	<item fromid="5789" toid="5790" name="stuck axe" />
 	<item id="5791" name="stuffed dragon">
 	</item>
@@ -10768,7 +10769,6 @@ e o newmarketitems.json vai estar em appdata
 	<item id="6505" name="blue christmas garland">
 	</item>
 	<item id="6506" name="christmas present">
-		<attribute key="containerSize" value="5" />
 	</item>
 	<item id="6507" name="red christmas bundle">
 		<attribute key="description" 
@@ -12957,8 +12957,23 @@ e o newmarketitems.json vai estar em appdata
 	</item>
 	<item id="7726" name="Dungeon Scroll">
 		<attribute key="description" 
-			value="Give you one charge." 
-			pt="Dê a você uma cobrança." />
+			value="Give you one dungeon charge." 
+			pt="Dê a você uma carga de dungeon." />
+	</item>
+	<item id="23836" name="Dungeon Charge">
+		<attribute key="description" 
+			value="Give you one dungeon charge." 
+			pt="Dê a você uma carga de dungeon." />
+	</item>
+	<item id="23837" name="Hunting Ground Charge">
+		<attribute key="description" 
+			value="Give you one hunting ground charge." 
+			pt="Dê a você uma carga de hunting ground." />
+	</item>
+	<item id="23764" name="Dungeon and Hunting Ground Charge">
+		<attribute key="description" 
+			value="Give you one dungeon/hunting ground charge." 
+			pt="Dê a você uma carga de dungeon/hunting ground." />
 	</item>
 	<item id="7724" name="paper">
 	</item>
@@ -18070,17 +18085,29 @@ e o newmarketitems.json vai estar em appdata
 		<attribute key="duration" value="60" />
 	</item>
 	<item id="10515" name="whacking driller of fate">
+		<attribute key="slotType" value="relic" />
+		<attribute key="relic" value="1" />
+		<attribute key="transformEquipTo" value="10516" />
+		<attribute key="stopduration" value="1" />
+		<attribute key="showduration" value="1" />
 		<attribute key="description" 
-			value="This nifty gadget can be used for many vital and less vital purposes. If its not jammed, that is." 
-			pt="Este gadget bacana pode ser usado para muitos propósitos vitais e menos vitais. Se não estiver preso, é isso." />
+			value="Increase energy cost, rewards and experience obtained by gathering skills (mining, herbalist, woodcutting) by 100%&#xA;Allows you to collect nodes directly with the mouse click" 
+			pt="Aumentar o custo de energia, as recompensas e a experiência obtida por habilidades de coleta (mineração, herbalista, corcutação) em 100%&#xA;Permite que você colete nós diretamente com o clique do mouse" />
 	</item>
 	<item id="10516" name="whacking driller of fate">
+		<attribute key="slotType" value="relic" />
+		<attribute key="relic" value="1" />
+		<attribute key="transformDeEquipTo" value="10515" />
+		<attribute key="showduration" value="1" />
+		<attribute key="showattributes" value="1" />
+		<attribute key="duration" value="900" />
+		<attribute key="decayTo" value="0" />
 		<attribute key="description" 
-			value="This nifty gadget can be used for many vital and less vital purposes. If its not jammed, that is." 
-			pt="Este gadget bacana pode ser usado para muitos propósitos vitais e menos vitais. Se não estiver preso, é isso." />
-		<attribute key="decayTo" value="10515" />
-		<attribute key="duration" value="60" />
+			value="Increase energy cost, rewards and experience obtained by gathering skills (mining, herbalist, woodcutting) by 100%&#xA;Allows you to collect nodes directly with the mouse click" 
+			pt="Aumentar o custo de energia, as recompensas e a experiência obtida por habilidades de coleta (mineração, herbalista, corcutação) em 100%&#xA;Permite que você colete nós diretamente com o clique do mouse" />
 	</item>
+	
+	
 	<item id="10518" name="demon backpack">
 		<attribute key="containerSize" value="20" />
 		<attribute key="slotType" value="backpack" />
@@ -35020,6 +35047,14 @@ e o newmarketitems.json vai estar em appdata
 		<attribute key="markettype" value="other" />
 	</item>
 
+	<item id="33332" name="super milestone scroll">
+		<attribute key="description" 
+			value="Increase milestone count by 500% for 10 minutes. (Professions not included)" 
+			pt="Aumentar a contagem de milestone em 500% por 10 minutos. (Profissões não incluídas)" 
+			/>
+		<attribute key="markettype" value="other" />
+	</item>
+
 	
 	<item id="34810" name="copper fishing rod">
 		<attribute key="description" 
@@ -38815,6 +38850,10 @@ e o newmarketitems.json vai estar em appdata
 		<attribute key="relic" value="1" />
 		<attribute key="markettype" value="relic" />
 	</item>
+	<item id="51577" name="celestial aegisphere">
+		<attribute key="relic" value="1" />
+		<attribute key="markettype" value="relic" />
+	</item>
 
 	<item id="21039" name="ramp">
 		<attribute key="floorchange" value="east" />
@@ -40569,6 +40608,101 @@ e o newmarketitems.json vai estar em appdata
 		<attribute key="floorchange" value="west" />
 	</item>
 
+	<!-- Exercise weapons -->
+
+	<!-- Base exercise weapons (500 charges) -->
+	<item id="31260" article="an" name="exercise staff">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="500" />
+	</item>
+	<item id="31261" article="an" name="exercise sword">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="500" />
+	</item>
+	<item id="31262" article="an" name="exercise bow">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="500" />
+	</item>
+	<item id="31263" article="an" name="exercise shield">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="500" />
+	</item>
+
+	<item id="33326" name="exercise weapon crate">
+		<attribute key="description" 
+			value="This crate lets you choose one basic exercise weapon — staff, sword, bow, or shield — each containing 500 charges." 
+    		pt="Esta caixa permite que você escolha uma arma de exercício básica — cajado, espada, arco ou escudo — cada uma contendo 500 cargas." />
+	</item>
+
+	<item id="31264" article="an" name="durable exercise staff">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="1800" />
+	</item>
+	<item id="31265" article="an" name="durable exercise sword">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="1800" />
+	</item>
+	<item id="31266" article="an" name="durable exercise bow">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="1800" />
+	</item>
+	<item id="31267" article="an" name="durable exercise shield">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="1800" />
+	</item>
+
+	<item id="33327" name="durable exercise weapon crate">
+		<attribute key="description" 
+			value="This crate lets you choose one durable exercise weapon — staff, sword, bow, or shield — each containing 1800 charges." 
+    		pt="Esta caixa permite que você escolha uma arma de exercício duravel — cajado, espada, arco ou escudo — cada uma contendo 1800 cargas." />
+	</item>
+
+	<item id="31268" article="an" name="lasting exercise staff">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31269" article="an" name="lasting exercise sword">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31270" article="an" name="lasting exercise bow">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31271" article="an" name="lasting exercise shield">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+
+	<item id="33328" name="lasting exercise weapon crate">
+		<attribute key="description" 
+			value="This crate lets you choose one lasting exercise weapon — staff, sword, bow, or shield — each containing 14400 charges." 
+    		pt="Esta caixa permite que você escolha uma arma de exercício duradoura — cajado, espada, arco ou escudo — cada uma contendo 14400 cargas." />
+	</item>
+
+	<item id="31268" article="an" name="enduring exercise staff">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31269" article="an" name="enduring exercise sword">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31270" article="an" name="enduring exercise bow">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+	<item id="31271" article="an" name="enduring exercise shield">
+		<attribute key="showCharges" value="1" />
+		<attribute key="charges" value="14400" />
+	</item>
+
+	<item id="33334" name="enduring exercise weapon crate">
+		<attribute key="description" 
+			value="This crate lets you choose one enduring exercise weapon — staff, sword, bow, or shield — each containing 14400 charges." 
+    		pt="Esta caixa permite que você escolha uma arma de exercício resistente — cajado, espada, arco ou escudo — cada uma contendo 14400 cargas." />
+	</item>
+
 	<item id="49189" name="stairs">
 		<attribute key="floorchange" value="down" />
 	</item>
@@ -40607,5 +40741,238 @@ e o newmarketitems.json vai estar em appdata
 	<item fromid="50623" toid="50624" name="trapdoor">
 		<attribute key="floorchange" value="down" />
 	</item>
+
+	<item fromid="33213" toid="33216" name="krampus training dummy">
+	    <attribute key="description"
+	        value="Use your exercise weapon on this dummy to begin training your skills."
+	        pt="Use sua exercise weapon neste manequim para começar a treinar suas skills." />
+	</item>
+
+	<item id="33217" name="snowlf training dummy">
+	    <attribute key="description"
+	        value="Use your exercise weapon on this dummy to begin training your skills."
+	        pt="Use sua exercise weapon neste manequim para começar a treinar suas skills." />
+	</item>
+
+	<item id="33218" name="skeleclaus training dummy">
+	    <attribute key="wrapTo" value="26054" />
+	    <attribute key="description"
+	        value="Use your exercise weapon on this dummy to begin training your skills."
+	        pt="Use sua exercise weapon neste manequim para começar a treinar suas skills." />
+	</item>
+
+	<item id="33221" name="ravenfall dummy">
+	    <attribute key="wrapTo" value="26054" />
+	    <attribute key="description"
+            value="Use your exercise weapon on this dummy to begin training your skills. (Increases skill gain by 25%)"
+            pt="Use sua exercise weapon neste manequim para começar a treinar suas skills. (Aumenta o ganho de skill em 25%)" />
+    </item>
+
+	<item id="33222" name="infernal reaper statue">
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+
+	<item id="33220" name="tahm kench statue">
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+
+	<item id="33219" name="umbral seraphim statue">
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+
+	<item id="33311" name="task reseter">
+	    <attribute key="description" 
+	        value="Resets your current task cooldown, allowing you to start a new task immediately." 
+	        pt="Redefine o tempo de espera da sua task atual, permitindo iniciar uma nova imediatamente." />
+	</item>
+
+	<item id="33312" name="quest reseter">
+	    <attribute key="description" 
+	        value="Resets the cooldown of your Continent Quest, enabling another run." 
+	        pt="Redefine o tempo de espera da sua Continent Quest, permitindo uma nova tentativa." />
+	</item>
+
+	<item id="33313" name="tower damage amplifier">
+	    <attribute key="description" 
+	        value="Temporarily increases your damage against Tower Arena creatures." 
+	        pt="Aumenta temporariamente seu dano contra criaturas da Tower Arena." />
+	</item>
+
+	<item id="33314" name="townwarp crystal">
+	    <attribute key="description" 
+	        value="Teleports you back to the home city temple [infinite]." 
+	        pt="Teleporta você de volta ao templo da cidade natal [infinito]." />
+	</item>
+
+	<item id="33315" name="corruption catalyst">
+	    <attribute key="description" 
+	        value="Corrupts a single attribute line on a piece of equipment, altering its properties." 
+	        pt="Corrompe uma linha de atributo de um equipamento, alterando suas propriedades." />
+	</item>
+
+	<item id="33316" name="rage-whopper">
+		<attribute key="duration" value="604800" />
+		<attribute key="showduration" value="1" />
+		<attribute key="decayTo" value="0" />
+	    <attribute key="description"
+	            value="Recharge 0.7% + 325 of your health and mana every 2 seconds.&#xA;[Infinite Effect]&#xA;&#xA;This item expires 7 days after being obtained."
+	            pt="Recarregue 0,7% + 325 da sua saúde e mana a cada 2 segundos.&#xA;[Efeito Infinito]&#xA;&#xA;Este item expira 7 dias após ser obtido." />
+	    </item>
+
+	<item id="33317" name="crystalforged scissor">
+	    <attribute key="description" 
+	        value="Battle pass tool sculpted from pure crystal for precise cutting tasks. Powered by limited arcane charge.&#xA;&#xA;Herbalist Tool&#xA;&#xA;Required Skill: 0" 
+	        pt="Ferramenta do battle pass esculpida em cristal puro para cortes precisos. Alimentada por carga arcana limitada.&#xA;&#xA;Ferramenta herbalista&#xA;&#xA;Habilidade necessária: 0" />
+	</item>
+
+	<item id="33318" name="crystalforged axe">
+	    <attribute key="description" 
+	        value="Battle pass axe forged with crystal veins for reinforced lumber work. Powered by limited arcane charge.&#xA;&#xA;Woodcutting Tool&#xA;&#xA;Required Skill: 0" 
+	        pt="Machado do battle pass forjado com veios de cristal para madeira reforçada. Alimentado por carga arcana limitada.&#xA;&#xA;Ferramenta de cortar madeira&#xA;&#xA;Habilidade necessária: 0" />
+	</item>
+
+	<item id="33319" name="crystalforged pickaxe">
+	    <attribute key="description" 
+	        value="Battle pass pickaxe reinforced by crystal lattice to shatter dense ore. Powered by limited arcane charge.&#xA;&#xA;Mining Tool&#xA;&#xA;Required Skill: 0" 
+	        pt="Picareta do battle pass reforçada por rede de cristal para quebrar minérios densos. Alimentada por carga arcana limitada.&#xA;&#xA;Ferramenta de mineração&#xA;&#xA;Habilidade necessária: 0" />
+	</item>
+
+	<item id="33329" name="crystalforged tools crate">
+		<attribute key="description" 
+			value="A reinforced crate infused with crystal energy, containing a full set of crystalforged gathering tools: pickaxe, axe, and scissor, each with limited charges." 
+			pt="Uma caixa reforçada com energia cristalina, contendo um conjunto completo de ferramentas de coleta crystalforged: picareta, machado e tesoura, cada uma com cargas limitadas." />
+	</item>
+
+
+	<item id="33320" name="whacking driller of fate (battle pass)">
+	    <attribute key="description" 
+	        value="A powerful drilling tool awarded from the battle pass. Uses charges to break fortified training objects." 
+	        pt="Uma poderosa ferramenta perfuradora obtida pelo battle pass. Usa cargas para destruir objetos de treino fortificados." />
+	</item>
+
+	<item id="33321" name="legendary stone upgrader">
+	    <attribute key="description" 
+	        value="A powerful enhancement stone that upgrades any eligible equipment to Legendary rarity." 
+	        pt="Uma poderosa pedra de aprimoramento que eleva qualquer equipamento elegível para a raridade Lendária." />
+	</item>
+
+	<item id="33322" name="mythic stone upgrader">
+	    <attribute key="description" 
+	        value="A powerful enhancement stone that upgrades any eligible equipment to Mythic rarity." 
+	        pt="Uma poderosa pedra de aprimoramento que eleva qualquer equipamento elegível para a raridade Mítica." />
+	</item>
+
+	<item id="33323" name="single daily boss charge scroll">
+	    <attribute key="description" 
+	        value="Adds one extra daily boss charge, allowing an additional boss attempt today." 
+	        pt="Concede uma carga extra de boss diário, permitindo mais uma tentativa hoje." />
+	</item>
+
+	<item id="33324" name="all daily boss charge scroll">
+	    <attribute key="description" 
+	        value="Fully restores all your daily boss charges for the day." 
+	        pt="Restaura completamente todas as suas cargas de boss diário para o dia." />
+	</item>
+
+	<item id="33325" name="santa claus cosmetic doll">
+	    <attribute key="description" 
+	        value="A festive Santa Claus cosmetic doll. A cheerful holiday decoration for your house." 
+	        pt="Uma boneca cosmética do Papai Noel. Uma alegre decoração festiva para sua casa." />
+	</item>
+
+	<item id="51575" name="warborne champion outfit scroll">
+		<attribute key="description" 
+			value="This scroll gives you the warbone champion outfit with full addons" 
+			pt="Este pergaminho lhe concede a roupa warbone champion com addons completos" />
+	</item>
+
+	<item id="51574" name="tombcaller adept outfit scroll">
+		<attribute key="description" 
+			value="This scroll gives you the tombcaller adept outfit with full addons" 
+			pt="Este pergaminho lhe concede a roupa tombcaller adept com addons completos" />
+	</item>
+
+	<item id="51576" name="phoenixflare wing scroll">
+		<attribute key="description" 
+			value="This scroll gives you the phoenixflare wings" 
+			pt="Este pergaminho lhe concede as asas phoenixflare" />
+	</item>
+
+	<item id="33333" name="super bestiary scroll">
+		<attribute key="description" 
+			value="Increase bestiary count by 200% for 2 hours" 
+			pt="Aumenta a contagem do bestiário em 200% por 2 horas"
+			/>
+		<attribute key="markettype" value="other" />
+	</item>
+
+	<item id="33331" name="task experience amplifier scroll">
+		<attribute key="description" 
+			value="Multiplies the experience reward of your next completed task by 10x. This effect is consumed upon task completion."
+			pt="Multiplica em 10x a recompensa de experiência da sua próxima task concluída. Este efeito é consumido após a conclusão da task."
+		/>
+		<attribute key="markettype" value="other" />
+	</item>
+
+	<item id="41253" name="titan’s strength elixir">
+		<attribute key="description"
+			value="A 4-hour elixir that increases your character’s strength by 50% in the open world for the duration."
+			pt="Elixir com duração de 4 horas que aumenta a força do seu personagem em 50% no mundo aberto durante o efeito."
+		/>
+		<attribute key="markettype" value="other" />
+	</item>
+
+	<item id="51818" name="jingle howl">
+		<attribute key="rotateTo" value="51819" />
+		
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+	<item id="51819" name="jingle howl">
+		<attribute key="rotateTo" value="51820" />
+		
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+	<item id="51820" name="jingle howl">
+		<attribute key="rotateTo" value="51821" />
+		
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+	<item id="51821" name="jingle howl">
+		<attribute key="rotateTo" value="51818" />
+		
+		<attribute key="forcesave" value="1" />
+		<attribute key="description" 
+			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
+			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		/>
+	</item>
+	<item id="51822" name="relic container dois">
+		<attribute key="containerSize" value="15" />
+	</item>
+
 
 </items>
