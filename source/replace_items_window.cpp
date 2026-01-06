@@ -25,13 +25,35 @@
 #include "theme.h"
 
 // ============================================================================
+// ReplaceItemsDropTarget
+
+ReplaceItemsDropTarget::ReplaceItemsDropTarget(ReplaceItemsButton* button) :
+	m_button(button)
+{
+	////
+}
+
+bool ReplaceItemsDropTarget::OnDropText(wxCoord x, wxCoord y, const wxString& data)
+{
+	if(data.StartsWith("ITEM_ID:")) {
+		wxString idStr = data.Mid(8);
+		long itemId = 0;
+		if(idStr.ToLong(&itemId) && itemId > 0 && itemId <= 0xFFFF) {
+			m_button->OnItemDropped(static_cast<uint16_t>(itemId));
+			return true;
+		}
+	}
+	return false;
+}
+
+// ============================================================================
 // ReplaceItemsButton
 
 ReplaceItemsButton::ReplaceItemsButton(wxWindow* parent) :
 	DCButton(parent, wxID_ANY, wxDefaultPosition, DC_BTN_TOGGLE, RENDER_SIZE_32x32, 0),
 	m_id(0)
 {
-	////
+	SetDropTarget(new ReplaceItemsDropTarget(this));
 }
 
 ItemGroup_t ReplaceItemsButton::GetGroup() const
@@ -60,6 +82,19 @@ void ReplaceItemsButton::SetItemId(uint16_t id)
 	}
 
 	SetSprite(0);
+}
+
+void ReplaceItemsButton::OnItemDropped(uint16_t itemId)
+{
+	SetItemId(itemId);
+
+	// Notify parent dialog to update widgets
+	ReplaceItemsDialog* dialog = dynamic_cast<ReplaceItemsDialog*>(GetParent());
+	if(dialog) {
+		wxCommandEvent evt(wxEVT_COMMAND_BUTTON_CLICKED);
+		evt.SetEventObject(this);
+		dialog->GetEventHandler()->ProcessEvent(evt);
+	}
 }
 
 // ============================================================================
@@ -199,6 +234,10 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	with_button = new ReplaceItemsButton(this);
 	items_sizer->Add(with_button, 0, wxALL, 5);
 
+	auto_add_checkbox = new wxCheckBox(this, wxID_ANY, wxT("Auto Add"));
+	auto_add_checkbox->SetToolTip("Automatically add to list when both boxes are filled");
+	items_sizer->Add(auto_add_checkbox, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+
 	items_sizer->Add(0, 0, 1, wxEXPAND, 5);
 
 	progress = new wxGauge(this, wxID_ANY, 100);
@@ -235,7 +274,9 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	// Connect Events
 	list->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(ReplaceItemsDialog::OnListSelected), NULL, this);
 	replace_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnReplaceItemClicked), NULL, this);
+	replace_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnItemDropped), NULL, this);
 	with_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnWithItemClicked), NULL, this);
+	with_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnItemDropped), NULL, this);
 	add_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
 	remove_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
@@ -247,7 +288,9 @@ ReplaceItemsDialog::~ReplaceItemsDialog()
 	// Disconnect Events
 	list->Disconnect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(ReplaceItemsDialog::OnListSelected), NULL, this);
 	replace_button->Disconnect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnReplaceItemClicked), NULL, this);
+	replace_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnItemDropped), NULL, this);
 	with_button->Disconnect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnWithItemClicked), NULL, this);
+	with_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnItemDropped), NULL, this);
 	add_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
 	remove_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
@@ -268,6 +311,12 @@ void ReplaceItemsDialog::OnListSelected(wxCommandEvent& WXUNUSED(event))
 	remove_button->Enable(list->GetCount() != 0 && list->GetSelection() != wxNOT_FOUND);
 }
 
+void ReplaceItemsDialog::OnItemDropped(wxCommandEvent& WXUNUSED(event))
+{
+	UpdateWidgets();
+	TryAutoAdd();
+}
+
 void ReplaceItemsDialog::OnReplaceItemClicked(wxMouseEvent& WXUNUSED(event))
 {
 	FindItemDialog dialog(this, "Replace Item");
@@ -276,6 +325,7 @@ void ReplaceItemsDialog::OnReplaceItemClicked(wxMouseEvent& WXUNUSED(event))
 		if(id != with_button->GetItemId()) {
 			replace_button->SetItemId(id);
 			UpdateWidgets();
+			TryAutoAdd();
 		}
 	}
 	dialog.Destroy();
@@ -292,6 +342,7 @@ void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event))
 		if(id != replace_button->GetItemId()) {
 			with_button->SetItemId(id);
 			UpdateWidgets();
+			TryAutoAdd();
 		}
 	}
 	dialog.Destroy();
@@ -386,4 +437,35 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event))
 {
 	Close();
+}
+
+void ReplaceItemsDialog::ApplyItemToBox(uint16_t itemId, int boxNumber)
+{
+	if(boxNumber == 1) {
+		replace_button->SetItemId(itemId);
+	} else if(boxNumber == 2) {
+		with_button->SetItemId(itemId);
+	}
+	UpdateWidgets();
+	TryAutoAdd();
+}
+
+void ReplaceItemsDialog::TryAutoAdd()
+{
+	if(!auto_add_checkbox->IsChecked())
+		return;
+
+	const uint16_t replaceId = replace_button->GetItemId();
+	const uint16_t withId = with_button->GetItemId();
+
+	if(list->CanAdd(replaceId, withId)) {
+		ReplacingItem item;
+		item.replaceId = replaceId;
+		item.withId = withId;
+		if(list->AddItem(item)) {
+			replace_button->SetItemId(0);
+			with_button->SetItemId(0);
+			UpdateWidgets();
+		}
+	}
 }

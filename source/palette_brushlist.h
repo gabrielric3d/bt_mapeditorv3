@@ -65,9 +65,16 @@ public:
 	virtual wxCoord OnMeasureItem(size_t n) const;
 
 	void OnKey(wxKeyEvent& event);
+	void OnMouseDown(wxMouseEvent& event);
+	void OnMouseMotion(wxMouseEvent& event);
+	void OnRightClick(wxMouseEvent& event);
+	void OnApplyReplaceBox1(wxCommandEvent& event);
+	void OnApplyReplaceBox2(wxCommandEvent& event);
 
 private:
 	int icon_pixel_size;
+	wxPoint drag_start_pos;
+	bool dragging;
 
 	DECLARE_EVENT_TABLE();
 };
@@ -92,12 +99,19 @@ public:
 
 	// Event handling...
 	void OnClickBrushButton(wxCommandEvent& event);
+	void OnMouseDown(wxMouseEvent& event);
+	void OnMouseMotion(wxMouseEvent& event);
+	void OnRightClick(wxMouseEvent& event);
+	void OnApplyReplaceBox1(wxCommandEvent& event);
+	void OnApplyReplaceBox2(wxCommandEvent& event);
 protected:
 	// Used internally to deselect all buttons before selecting a newd one.
 	void DeselectAll();
 protected:
 	std::vector<BrushButton*> brush_buttons;
 	RenderSize icon_size;
+	wxPoint drag_start_pos;
+	bool dragging;
 
 	DECLARE_EVENT_TABLE();
 };

@@ -94,6 +94,8 @@ public:
 	void OnPaste(wxCommandEvent& event);
 	void OnDelete(wxCommandEvent& event);
 	void OnDeleteAll(wxCommandEvent& event);
+	void OnApplyReplaceBox1(wxCommandEvent& event);
+	void OnApplyReplaceBox2(wxCommandEvent& event);
 	// ----
 	void OnGotoDestination(wxCommandEvent& event);
 	void OnCopyDestination(wxCommandEvent& event);
@@ -157,6 +159,13 @@ private:
 
 	static bool processed[BLOCK_SIZE*BLOCK_SIZE];
 
+	void ClearLassoSelection();
+	void StartLassoSelection(int screen_x, int screen_y, int map_x, int map_y);
+	void AddLassoPoint(int screen_x, int screen_y, int map_x, int map_y);
+	void ApplyLassoSelection(Selection& selection, bool creaturesOnly, bool removeSelection);
+	bool IsLassoSelectionEnabled() const noexcept;
+	bool HasLassoSelection() const noexcept;
+
 	bool CaptureScreenshot(wxImage& outImage, int* out_view_start_x = nullptr, int* out_view_start_y = nullptr);
 	bool SaveScreenshotImage(const wxImage& image, wxFileName path, const wxString& format, const wxString& prefix);
 
@@ -174,6 +183,7 @@ private:
 	bool dragging;
 	bool boundbox_selection;
 	bool boundbox_select_creatures;
+	bool boundbox_deselect;
 	bool screendragging;
 	bool isPasting() const;
 	bool drawing;
@@ -181,6 +191,8 @@ private:
 	bool replace_dragging;
 	bool alt_ground_mode;
 	GroundBrush* alt_ground_reference;
+	std::vector<wxPoint> lasso_screen_points;
+	std::vector<wxPoint> lasso_map_points;
 
 	uint8_t* screenshot_buffer;
 	std::unique_ptr<AnimatedGifWriter> gif_writer;
@@ -223,6 +235,9 @@ private:
 	AnimationTimer* animation_timer;
 	std::set<MouseActionID> active_keyboard_mouse_actions;
 
+	// Performance optimization: garbage collection counter
+	int gc_frame_counter;
+
 	void HandlePropertiesDoubleClick(wxMouseEvent& event);
 
 	friend class MapDrawer;
@@ -250,10 +265,13 @@ public:
 	void Notify();
 	void Start();
 	void Stop();
+	void RequestRefresh() { needs_refresh = true; } // Mark that a refresh is needed
 
 private:
 	MapCanvas *map_canvas;
 	bool started;
+	bool needs_refresh; // Track if refresh is actually needed
+	int idle_frames;    // Count frames without activity
 };
 
 #endif

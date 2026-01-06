@@ -763,7 +763,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 
 						if(!only_mountain) {
 							const BorderBlock* borderBlock = getBrushTo(borderBrush, other);
-							if(borderBlock) {
+							if(borderBlock && borderBlock->autoborder) {
 								bool found = false;
 								for(BorderCluster& borderCluster : borderList) {
 									if(borderCluster.border == borderBlock->autoborder) {

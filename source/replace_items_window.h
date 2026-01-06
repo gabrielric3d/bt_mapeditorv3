@@ -21,6 +21,7 @@
 #include "main.h"
 #include "common_windows.h"
 #include "editor.h"
+#include <wx/dnd.h>
 
 struct ReplacingItem
 {
@@ -41,6 +42,18 @@ struct ReplacingItem
 // ============================================================================
 // ReplaceItemsButton
 
+class ReplaceItemsButton;
+
+class ReplaceItemsDropTarget : public wxTextDropTarget
+{
+public:
+	ReplaceItemsDropTarget(ReplaceItemsButton* button);
+	virtual bool OnDropText(wxCoord x, wxCoord y, const wxString& data) override;
+
+private:
+	ReplaceItemsButton* m_button;
+};
+
 class ReplaceItemsButton : public DCButton
 {
 public:
@@ -50,6 +63,9 @@ public:
 	ItemGroup_t GetGroup() const;
 	uint16_t GetItemId() const { return m_id; }
 	void SetItemId(uint16_t id);
+
+	// Callback for when item is dropped
+	void OnItemDropped(uint16_t itemId);
 
 private:
 	uint16_t m_id;
@@ -119,10 +135,14 @@ public:
 	void OnRemoveButtonClicked(wxCommandEvent& event);
 	void OnExecuteButtonClicked(wxCommandEvent& event);
 	void OnCancelButtonClicked(wxCommandEvent& event);
+	void OnItemDropped(wxCommandEvent& event);
 
-private:
 	void UpdateWidgets();
 
+	// Apply item to replace boxes (1 = Replace, 2 = With)
+	void ApplyItemToBox(uint16_t itemId, int boxNumber);
+
+private:
 	ReplaceItemsListBox* list;
 	ReplaceItemsButton* replace_button;
 	ReplaceItemsButton* with_button;
@@ -132,7 +152,11 @@ private:
 	wxButton* remove_button;
 	wxButton* execute_button;
 	wxButton* close_button;
+	wxCheckBox* auto_add_checkbox;
 	bool selectionOnly;
+
+	// Try to auto-add when both boxes are filled
+	void TryAutoAdd();
 };
 
 #endif

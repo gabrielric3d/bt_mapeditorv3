@@ -486,6 +486,95 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	return true;
 }
 
+bool GUI::ReloadBrushes(wxString& error, wxArrayString& warnings)
+{
+	if(loaded_version == CLIENT_VERSION_NONE) {
+		error = "No version loaded";
+		return false;
+	}
+
+	// Disable rendering while reloading
+	UnnamedRenderingLock();
+
+	// Save and destroy palettes
+	SavePerspective();
+	DestroyPalettes();
+
+	// Clear only brushes and materials (not items, sprites, or creatures)
+	current_brush = nullptr;
+	previous_brush = nullptr;
+	house_brush = nullptr;
+	house_exit_brush = nullptr;
+	waypoint_brush = nullptr;
+	optional_brush = nullptr;
+	eraser = nullptr;
+	normal_door_brush = nullptr;
+	locked_door_brush = nullptr;
+	magic_door_brush = nullptr;
+	quest_door_brush = nullptr;
+	hatch_door_brush = nullptr;
+	window_door_brush = nullptr;
+
+	// Clear materials and brushes
+	g_materials.clear();
+	g_brushes.clear();
+
+	// Reset item brush references (but keep items loaded)
+	for(int32_t id = 0; id <= g_items.getMaxID(); ++id) {
+		ItemType* type = g_items.getRawItemType(id);
+		if(type) {
+			type->brush = nullptr;
+			type->doodad_brush = nullptr;
+			type->raw_brush = nullptr;
+			type->has_raw = false;
+			type->in_other_tileset = false;
+			// Reset border/brush flags that are set during brush loading
+			type->isBorder = false;
+			type->isOptionalBorder = false;
+			type->isWall = false;
+			type->isBrushDoor = false;
+			type->isTable = false;
+			type->isCarpet = false;
+			type->ground_equivalent = 0;
+			type->border_group = 0;
+			type->has_equivalent = false;
+			type->wall_hate_me = false;
+			type->border_alignment = BORDER_NONE;
+		}
+	}
+
+	// Reset creature brush references
+	for(CreatureMap::iterator iter = g_creatures.begin(); iter != g_creatures.end(); ++iter) {
+		CreatureType* type = iter->second;
+		type->brush = nullptr;
+		type->in_other_tileset = false;
+	}
+
+	// Reload materials.xml and all included files
+	FileName data_path = getLoadedVersion()->getDataPath();
+	if(!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "materials.xml"), error, warnings)) {
+		warnings.push_back("Couldn't reload materials.xml: " + error);
+	}
+
+	// Reload extensions
+	FileName extension_path = GetExtensionsDirectory();
+	if(!g_materials.loadExtensions(extension_path, error, warnings)) {
+		// Extensions are optional
+	}
+
+	// Reinitialize brushes and create Other tileset
+	g_brushes.init();
+	g_materials.createOtherTileset();
+
+	// Restore palettes
+	LoadPerspective();
+
+	// Refresh view
+	RefreshView();
+
+	return true;
+}
+
 void GUI::UnloadVersion()
 {
 	UnnamedRenderingLock();

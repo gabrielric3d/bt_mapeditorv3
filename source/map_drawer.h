@@ -51,6 +51,7 @@ public:
 
 	void SetIngame();
 	void SetDefault();
+	void LoadFromSettings(); // Load all settings at once (cached)
 
 	bool isOnlyColors() const noexcept;
 	bool isTileIndicators() const noexcept;
@@ -59,6 +60,7 @@ public:
 
 	bool transparent_floors;
 	bool transparent_items;
+	bool transparent_ground_items;
 	bool show_ingame_box;
 	bool show_lights;
 	bool show_tech_items;

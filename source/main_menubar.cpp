@@ -132,6 +132,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
 
 	MAKE_ACTION(RELOAD_DATA, wxITEM_NORMAL, OnReloadDataFiles);
+	MAKE_ACTION(RELOAD_BRUSHES, wxITEM_NORMAL, OnReloadBrushes);
 	//MAKE_ACTION(RECENT_FILES, wxITEM_NORMAL, OnRecent);
 	MAKE_ACTION(PREFERENCES, wxITEM_NORMAL, OnPreferences);
 	MAKE_ACTION(CONFIGURE_HOTKEYS, wxITEM_NORMAL, OnConfigureHotkeys);
@@ -161,6 +162,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(SELECT_MODE_LOWER, wxITEM_RADIO, OnSelectionTypeChange);
 	MAKE_ACTION(SELECT_MODE_CURRENT, wxITEM_RADIO, OnSelectionTypeChange);
 	MAKE_ACTION(SELECT_MODE_VISIBLE, wxITEM_RADIO, OnSelectionTypeChange);
+	MAKE_ACTION(SELECT_MODE_LASSO, wxITEM_CHECK, OnSelectionLassoToggle);
 
 	MAKE_ACTION(AUTOMAGIC, wxITEM_CHECK, OnToggleAutomagic);
 	MAKE_ACTION(BORDERIZE_SELECTION, wxITEM_NORMAL, OnBorderizeSelection);
@@ -206,6 +208,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 	MAKE_ACTION(SHOW_SHADE, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_ALL_FLOORS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(GHOST_ITEMS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(GHOST_GROUND_ITEMS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(GHOST_HIGHER_FLOORS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(HIGHLIGHT_ITEMS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_EXTRA, wxITEM_CHECK, OnChangeViewSettings);
@@ -463,6 +466,14 @@ void MainMenuBar::Update()
 	EnableItem(TAKE_SCREENSHOT, has_map);
 	EnableItem(TAKE_REGION_SCREENSHOT, has_map && has_selection);
 	EnableItem(RECORD_GIF, has_map);
+	bool allow_multi_floor_selection = g_settings.getBoolean(Config::SHOW_ALL_FLOORS) ||
+		g_settings.getBoolean(Config::SELECTION_LASSO);
+	EnableItem(SELECT_MODE_VISIBLE, allow_multi_floor_selection);
+	EnableItem(SELECT_MODE_LOWER, allow_multi_floor_selection);
+	if(!allow_multi_floor_selection) {
+		CheckItem(SELECT_MODE_CURRENT, true);
+		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_CURRENT_FLOOR);
+	}
 
 	if(has_map)
 		CheckItem(SHOW_SPAWNS, g_settings.getBoolean(Config::SHOW_SPAWNS));
@@ -521,6 +532,7 @@ void MainMenuBar::LoadValues()
 			CheckItem(SELECT_MODE_VISIBLE, true);
 			break;
 	}
+	CheckItem(SELECT_MODE_LASSO, g_settings.getBoolean(Config::SELECTION_LASSO));
 
 	CheckItem(AUTOMAGIC, g_settings.getBoolean(Config::USE_AUTOMAGIC));
 
@@ -530,6 +542,7 @@ void MainMenuBar::LoadValues()
 	CheckItem(SHOW_TECHNICAL_ITEMS, g_settings.getBoolean(Config::SHOW_TECHNICAL_ITEMS));
 	CheckItem(SHOW_ALL_FLOORS, g_settings.getBoolean(Config::SHOW_ALL_FLOORS));
 	CheckItem(GHOST_ITEMS, g_settings.getBoolean(Config::TRANSPARENT_ITEMS));
+	CheckItem(GHOST_GROUND_ITEMS, g_settings.getBoolean(Config::TRANSPARENT_GROUND_ITEMS));
 	CheckItem(GHOST_HIGHER_FLOORS, g_settings.getBoolean(Config::TRANSPARENT_FLOORS));
 	CheckItem(SHOW_EXTRA, !g_settings.getBoolean(Config::SHOW_EXTRA));
 	CheckItem(SHOW_GRID, g_settings.getBoolean(Config::SHOW_GRID));
@@ -1046,6 +1059,18 @@ void MainMenuBar::OnReloadDataFiles(wxCommandEvent& WXUNUSED(event))
 	g_gui.ListDialog("Warnings", warnings);
 }
 
+void MainMenuBar::OnReloadBrushes(wxCommandEvent& WXUNUSED(event))
+{
+	wxString error;
+	wxArrayString warnings;
+	if(!g_gui.ReloadBrushes(error, warnings)) {
+		g_gui.PopupDialog("Error", error, wxOK);
+	}
+	if(!warnings.IsEmpty()) {
+		g_gui.ListDialog("Warnings", warnings);
+	}
+}
+
 void MainMenuBar::OnListExtensions(wxCommandEvent& WXUNUSED(event))
 {
 	ExtensionsDialog exts(frame);
@@ -1363,6 +1388,20 @@ void MainMenuBar::OnSelectionTypeChange(wxCommandEvent& WXUNUSED(event))
 		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_ALL_FLOORS);
 	else if(IsItemChecked(MenuBar::SELECT_MODE_VISIBLE))
 		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_VISIBLE_FLOORS);
+}
+
+void MainMenuBar::OnSelectionLassoToggle(wxCommandEvent& WXUNUSED(event))
+{
+	g_settings.setInteger(Config::SELECTION_LASSO, IsItemChecked(MenuBar::SELECT_MODE_LASSO));
+	bool allow_multi_floor_selection = IsItemChecked(MenuBar::SHOW_ALL_FLOORS) ||
+		g_settings.getBoolean(Config::SELECTION_LASSO);
+	EnableItem(MenuBar::SELECT_MODE_VISIBLE, allow_multi_floor_selection);
+	EnableItem(MenuBar::SELECT_MODE_LOWER, allow_multi_floor_selection);
+	if(!allow_multi_floor_selection) {
+		CheckItem(MenuBar::SELECT_MODE_CURRENT, true);
+		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_CURRENT_FLOOR);
+	}
+	g_gui.RefreshView();
 }
 
 void MainMenuBar::OnCopy(wxCommandEvent& WXUNUSED(event))
@@ -2208,17 +2247,17 @@ void MainMenuBar::OnZoomNormal(wxCommandEvent& event)
 void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 {
 	g_settings.setInteger(Config::SHOW_ALL_FLOORS, IsItemChecked(MenuBar::SHOW_ALL_FLOORS));
-	if(IsItemChecked(MenuBar::SHOW_ALL_FLOORS)) {
-		EnableItem(MenuBar::SELECT_MODE_VISIBLE, true);
-		EnableItem(MenuBar::SELECT_MODE_LOWER, true);
-	} else {
-		EnableItem(MenuBar::SELECT_MODE_VISIBLE, false);
-		EnableItem(MenuBar::SELECT_MODE_LOWER, false);
+	bool allow_multi_floor_selection = IsItemChecked(MenuBar::SHOW_ALL_FLOORS) ||
+		g_settings.getBoolean(Config::SELECTION_LASSO);
+	EnableItem(MenuBar::SELECT_MODE_VISIBLE, allow_multi_floor_selection);
+	EnableItem(MenuBar::SELECT_MODE_LOWER, allow_multi_floor_selection);
+	if(!allow_multi_floor_selection) {
 		CheckItem(MenuBar::SELECT_MODE_CURRENT, true);
 		g_settings.setInteger(Config::SELECTION_TYPE, SELECT_CURRENT_FLOOR);
 	}
 	g_settings.setInteger(Config::TRANSPARENT_FLOORS, IsItemChecked(MenuBar::GHOST_HIGHER_FLOORS));
 	g_settings.setInteger(Config::TRANSPARENT_ITEMS, IsItemChecked(MenuBar::GHOST_ITEMS));
+	g_settings.setInteger(Config::TRANSPARENT_GROUND_ITEMS, IsItemChecked(MenuBar::GHOST_GROUND_ITEMS));
 	g_settings.setInteger(Config::SHOW_INGAME_BOX, IsItemChecked(MenuBar::SHOW_INGAME_BOX));
 	g_settings.setInteger(Config::SHOW_LIGHTS, IsItemChecked(MenuBar::SHOW_LIGHTS));
 	g_settings.setInteger(Config::SHOW_TECHNICAL_ITEMS, IsItemChecked(MenuBar::SHOW_TECHNICAL_ITEMS));

@@ -231,6 +231,9 @@ TerrainBrush::~TerrainBrush()
 
 bool TerrainBrush::friendOf(TerrainBrush* other)
 {
+	if(!other) {
+		return false;
+	}
 	uint32_t borderID = other->getID();
 	for(uint32_t friendId : friends) {
 		if(friendId == borderID) {
@@ -439,7 +442,10 @@ void DoorBrush::undraw(BaseMap* map, Tile* tile)
 	for(ItemVector::iterator it = tile->items.begin(); it != tile->items.end(); ++it) {
 		Item* item = *it;
 		if(item->isBrushDoor()) {
-			item->getWallBrush()->draw(map, tile, nullptr);
+			WallBrush* wallBrush = item->getWallBrush();
+			if(wallBrush) {
+				wallBrush->draw(map, tile, nullptr);
+			}
 			if(g_settings.getInteger(Config::USE_AUTOMAGIC)) {
 				tile->wallize(map);
 			}

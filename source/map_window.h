@@ -76,6 +76,8 @@ public:
 	void ShowReplaceItemsDialog(bool selectionOnly);
 	void CloseReplaceItemsDialog();
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
+	ReplaceItemsDialog* GetReplaceItemsDialog() const { return replaceItemsDialog; }
+	void ApplyItemToReplaceBox(uint16_t itemId, int boxNumber);
 
 protected:
 	// For internal use, call to resize the scrollbars with

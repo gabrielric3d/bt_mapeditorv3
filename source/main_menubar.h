@@ -39,6 +39,7 @@ namespace MenuBar
 		IMPORT_MINIMAP,
 		EXPORT_MINIMAP,
 		RELOAD_DATA,
+		RELOAD_BRUSHES,
 		RECENT_FILES,
 		PREFERENCES,
 		CONFIGURE_HOTKEYS,
@@ -66,6 +67,7 @@ namespace MenuBar
 		SELECT_MODE_CURRENT,
 		SELECT_MODE_LOWER,
 		SELECT_MODE_VISIBLE,
+		SELECT_MODE_LASSO,
 		AUTOMAGIC,
 		BORDERIZE_SELECTION,
 		BORDERIZE_MAP,
@@ -104,6 +106,7 @@ namespace MenuBar
 		SHOW_SHADE,
 		SHOW_ALL_FLOORS,
 		GHOST_ITEMS,
+		GHOST_GROUND_ITEMS,
 		GHOST_HIGHER_FLOORS,
 		HIGHLIGHT_ITEMS,
 		SHOW_INGAME_BOX,
@@ -228,6 +231,7 @@ public:
 	void OnImportMinimap(wxCommandEvent& event);
 	void OnExportMinimap(wxCommandEvent& event);
 	void OnReloadDataFiles(wxCommandEvent& event);
+	void OnReloadBrushes(wxCommandEvent& event);
 
 	// Edit Menu
 	void OnUndo(wxCommandEvent& event);
@@ -248,6 +252,7 @@ public:
 	void OnClearModifiedState(wxCommandEvent& event);
 	void OnToggleAutomagic(wxCommandEvent& event);
 	void OnSelectionTypeChange(wxCommandEvent& event);
+	void OnSelectionLassoToggle(wxCommandEvent& event);
 	void OnCut(wxCommandEvent& event);
 	void OnCopy(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);

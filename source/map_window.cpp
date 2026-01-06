@@ -82,6 +82,18 @@ void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event)
 	}
 }
 
+void MapWindow::ApplyItemToReplaceBox(uint16_t itemId, int boxNumber)
+{
+	// If dialog doesn't exist, create it first
+	if(!replaceItemsDialog) {
+		ShowReplaceItemsDialog(false);
+	}
+
+	if(replaceItemsDialog) {
+		replaceItemsDialog->ApplyItemToBox(itemId, boxNumber);
+	}
+}
+
 void MapWindow::SetSize(int x, int y, bool center)
 {
 	if(x == 0 || y == 0) return;

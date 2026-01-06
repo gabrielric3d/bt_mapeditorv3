@@ -46,6 +46,12 @@
 
 #include <wx/dcbuffer.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <cstdio>
+static void EnsureConsoleAttached();
+#endif
+
 BEGIN_EVENT_TABLE(MainFrame, wxFrame)
 	EVT_CLOSE(MainFrame::OnExit)
 	EVT_MENU_OPEN(MainFrame::OnMenuOpen)
@@ -165,6 +171,9 @@ Application::~Application()
 
 bool Application::OnInit()
 {
+#ifdef _WIN32
+	EnsureConsoleAttached();
+#endif
 #if defined __DEBUG_MODE__ && defined __WINDOWS__
 	_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
@@ -750,9 +759,25 @@ void MainFrame::PrepareDC(wxDC& dc)
 }
 
 #ifdef _WIN32
+static void EnsureConsoleAttached()
+{
+	if(!AttachConsole(ATTACH_PARENT_PROCESS)) {
+		AllocConsole();
+	}
+
+	FILE* stream = nullptr;
+	freopen_s(&stream, "CONOUT$", "w", stdout);
+	freopen_s(&stream, "CONOUT$", "w", stderr);
+	freopen_s(&stream, "CONIN$", "r", stdin);
+
+	setvbuf(stdout, nullptr, _IONBF, 0);
+	setvbuf(stderr, nullptr, _IONBF, 0);
+}
+
 // This is necessary for cmake to understand that it needs to set the executable
 int main(int argc, char** argv)
 {
+	EnsureConsoleAttached();
 	wxEntryStart(argc, argv); // Start the wxWidgets library
 	Application* app = new Application(); // Create the application object
 	wxApp::SetInstance(app); // Informs wxWidgets that app is the application object

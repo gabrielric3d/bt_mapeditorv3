@@ -1201,6 +1201,9 @@ void GameSprite::Image::createGLTexture(GLuint textureId)
 
 void GameSprite::Image::unloadGLTexture(GLuint textureId)
 {
+	if(!isGLLoaded) {
+		return;
+	}
 	isGLLoaded = false;
 	g_gui.gfx.loaded_textures -= 1;
 	glDeleteTextures(1, &textureId);
@@ -1230,6 +1233,9 @@ GameSprite::NormalImage::NormalImage() :
 
 GameSprite::NormalImage::~NormalImage()
 {
+	if(isGLLoaded) {
+		unloadGLTexture(id);
+	}
 	if(in_cache) {
 		g_gui.gfx.sprite_cache.erase(cache_iterator);
 		in_cache = false;
@@ -1484,7 +1490,9 @@ GameSprite::TemplateImage::TemplateImage(GameSprite* parent, int v, const Outfit
 
 GameSprite::TemplateImage::~TemplateImage()
 {
-	////
+	if(isGLLoaded) {
+		unloadGLTexture(gl_tid);
+	}
 }
 
 void GameSprite::TemplateImage::colorizePixel(uint8_t color, uint8_t& red, uint8_t& green, uint8_t& blue)

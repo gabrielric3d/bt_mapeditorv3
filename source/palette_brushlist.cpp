@@ -20,6 +20,11 @@
 #include "palette_brushlist.h"
 #include "gui.h"
 #include "brush.h"
+#include "raw_brush.h"
+#include "map_window.h"
+#include "map_tab.h"
+#include <wx/dnd.h>
+#include <wx/menu.h>
 
 namespace {
 
@@ -404,12 +409,18 @@ void BrushPanel::OnClickListBoxRow(wxCommandEvent& event)
 BEGIN_EVENT_TABLE(BrushIconBox, wxScrolledWindow)
 	// Listbox style
 	EVT_TOGGLEBUTTON(wxID_ANY, BrushIconBox::OnClickBrushButton)
+	EVT_LEFT_DOWN(BrushIconBox::OnMouseDown)
+	EVT_MOTION(BrushIconBox::OnMouseMotion)
+	EVT_RIGHT_DOWN(BrushIconBox::OnRightClick)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushIconBox::OnApplyReplaceBox1)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushIconBox::OnApplyReplaceBox2)
 END_EVENT_TABLE()
 
 BrushIconBox::BrushIconBox(wxWindow *parent, const TilesetCategory *_tileset, RenderSize rsz) :
 	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL),
 	BrushBoxInterface(_tileset),
-	icon_size(rsz)
+	icon_size(rsz),
+	dragging(false)
 {
 	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_HOUSE);
 	int width;
@@ -543,17 +554,106 @@ void BrushIconBox::OnClickBrushButton(wxCommandEvent& event)
 	}
 }
 
+void BrushIconBox::OnMouseDown(wxMouseEvent& event)
+{
+	drag_start_pos = event.GetPosition();
+	dragging = false;
+	event.Skip();
+}
+
+void BrushIconBox::OnMouseMotion(wxMouseEvent& event)
+{
+	if(event.Dragging() && event.LeftIsDown()) {
+		if(!dragging) {
+			int dx = abs(event.GetPosition().x - drag_start_pos.x);
+			int dy = abs(event.GetPosition().y - drag_start_pos.y);
+			if(dx > 3 || dy > 3) {
+				dragging = true;
+
+				Brush* brush = GetSelectedBrush();
+				if(brush && brush->isRaw()) {
+					RAWBrush* raw = brush->asRaw();
+					if(raw) {
+						uint16_t itemId = raw->getItemID();
+						wxString data = wxString::Format("ITEM_ID:%d", itemId);
+						wxTextDataObject dragData(data);
+						wxDropSource dragSource(this);
+						dragSource.SetData(dragData);
+						dragSource.DoDragDrop(wxDrag_CopyOnly);
+					}
+				}
+			}
+		}
+	} else {
+		dragging = false;
+	}
+	event.Skip();
+}
+
+void BrushIconBox::OnRightClick(wxMouseEvent& event)
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && brush->isRaw()) {
+		wxMenu menu;
+		menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
+		menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+		PopupMenu(&menu, event.GetPosition());
+	}
+}
+
+void BrushIconBox::OnApplyReplaceBox1(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			uint16_t itemId = raw->getItemID();
+			MapTab* tab = g_gui.GetCurrentMapTab();
+			if(tab) {
+				MapWindow* window = dynamic_cast<MapWindow*>(tab);
+				if(window) {
+					window->ApplyItemToReplaceBox(itemId, 1);
+				}
+			}
+		}
+	}
+}
+
+void BrushIconBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			uint16_t itemId = raw->getItemID();
+			MapTab* tab = g_gui.GetCurrentMapTab();
+			if(tab) {
+				MapWindow* window = dynamic_cast<MapWindow*>(tab);
+				if(window) {
+					window->ApplyItemToReplaceBox(itemId, 2);
+				}
+			}
+		}
+	}
+}
+
 // ============================================================================
 // BrushListBox
 
 BEGIN_EVENT_TABLE(BrushListBox, wxVListBox)
 	EVT_KEY_DOWN(BrushListBox::OnKey)
+	EVT_LEFT_DOWN(BrushListBox::OnMouseDown)
+	EVT_MOTION(BrushListBox::OnMouseMotion)
+	EVT_RIGHT_DOWN(BrushListBox::OnRightClick)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushListBox::OnApplyReplaceBox1)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushListBox::OnApplyReplaceBox2)
 END_EVENT_TABLE()
 
 BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
 	wxVListBox(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLB_SINGLE),
 	BrushBoxInterface(tileset),
-	icon_pixel_size(GetConfiguredListIconSize())
+	icon_pixel_size(GetConfiguredListIconSize()),
+	dragging(false)
 {
 	SetBackgroundColour(kPaletteListBackgroundColour);
 	SetOwnForegroundColour(kPaletteListTextColour);
@@ -650,6 +750,101 @@ void BrushListBox::OnKey(wxKeyEvent& event)
 		default:
 			if(g_gui.GetCurrentTab() != nullptr) {
 				g_gui.GetCurrentMapTab()->GetEventHandler()->AddPendingEvent(event);
+			}
+		}
+	}
+}
+
+void BrushListBox::OnMouseDown(wxMouseEvent& event)
+{
+	drag_start_pos = event.GetPosition();
+	dragging = false;
+	event.Skip();
+}
+
+void BrushListBox::OnMouseMotion(wxMouseEvent& event)
+{
+	if(event.Dragging() && event.LeftIsDown()) {
+		if(!dragging) {
+			int dx = abs(event.GetPosition().x - drag_start_pos.x);
+			int dy = abs(event.GetPosition().y - drag_start_pos.y);
+			if(dx > 3 || dy > 3) {
+				dragging = true;
+
+				int n = GetSelection();
+				if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+					Brush* brush = tileset->brushlist[n];
+					if(brush && brush->isRaw()) {
+						RAWBrush* raw = brush->asRaw();
+						if(raw) {
+							uint16_t itemId = raw->getItemID();
+							wxString data = wxString::Format("ITEM_ID:%d", itemId);
+							wxTextDataObject dragData(data);
+							wxDropSource dragSource(this);
+							dragSource.SetData(dragData);
+							dragSource.DoDragDrop(wxDrag_CopyOnly);
+						}
+					}
+				}
+			}
+		}
+	} else {
+		dragging = false;
+	}
+	event.Skip();
+}
+
+void BrushListBox::OnRightClick(wxMouseEvent& event)
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && brush->isRaw()) {
+			wxMenu menu;
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+			PopupMenu(&menu, event.GetPosition());
+		}
+	}
+}
+
+void BrushListBox::OnApplyReplaceBox1(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && brush->isRaw()) {
+			RAWBrush* raw = brush->asRaw();
+			if(raw) {
+				uint16_t itemId = raw->getItemID();
+				MapTab* tab = g_gui.GetCurrentMapTab();
+				if(tab) {
+					MapWindow* window = dynamic_cast<MapWindow*>(tab);
+					if(window) {
+						window->ApplyItemToReplaceBox(itemId, 1);
+					}
+				}
+			}
+		}
+	}
+}
+
+void BrushListBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && brush->isRaw()) {
+			RAWBrush* raw = brush->asRaw();
+			if(raw) {
+				uint16_t itemId = raw->getItemID();
+				MapTab* tab = g_gui.GetCurrentMapTab();
+				if(tab) {
+					MapWindow* window = dynamic_cast<MapWindow*>(tab);
+					if(window) {
+						window->ApplyItemToReplaceBox(itemId, 2);
+					}
+				}
 			}
 		}
 	}

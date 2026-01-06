@@ -307,6 +307,8 @@ public:
 	// Load/unload a client version (takes care of dialogs aswell)
 	void UnloadVersion();
 	bool LoadVersion(ClientVersionID ver, wxString& error, wxArrayString& warnings, bool force = false);
+	// Reload only brushes/materials without reloading sprites/items (faster, less crash-prone)
+	bool ReloadBrushes(wxString& error, wxArrayString& warnings);
 	// The current version loaded (returns CLIENT_VERSION_NONE if no version is loaded)
 	const ClientVersion& GetCurrentVersion() const;
 	ClientVersionID GetCurrentVersionID() const;

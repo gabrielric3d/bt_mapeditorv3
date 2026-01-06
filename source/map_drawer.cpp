@@ -55,6 +55,7 @@ void DrawingOptions::SetDefault()
 {
 	transparent_floors = false;
 	transparent_items = false;
+	transparent_ground_items = false;
 	show_ingame_box = false;
 	show_lights = false;
 	show_tech_items = false;
@@ -95,6 +96,7 @@ void DrawingOptions::SetIngame()
 {
 	transparent_floors = false;
 	transparent_items = false;
+	transparent_ground_items = false;
 	show_ingame_box = false;
 	show_lights = false;
 	show_tech_items = true;
@@ -129,6 +131,45 @@ void DrawingOptions::SetIngame()
 	client_box_height = rme::ClientMapHeight;
 	client_box_offset_x = 0;
 	client_box_offset_y = 2;
+}
+
+void DrawingOptions::LoadFromSettings()
+{
+	// Load all settings at once to avoid repeated lookups per frame
+	transparent_floors = g_settings.getBoolean(Config::TRANSPARENT_FLOORS);
+	transparent_items = g_settings.getBoolean(Config::TRANSPARENT_ITEMS);
+	transparent_ground_items = g_settings.getBoolean(Config::TRANSPARENT_GROUND_ITEMS);
+	show_ingame_box = g_settings.getBoolean(Config::SHOW_INGAME_BOX);
+	show_lights = g_settings.getBoolean(Config::SHOW_LIGHTS);
+	show_tech_items = g_settings.getBoolean(Config::SHOW_TECHNICAL_ITEMS);
+	show_grid = g_settings.getInteger(Config::SHOW_GRID);
+	ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
+	show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
+	show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
+	show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
+	show_spawn_creatureslist = g_settings.getBoolean(Config::SHOW_SPAWN_CREATURESLIST);
+	show_houses = g_settings.getBoolean(Config::SHOW_HOUSES);
+	show_shade = g_settings.getBoolean(Config::SHOW_SHADE);
+	show_special_tiles = g_settings.getBoolean(Config::SHOW_SPECIAL_TILES);
+	show_items = g_settings.getBoolean(Config::SHOW_ITEMS);
+	highlight_items = g_settings.getBoolean(Config::HIGHLIGHT_ITEMS);
+	show_blocking = g_settings.getBoolean(Config::SHOW_BLOCKING);
+	show_tooltips = g_settings.getBoolean(Config::SHOW_TOOLTIPS);
+	show_as_minimap = g_settings.getBoolean(Config::SHOW_AS_MINIMAP);
+	show_only_colors = g_settings.getBoolean(Config::SHOW_ONLY_TILEFLAGS);
+	show_only_modified = g_settings.getBoolean(Config::SHOW_ONLY_MODIFIED_TILES);
+	show_preview = g_settings.getBoolean(Config::SHOW_PREVIEW);
+	show_hooks = g_settings.getBoolean(Config::SHOW_WALL_HOOKS);
+	show_pickupables = g_settings.getBoolean(Config::SHOW_PICKUPABLES);
+	show_moveables = g_settings.getBoolean(Config::SHOW_MOVEABLES);
+	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
+	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
+	custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
+	client_box_width = g_settings.getInteger(Config::CLIENT_BOX_WIDTH);
+	client_box_height = g_settings.getInteger(Config::CLIENT_BOX_HEIGHT);
+	client_box_offset_x = g_settings.getInteger(Config::CLIENT_BOX_OFFSET_X);
+	client_box_offset_y = g_settings.getInteger(Config::CLIENT_BOX_OFFSET_Y);
+	light_hour = g_settings.getInteger(Config::LIGHT_HOUR);
 }
 
 bool DrawingOptions::isOnlyColors() const noexcept
@@ -752,6 +793,41 @@ void MapDrawer::DrawSelectionBox()
 		return;
 	}
 
+	if(g_settings.getBoolean(Config::SELECTION_LASSO) && !canvas->lasso_screen_points.empty()) {
+		const std::vector<wxPoint>& points = canvas->lasso_screen_points;
+		if(points.size() < 2) {
+			return;
+		}
+
+		glDisable(GL_TEXTURE_2D);
+		glEnable(GL_LINE_STIPPLE);
+		glLineStipple(2, 0xAAAA);
+		glLineWidth(1.0f);
+		glColor4f(1.0, 1.0, 1.0, 1.0);
+		glBegin(GL_LINE_STRIP);
+		for(const wxPoint& point : points) {
+			glVertex2f(point.x * zoom, point.y * zoom);
+		}
+		glVertex2f(points.front().x * zoom, points.front().y * zoom);
+		glEnd();
+		glDisable(GL_LINE_STIPPLE);
+
+		const float dot_size = 3.0f;
+		glColor4f(1.0, 1.0, 1.0, 1.0);
+		glBegin(GL_QUADS);
+		for(const wxPoint& point : points) {
+			float x = point.x * zoom;
+			float y = point.y * zoom;
+			glVertex2f(x - dot_size, y - dot_size);
+			glVertex2f(x + dot_size, y - dot_size);
+			glVertex2f(x + dot_size, y + dot_size);
+			glVertex2f(x - dot_size, y + dot_size);
+		}
+		glEnd();
+		glEnable(GL_TEXTURE_2D);
+		return;
+	}
+
 	// Draw bounding box
 
 	int last_click_rx = canvas->last_click_abs_x - view_scroll_x;
@@ -1291,13 +1367,23 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, const Item*
 		pattern_y = pos.y % sprite->pattern_y;
 	}
 
-	if(!ephemeral && options.transparent_items &&
-			(!type.isGroundTile() || sprite->width > 1 || sprite->height > 1) &&
-			!type.isSplash() &&
-			(!type.isBorder || sprite->width > 1 || sprite->height > 1)
-	  )
-	{
-		alpha /= 2;
+	if(!ephemeral && !type.isSplash()) {
+		bool apply_transparency = false;
+
+		// Ghost ground items - applies to ground tiles of size 1x1
+		if(options.transparent_ground_items && type.isGroundTile() && sprite->width == 1 && sprite->height == 1) {
+			apply_transparency = true;
+		}
+		// Ghost loose items - applies to non-ground items (or large ground items)
+		else if(options.transparent_items &&
+				(!type.isGroundTile() || sprite->width > 1 || sprite->height > 1) &&
+				(!type.isBorder || sprite->width > 1 || sprite->height > 1)) {
+			apply_transparency = true;
+		}
+
+		if(apply_transparency) {
+			alpha /= 2;
+		}
 	}
 
 	int frame = item->getFrame();
@@ -1394,13 +1480,23 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, const It
 		pattern_y = pos.y % sprite->pattern_y;
 	}
 
-	if(!ephemeral && options.transparent_items &&
-			(!type.isGroundTile() || sprite->width > 1 || sprite->height > 1) &&
-			!type.isSplash() &&
-			(!type.isBorder || sprite->width > 1 || sprite->height > 1)
-	  )
-	{
-		alpha /= 2;
+	if(!ephemeral && !type.isSplash()) {
+		bool apply_transparency = false;
+
+		// Ghost ground items - applies to ground tiles of size 1x1
+		if(options.transparent_ground_items && type.isGroundTile() && sprite->width == 1 && sprite->height == 1) {
+			apply_transparency = true;
+		}
+		// Ghost loose items - applies to non-ground items (or large ground items)
+		else if(options.transparent_items &&
+				(!type.isGroundTile() || sprite->width > 1 || sprite->height > 1) &&
+				(!type.isBorder || sprite->width > 1 || sprite->height > 1)) {
+			apply_transparency = true;
+		}
+
+		if(apply_transparency) {
+			alpha /= 2;
+		}
 	}
 
 	int frame = item->getFrame();
@@ -2281,6 +2377,11 @@ void MapDrawer::DrawStatsOverlay()
 		current_fps = frame_count * 1000.0 / elapsed;
 		frame_count = 0;
 		fps_timer.Start();
+	}
+
+	// Don't draw stats overlay during screenshot capture (ingame mode)
+	if(options.ingame) {
+		return;
 	}
 
 	// Format text
