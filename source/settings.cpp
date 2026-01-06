@@ -234,6 +234,7 @@ void Settings::IO(IOMode mode)
 
 	section("Editor");
 	String(RECENT_FILES, "");
+	String(FAVORITE_FILES, "");
 	Int(WORKER_THREADS, 1);
 	Int(MERGE_MOVE, 0);
 	Int(MERGE_PASTE, 0);
@@ -338,6 +339,7 @@ void Settings::IO(IOMode mode)
 	Int(WINDOW_MAXIMIZED, 0);
 	Int(WELCOME_DIALOG, 1);
 	Int(IGNORE_WARNINGS_ON_OPEN, 0);
+	Int(CONFIRM_RECENT_OPEN, 0);
 
 	section("Hotkeys");
 	String(NUMERICAL_HOTKEYS, "none:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\nnone:{}\n");

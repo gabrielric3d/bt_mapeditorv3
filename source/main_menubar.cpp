@@ -55,6 +55,8 @@
 
 namespace
 {
+	const int kRecentFilesLimit = 20;
+
 	std::string TrimString(const std::string& text)
 	{
 		if(text.empty())
@@ -105,7 +107,7 @@ namespace
 BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 END_EVENT_TABLE()
 
-MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
+MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFilesLimit)
 {
 	using namespace MenuBar;
 	checking_programmaticly = false;
@@ -300,7 +302,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame)
 		frame->Connect(MAIN_FRAME_MENU + ai->second->id, wxEVT_COMMAND_MENU_SELECTED,
 			(wxObjectEventFunction)(wxEventFunction)(ai->second->handler), nullptr, this);
 	}
-	for(size_t i = 0; i < 10; ++i) {
+	for(int i = 0; i < kRecentFilesLimit; ++i) {
 		frame->Connect(recentFiles.GetBaseId() + i, wxEVT_COMMAND_MENU_SELECTED,
 			wxCommandEventHandler(MainMenuBar::OnOpenRecent), nullptr, this);
 	}
