@@ -34,6 +34,7 @@
 #include "browse_tile_window.h"
 #include "hotkey_window.h"
 #include "hotkey_utils.h"
+#include "welcome_dialog.h"
 
 #include "gui.h"
 
@@ -41,6 +42,7 @@
 #include <wx/numdlg.h>
 #include <wx/filename.h>
 #include <wx/filedlg.h>
+#include <wx/scrolwin.h>
 #include <sstream>
 #include <algorithm>
 #include <vector>
@@ -56,6 +58,7 @@
 namespace
 {
 	const int kRecentFilesLimit = 20;
+	const char* kOpenDialogTitle = "Open Map";
 
 	std::string TrimString(const std::string& text)
 	{
@@ -101,6 +104,56 @@ namespace
 		if(hotkey.empty())
 			return base;
 		return base + '\t' + hotkey;
+	}
+
+	bool PathEquals(const wxString& left, const wxString& right)
+	{
+#ifdef __WINDOWS__
+		return left.CmpNoCase(right) == 0;
+#else
+		return left == right;
+#endif
+	}
+
+	void AddUniquePath(std::vector<wxString>& paths, const wxString& value)
+	{
+		if(value.empty())
+			return;
+		for(const wxString& existing : paths) {
+			if(PathEquals(existing, value)) {
+				return;
+			}
+		}
+		paths.push_back(value);
+	}
+
+	std::vector<wxString> LoadFavoriteFiles()
+	{
+		std::vector<wxString> favorites;
+		std::string raw = g_settings.getString(Config::FAVORITE_FILES);
+		std::istringstream stream(raw);
+		std::string line;
+		while(std::getline(stream, line)) {
+			if(!line.empty() && line.back() == '\r') {
+				line.pop_back();
+			}
+			if(!line.empty()) {
+				AddUniquePath(favorites, wxstr(line));
+			}
+		}
+		return favorites;
+	}
+
+	void SaveFavoriteFiles(const std::vector<wxString>& favorites)
+	{
+		std::ostringstream stream;
+		for(size_t i = 0; i < favorites.size(); ++i) {
+			if(i > 0) {
+				stream << "\n";
+			}
+			stream << nstr(favorites[i]);
+		}
+		g_settings.setString(Config::FAVORITE_FILES, stream.str());
 	}
 }
 
@@ -937,7 +990,174 @@ void MainMenuBar::OnOpenRecent(wxCommandEvent& event)
 
 void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 {
-	g_gui.OpenMap();
+	std::vector<wxString> favorites = LoadFavoriteFiles();
+	std::vector<wxString> recent;
+	for(size_t i = 0; i < recentFiles.GetCount(); ++i) {
+		AddUniquePath(recent, recentFiles.GetHistoryFile(i));
+	}
+
+	class OpenMapDialog : public wxDialog
+	{
+	public:
+		OpenMapDialog(wxWindow* parent,
+			const std::vector<wxString>& favorites,
+			const std::vector<wxString>& recent)
+			: wxDialog(parent, wxID_ANY, kOpenDialogTitle, wxDefaultPosition, wxDefaultSize,
+				wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+			  m_theme(Theme::Dark()),
+			  m_list_window(nullptr),
+			  m_list_sizer(nullptr),
+			  open_button(nullptr),
+			  m_recent_files(recent),
+			  m_favorite_files(favorites)
+		{
+			SetBackgroundColour(m_theme.surfaceAlt);
+			wxBoxSizer* root = new wxBoxSizer(wxVERTICAL);
+
+			m_list_window = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
+			m_list_window->SetScrollRate(0, FROM_DIP(this, 8));
+			m_list_window->SetBackgroundColour(m_theme.surfaceAlt);
+			m_list_sizer = new wxBoxSizer(wxVERTICAL);
+			m_list_window->SetSizer(m_list_sizer);
+			m_list_window->Bind(WELCOME_DIALOG_FAVORITE, &OpenMapDialog::OnFavoriteToggled, this);
+
+			BuildList();
+			root->Add(m_list_window, 1, wxEXPAND | wxALL, FROM_DIP(this, 8));
+
+			wxBoxSizer* button_sizer = new wxBoxSizer(wxHORIZONTAL);
+			wxButton* browse_button = new wxButton(this, wxID_ANY, "Browse...");
+			open_button = new wxButton(this, wxID_OK, "Open");
+			wxButton* cancel_button = new wxButton(this, wxID_CANCEL, "Cancel");
+			open_button->Enable(false);
+			button_sizer->Add(browse_button, 0, wxRIGHT, FROM_DIP(this, 8));
+			button_sizer->AddStretchSpacer(1);
+			button_sizer->Add(open_button, 0, wxRIGHT, FROM_DIP(this, 8));
+			button_sizer->Add(cancel_button, 0);
+			root->Add(button_sizer, 0, wxEXPAND | wxALL, FROM_DIP(this, 10));
+
+			SetSizerAndFit(root);
+			SetSize(FROM_DIP(this, wxSize(800, 600)));
+			SetMinSize(FROM_DIP(this, wxSize(800, 600)));
+			browse_button->Bind(wxEVT_BUTTON, &OpenMapDialog::OnBrowse, this);
+		}
+
+		wxString GetSelectedPath() const { return selected_path; }
+
+	private:
+		void BuildList()
+		{
+			m_list_sizer->Clear(true);
+			auto add_divider = [this]() {
+				auto *divider = newd wxPanel(m_list_window, wxID_ANY);
+				divider->SetBackgroundColour(m_theme.border);
+				divider->SetMinSize(wxSize(-1, FROM_DIP(m_list_window, 1)));
+				m_list_sizer->Add(divider, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(m_list_window, 8));
+			};
+			auto add_title = [this, &add_divider](const wxString& title) {
+				auto *label = newd wxStaticText(m_list_window, wxID_ANY, title);
+				wxFont font = label->GetFont().Bold();
+				font.SetPointSize(font.GetPointSize() + 1);
+				label->SetFont(font);
+				label->SetForegroundColour(m_theme.textMuted);
+				m_list_sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(m_list_window, 8));
+				add_divider();
+			};
+
+			std::vector<wxString> unique_favorites;
+			for(const wxString& favorite : m_favorite_files) {
+				AddUniquePath(unique_favorites, favorite);
+			}
+			std::vector<wxString> unique_recent;
+			for(const wxString& file : m_recent_files) {
+				bool is_favorite = false;
+				for(const wxString& favorite : unique_favorites) {
+					if(PathEquals(favorite, file)) {
+						is_favorite = true;
+						break;
+					}
+				}
+				if(!is_favorite) {
+					AddUniquePath(unique_recent, file);
+				}
+			}
+
+			if(!unique_favorites.empty()) {
+				add_title("Favorites");
+				for(const wxString& file : unique_favorites) {
+					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, true);
+					m_list_sizer->Add(recent_item, 0, wxEXPAND);
+					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
+					add_divider();
+				}
+			}
+
+			if(!unique_recent.empty()) {
+				add_title("Recent Maps");
+				for(const wxString& file : unique_recent) {
+					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, false);
+					m_list_sizer->Add(recent_item, 0, wxEXPAND);
+					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
+					add_divider();
+				}
+			}
+
+			m_list_window->Layout();
+			m_list_window->FitInside();
+		}
+
+		void OnRecentItemClicked(wxMouseEvent& event)
+		{
+			auto *recent_item = dynamic_cast<RecentItem*>(event.GetEventObject());
+			if(!recent_item) {
+				return;
+			}
+			selected_path = recent_item->GetText();
+			open_button->Enable(!selected_path.empty());
+		}
+
+		void OnFavoriteToggled(wxCommandEvent& event)
+		{
+			wxString path = event.GetString();
+			if(event.GetInt() != 0) {
+				AddUniquePath(m_favorite_files, path);
+			} else {
+				m_favorite_files.erase(
+					std::remove_if(m_favorite_files.begin(), m_favorite_files.end(),
+						[&path](const wxString& current) { return PathEquals(current, path); }),
+					m_favorite_files.end());
+			}
+			SaveFavoriteFiles(m_favorite_files);
+			BuildList();
+		}
+
+		void OnBrowse(wxCommandEvent& WXUNUSED(event))
+		{
+			wxString wildcard = g_settings.getInteger(Config::USE_OTGZ) != 0 ?
+				MAP_LOAD_FILE_WILDCARD_OTGZ : MAP_LOAD_FILE_WILDCARD;
+			wxFileDialog dialog(this, "Open map file", wxEmptyString, wxEmptyString, wildcard,
+				wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+			if(dialog.ShowModal() == wxID_OK) {
+				selected_path = dialog.GetPath();
+				EndModal(wxID_OK);
+			}
+		}
+
+		ThemeColors m_theme;
+		wxScrolledWindow* m_list_window;
+		wxBoxSizer* m_list_sizer;
+		wxButton* open_button;
+		wxString selected_path;
+		std::vector<wxString> m_recent_files;
+		std::vector<wxString> m_favorite_files;
+	};
+
+	OpenMapDialog dialog(frame, favorites, recent);
+	if(dialog.ShowModal() == wxID_OK) {
+		wxString path = dialog.GetSelectedPath();
+		if(!path.empty()) {
+			frame->LoadMap(FileName(path));
+		}
+	}
 }
 
 void MainMenuBar::OnClose(wxCommandEvent& WXUNUSED(event))

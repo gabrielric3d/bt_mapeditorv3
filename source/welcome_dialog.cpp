@@ -422,6 +422,21 @@ void RecentMapsPanel::UpdateRecentFiles(const std::vector<wxString>& recent_file
     Freeze();
     m_recent_files = recent_files;
     m_sizer->Clear(true);
+    auto add_divider = [this]() {
+        auto *divider = newd wxPanel(this, wxID_ANY);
+        divider->SetBackgroundColour(m_theme.border);
+        divider->SetMinSize(wxSize(-1, FROM_DIP(this, 1)));
+        m_sizer->Add(divider, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 8));
+    };
+    auto add_title = [this, &add_divider](const wxString& title) {
+        auto *label = newd wxStaticText(this, wxID_ANY, title);
+        wxFont font = label->GetFont().Bold();
+        font.SetPointSize(font.GetPointSize() + 1);
+        label->SetFont(font);
+        label->SetForegroundColour(m_theme.textMuted);
+        m_sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 8));
+        add_divider();
+    };
     std::vector<wxString> unique_favorites;
     for(const wxString& favorite : favorite_files) {
         AddUniquePath(unique_favorites, favorite);
@@ -433,21 +448,23 @@ void RecentMapsPanel::UpdateRecentFiles(const std::vector<wxString>& recent_file
         }
     }
 
-    for(const wxString& file : unique_favorites) {
-        auto *recent_item = newd RecentItem(this, m_theme, file, true);
-        m_sizer->Add(recent_item, 0, wxEXPAND);
-        recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+    if(!unique_favorites.empty()) {
+        add_title("Favorites");
+        for(const wxString& file : unique_favorites) {
+            auto *recent_item = newd RecentItem(this, m_theme, file, true);
+            m_sizer->Add(recent_item, 0, wxEXPAND);
+            recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+            add_divider();
+        }
     }
-    if(!unique_favorites.empty() && !unique_recent.empty()) {
-        auto *divider = newd wxPanel(this, wxID_ANY);
-        divider->SetBackgroundColour(m_theme.border);
-        divider->SetMinSize(wxSize(-1, FROM_DIP(this, 1)));
-        m_sizer->Add(divider, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 8));
-    }
-    for(const wxString& file : unique_recent) {
-        auto *recent_item = newd RecentItem(this, m_theme, file, false);
-        m_sizer->Add(recent_item, 0, wxEXPAND);
-        recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+    if(!unique_recent.empty()) {
+        add_title("Recent Maps");
+        for(const wxString& file : unique_recent) {
+            auto *recent_item = newd RecentItem(this, m_theme, file, false);
+            m_sizer->Add(recent_item, 0, wxEXPAND);
+            recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+            add_divider();
+        }
     }
     Layout();
     Thaw();
@@ -466,7 +483,9 @@ RecentItem::RecentItem(wxWindow *parent,
     const wxColour favorite_colour(214, 170, 46);
     SetBackgroundColour(theme.surfaceHighlight);
     m_title = newd wxStaticText(this, wxID_ANY, wxFileNameFromPath(m_item_text));
-    m_title->SetFont(GetFont().Bold());
+    wxFont title_font = GetFont().Bold();
+    title_font.SetPointSize(title_font.GetPointSize() + 2);
+    m_title->SetFont(title_font);
     m_title->SetForegroundColour(m_is_favorite ? favorite_colour : m_text_colour);
     m_title->SetToolTip(m_item_text);
     m_file_path = newd wxStaticText(this, wxID_ANY, m_item_text, wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_START);

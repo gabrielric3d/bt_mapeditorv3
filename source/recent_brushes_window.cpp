@@ -35,6 +35,16 @@ namespace {
 
 constexpr size_t kMaxButtonsPerCategory = 32;
 
+wxSize GetButtonPixelSize(RenderSize size)
+{
+	switch(size) {
+	case RENDER_SIZE_16x16: return wxSize(20, 20);
+	case RENDER_SIZE_32x32: return wxSize(36, 36);
+	case RENDER_SIZE_64x64: return wxSize(68, 68);
+	default: return wxSize(36, 36);
+	}
+}
+
 const std::array<TilesetCategoryType, 7> kCategoryOrder = {
 	TILESET_TERRAIN,
 	TILESET_RAW,
@@ -59,6 +69,10 @@ public:
 		if(brush_) {
 			SetToolTip(wxstr(brush_->getName()));
 		}
+		const wxSize fixed_size = GetButtonPixelSize(size);
+		SetMinSize(fixed_size);
+		SetMaxSize(fixed_size);
+		SetInitialSize(fixed_size);
 		Bind(wxEVT_BUTTON, &RecentBrushButton::OnPressed, this);
 		Bind(wxEVT_PAINT, &RecentBrushButton::OnPaint, this);
 	}
@@ -91,17 +105,55 @@ private:
 
 void RecentBrushButton::OnPaint(wxPaintEvent& event)
 {
-	ItemButton::OnPaint(event);
+	wxBufferedPaintDC pdc(this);
+
+	if(g_gui.gfx.isUnloaded()) {
+		return;
+	}
+
+	static std::unique_ptr<wxPen> highlight_pen;
+	static std::unique_ptr<wxPen> dark_highlight_pen;
+	static std::unique_ptr<wxPen> light_shadow_pen;
+	static std::unique_ptr<wxPen> shadow_pen;
+
+	if(highlight_pen.get() == nullptr)      highlight_pen.reset(newd wxPen(wxColor(0xFF,0xFF,0xFF), 1, wxSOLID));
+	if(dark_highlight_pen.get() == nullptr) dark_highlight_pen.reset(newd wxPen(wxColor(0xD4,0xD0,0xC8), 1, wxSOLID));
+	if(light_shadow_pen.get() == nullptr)   light_shadow_pen.reset(newd wxPen(wxColor(0x80,0x80,0x80), 1, wxSOLID));
+	if(shadow_pen.get() == nullptr)         shadow_pen.reset(newd wxPen(wxColor(0x40,0x40,0x40), 1, wxSOLID));
+
+	const wxSize size_px = GetButtonPixelSize(size);
+	pdc.SetPen(*wxTRANSPARENT_PEN);
+	pdc.SetBrush(wxBrush(GetParent()->GetBackgroundColour()));
+	pdc.DrawRectangle(0, 0, size_px.GetWidth(), size_px.GetHeight());
+
+	pdc.SetPen(*highlight_pen);
+	pdc.DrawLine(0, 0, size_px.GetWidth() - 1, 0);
+	pdc.DrawLine(0, 1, 0, size_px.GetHeight() - 1);
+	pdc.SetPen(*dark_highlight_pen);
+	pdc.DrawLine(1, 1, size_px.GetWidth() - 2, 1);
+	pdc.DrawLine(1, 2, 1, size_px.GetHeight() - 2);
+	pdc.SetPen(*light_shadow_pen);
+	pdc.DrawLine(size_px.GetWidth() - 2, 1, size_px.GetWidth() - 2, size_px.GetHeight() - 2);
+	pdc.DrawLine(1, size_px.GetHeight() - 2, size_px.GetWidth() - 1, size_px.GetHeight() - 2);
+	pdc.SetPen(*shadow_pen);
+	pdc.DrawLine(size_px.GetWidth() - 1, 0, size_px.GetWidth() - 1, size_px.GetHeight() - 1);
+	pdc.DrawLine(0, size_px.GetHeight() - 1, size_px.GetWidth(), size_px.GetHeight() - 1);
+
+	if(sprite) {
+		if(size == RENDER_SIZE_16x16) {
+			sprite->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2);
+		} else if(size == RENDER_SIZE_32x32) {
+			sprite->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2);
+		}
+	}
 
 	if(!highlighted_) {
 		return;
 	}
 
-	wxClientDC dc(this);
-	dc.SetPen(wxPen(wxColour(200, 0, 0), 3));
-	dc.SetBrush(*wxTRANSPARENT_BRUSH);
-	const wxSize size = GetClientSize();
-	dc.DrawRectangle(2, 2, size.GetWidth() - 4, size.GetHeight() - 4);
+	pdc.SetPen(wxPen(wxColour(200, 0, 0), 3));
+	pdc.SetBrush(*wxTRANSPARENT_BRUSH);
+	pdc.DrawRectangle(2, 2, size_px.GetWidth() - 4, size_px.GetHeight() - 4);
 }
 
 RecentBrushesWindow::RecentBrushesWindow(wxWindow* parent) :
@@ -187,7 +239,7 @@ void RecentBrushesWindow::UpdateBrushes(const RecentBrushMap& brushes)
 			}
 
 			auto* button = newd RecentBrushButton(widgets.container, brush, type);
-			widgets.brush_sizer->Add(button, 0, wxALL, 2);
+			widgets.brush_sizer->Add(button, 0, wxALL | wxFIXED_MINSIZE, 2);
 			widgets.buttons.push_back(button);
 			++count;
 		}

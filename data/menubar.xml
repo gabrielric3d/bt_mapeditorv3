@@ -98,6 +98,7 @@
         <menu name="$Selection Mode">
             <item name="$Compensate Selection" action="SELECT_MODE_COMPENSATE" help="Compensate for floor difference when selecting."/>
             <separator/>
+            <item name="$Lasso Selection" action="SELECT_MODE_LASSO" help="Use lasso selection instead of a rectangle."/>
             <item name="$Current Floor" action="SELECT_MODE_CURRENT" help="Select only current floor."/>
             <item name="$Lower Floors" action="SELECT_MODE_LOWER" help="Select all lower floors."/>
             <item name="$Visible Floors" action="SELECT_MODE_VISIBLE" help="Select only visible floors."/>
@@ -127,6 +128,7 @@
         <item name="$Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>
         <item name="Show $all floors" hotkey="Ctrl+W" action="SHOW_ALL_FLOORS" help="If not checked other floors are hidden."/>
         <item name="Ghost $loose items" hotkey="G" action="GHOST_ITEMS" help="Ghost items (except ground)."/>
+        <item name="Ghost $ground items" action="GHOST_GROUND_ITEMS" help="Ghost ground items (full tiles)."/>
         <item name="Ghost $higher floors" hotkey="Ctrl+L" action="GHOST_HIGHER_FLOORS" help="Ghost floors."/>
         <menu name="$Ingame Box">
             <item name="Show $client box" hotkey="Shift+I" action="SHOW_INGAME_BOX" help="Shadows out areas not visible ingame (from the center of the screen)."/>

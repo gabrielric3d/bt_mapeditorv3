@@ -19,12 +19,15 @@
 #define WELCOME_DIALOG_H
 
 #include <wx/wx.h>
+#include <vector>
 
 #include "theme.h"
 
 wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
+wxDECLARE_EVENT(WELCOME_DIALOG_FAVORITE, wxCommandEvent);
 
 class WelcomeDialogPanel;
+class RecentMapsPanel;
 
 class WelcomeDialog : public wxDialog
 {
@@ -37,6 +40,7 @@ public:
     void OnButtonClicked(const wxMouseEvent& event);
     void OnCheckboxClicked(const wxCommandEvent& event);
     void OnIgnoreWarningsCheckbox(const wxCommandEvent& event);
+    void OnConfirmRecentOpenCheckbox(const wxCommandEvent& event);
     void OnRecentItemClicked(const wxMouseEvent& event);
 private:
     WelcomeDialogPanel* m_welcome_dialog_panel;
@@ -54,6 +58,7 @@ public:
             const std::vector<wxString> &recent_files);
     void OnPaint(const wxPaintEvent& event);
     void updateInputs();
+    void updateRecentFiles(const std::vector<wxString>& recent_files);
 private:
     wxBitmap m_rme_logo;
     wxString m_title_text;
@@ -63,6 +68,8 @@ private:
     wxColour m_background_colour;
     wxCheckBox* m_show_welcome_dialog_checkbox;
     wxCheckBox* m_ignore_warnings_checkbox;
+    wxCheckBox* m_confirm_recent_open_checkbox;
+    RecentMapsPanel* m_recent_maps_panel;
 };
 
 class WelcomeDialogButton : public wxPanel
@@ -91,23 +98,42 @@ public:
             WelcomeDialog* dialog,
             const ThemeColors& theme,
             const std::vector<wxString> &recent_files);
+    void UpdateRecentFiles(const std::vector<wxString>& recent_files,
+            const std::vector<wxString>& favorite_files);
+private:
+    void OnFavoriteClicked(wxCommandEvent& event);
+    WelcomeDialog* m_dialog;
+    ThemeColors m_theme;
+    wxBoxSizer* m_sizer;
+    std::vector<wxString> m_recent_files;
 };
 
 class RecentItem : public wxPanel
 {
 public:
-    RecentItem(wxWindow* parent, const ThemeColors& theme, const wxString &item_name);
+    RecentItem(wxWindow* parent,
+            const ThemeColors& theme,
+            const wxString &item_name,
+            bool is_favorite);
     void OnMouseEnter(const wxMouseEvent& event);
     void OnMouseLeave(const wxMouseEvent& event);
     void PropagateItemClicked(wxMouseEvent& event);
+    void OnFavoriteClicked(wxMouseEvent& event);
     wxString GetText() { return m_item_text; };
+    bool IsFavorite() const { return m_is_favorite; }
 private:
     ThemeColors m_theme;
     wxColour m_text_colour;
     wxColour m_text_colour_hover;
     wxStaticText* m_title;
     wxStaticText* m_file_path;
+    wxStaticText* m_modified_text;
+    wxStaticBitmap* m_favorite_toggle;
     wxString m_item_text;
+    bool m_is_favorite;
+    wxBitmap m_star_filled;
+    wxBitmap m_star_outline;
+    wxBitmap m_star_outline_hover;
 };
 
 #endif //WELCOME_DIALOG_H
