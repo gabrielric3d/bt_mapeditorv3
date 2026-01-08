@@ -23,6 +23,78 @@
 #include "theme.h"
 
 #include <wx/aui/tabart.h>
+#include <wx/datetime.h>
+
+namespace {
+
+wxColour LerpColour(const wxColour& from, const wxColour& to, double t)
+{
+	const double clamped = t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
+	const int r = static_cast<int>(from.Red() + (to.Red() - from.Red()) * clamped + 0.5);
+	const int g = static_cast<int>(from.Green() + (to.Green() - from.Green()) * clamped + 0.5);
+	const int b = static_cast<int>(from.Blue() + (to.Blue() - from.Blue()) * clamped + 0.5);
+	return wxColour(r, g, b);
+}
+
+double PulseMix()
+{
+	static const int kPeriodMs = 1200;
+	const wxLongLong now = wxGetUTCTimeMillis();
+	const int t = static_cast<int>(now.GetValue() % kPeriodMs);
+	const double phase = static_cast<double>(t) / static_cast<double>(kPeriodMs);
+	if(phase < 0.5) {
+		return phase * 2.0;
+	}
+	return (1.0 - phase) * 2.0;
+}
+
+class MapTabArt : public wxAuiSimpleTabArt
+{
+public:
+	wxAuiTabArt* Clone() override
+	{
+		return new MapTabArt(*this);
+	}
+
+	void DrawTab(wxDC& dc,
+	             wxWindow* wnd,
+	             const wxAuiNotebookPage& pane,
+	             const wxRect& in_rect,
+	             int close_button_state,
+	             wxRect* out_tab_rect,
+	             wxRect* out_button_rect,
+	             int* x_extent) override
+	{
+		const ThemeColors& theme = Theme::Dark();
+		const wxColour active_green(83, 158, 42);
+		const wxColour unsaved_yellow(200, 180, 50);
+		const wxColour inactive_grey = theme.surfaceAlt;
+		const bool is_active = pane.active;
+
+		bool has_changes = false;
+		if(auto* map_tab = dynamic_cast<MapTab*>(pane.window)) {
+			Editor* editor = map_tab->GetEditor();
+			has_changes = editor && editor->getMap().hasChanged();
+		}
+
+		wxColour base_colour = inactive_grey;
+		wxColour active_colour = active_green;
+
+		if(has_changes) {
+			if(is_active) {
+				active_colour = LerpColour(unsaved_yellow, active_green, PulseMix());
+			} else {
+				base_colour = unsaved_yellow;
+			}
+		}
+
+		SetColour(base_colour);
+		SetActiveColour(active_colour);
+		wxAuiSimpleTabArt::DrawTab(dc, wnd, pane, in_rect, close_button_state, out_tab_rect, out_button_rect, x_extent);
+	}
+};
+
+}
 
 EditorTab::EditorTab()
 {
@@ -37,10 +109,12 @@ EditorTab::~EditorTab()
 BEGIN_EVENT_TABLE(MapTabbook, wxPanel)
 	EVT_AUINOTEBOOK_PAGE_CLOSE(wxID_ANY, MapTabbook::OnNotebookPageClose)
 	EVT_AUINOTEBOOK_PAGE_CHANGED(wxID_ANY, MapTabbook::OnNotebookPageChanged)
+	EVT_TIMER(wxID_ANY, MapTabbook::OnPulseTimer)
 END_EVENT_TABLE()
 
 MapTabbook::MapTabbook(wxWindow *parent, wxWindowID id) :
-	wxPanel(parent, id, wxDefaultPosition, wxDefaultSize)
+	wxPanel(parent, id, wxDefaultPosition, wxDefaultSize),
+	pulse_timer(this)
 {
 	wxSizer* wxz = newd wxBoxSizer(wxHORIZONTAL);
 	notebook = newd wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize);
@@ -50,9 +124,9 @@ MapTabbook::MapTabbook(wxWindow *parent, wxWindowID id) :
 	SetBackgroundColour(theme.background);
 	notebook->SetBackgroundColour(theme.surface);
 	notebook->SetForegroundColour(theme.text);
-	wxAuiSimpleTabArt* art = new wxAuiSimpleTabArt();
+	MapTabArt* art = new MapTabArt();
 	art->SetColour(theme.surfaceAlt);
-	art->SetActiveColour(theme.accent);
+	art->SetActiveColour(wxColour(83, 158, 42));
 	notebook->SetArtProvider(art);
 }
 
@@ -114,6 +188,7 @@ void MapTabbook::OnNotebookPageClose(wxAuiNotebookEvent& event)
 void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt)
 {
 	g_gui.UpdateMinimap();
+	UpdatePulseState();
 
 	int32_t oldSelection = evt.GetOldSelection();
 	int32_t newSelection = evt.GetSelection();
@@ -143,6 +218,34 @@ void MapTabbook::OnNotebookPageChanged(wxAuiNotebookEvent& evt)
 		oldMapTab->VisibilityCheck();
 	if(newMapTab)
 		newMapTab->VisibilityCheck();
+}
+
+void MapTabbook::UpdatePulseState()
+{
+	bool should_pulse = false;
+	EditorTab* editor_tab = GetCurrentTab();
+	if(auto* map_tab = dynamic_cast<MapTab*>(editor_tab)) {
+		Editor* editor = map_tab->GetEditor();
+		should_pulse = editor && editor->getMap().hasChanged();
+	}
+
+	if(should_pulse && !pulse_active) {
+		pulse_active = true;
+		pulse_timer.Start(80);
+	} else if(!should_pulse && pulse_active) {
+		pulse_active = false;
+		pulse_timer.Stop();
+		if(notebook) {
+			notebook->Refresh();
+		}
+	}
+}
+
+void MapTabbook::OnPulseTimer(wxTimerEvent&)
+{
+	if(notebook) {
+		notebook->Refresh();
+	}
 }
 
 void MapTabbook::OnAllowNotebookDND(wxAuiNotebookEvent& evt)

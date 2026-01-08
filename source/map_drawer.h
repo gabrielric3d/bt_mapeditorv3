@@ -18,6 +18,8 @@
 #ifndef RME_MAP_DRAWER_H_
 #define RME_MAP_DRAWER_H_
 
+#include <tuple>
+
 class GameSprite;
 
 struct MapTooltip
@@ -27,8 +29,8 @@ struct MapTooltip
 		MAX_CHARS = 255,
 	};
 
-	MapTooltip(int x, int y, std::string text, uint8_t r, uint8_t g, uint8_t b) :
-		x(x), y(y), text(text), r(r), g(g), b(b) {
+	MapTooltip(int x, int y, std::string text, uint8_t r, uint8_t g, uint8_t b, uint8_t tr = 0, uint8_t tg = 0, uint8_t tb = 0) :
+		x(x), y(y), text(text), r(r), g(g), b(b), tr(tr), tg(tg), tb(tb) {
 		ellipsis = (text.length() - 3) > MAX_CHARS;
 	}
 
@@ -40,6 +42,7 @@ struct MapTooltip
 	int x, y;
 	std::string text;
 	uint8_t r, g, b;
+	uint8_t tr, tg, tb;
 	bool ellipsis;
 };
 
@@ -73,6 +76,7 @@ public:
 	bool show_creatures;
 	bool show_spawns;
 	bool show_spawn_creatureslist;
+	bool show_spawn_overlays;
 	bool show_houses;
 	bool show_shade;
 	bool show_special_tiles;
@@ -122,6 +126,7 @@ class MapDrawer
 protected:
 	std::vector<MapTooltip*> tooltips;
 	std::ostringstream tooltip;
+	std::vector<std::tuple<int, int, int, int, int, bool>> spawn_overlays;
 
 	wxStopWatch pos_indicator_timer;
 	wxStopWatch selection_indicator_timer;
@@ -190,11 +195,14 @@ protected:
 	void DrawHookIndicator(int x, int y, const ItemType& type);
 	void DrawTileIndicators(TileLocation* location);
 	void DrawIndicator(int x, int y, int indicator, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
+	void DrawSpawnAreaOverlay(int start_map_x, int start_map_y, int end_map_x, int end_map_y, int radius, bool full_visibility);
+	void DrawSpawnAreaFill(int start_map_x, int start_map_y, int end_map_x, int end_map_y);
+	void DrawSpawnOverlays();
 	void DrawPositionIndicator(int z);
 	void DrawSelectedTileIndicator(int x, int y);
 	void WriteTooltip(const Item* item, std::ostringstream& stream);
 	void WriteTooltip(const Waypoint* item, std::ostringstream& stream);
-	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255);
+	void MakeTooltip(int screenx, int screeny, const std::string& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t tr = 0, uint8_t tg = 0, uint8_t tb = 0);
 	void AddLight(TileLocation* location);
 
 	enum BrushColor {

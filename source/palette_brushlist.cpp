@@ -23,6 +23,7 @@
 #include "raw_brush.h"
 #include "map_window.h"
 #include "map_tab.h"
+#include "border_editor_window.h"
 #include <wx/dnd.h>
 #include <wx/menu.h>
 
@@ -33,6 +34,7 @@ constexpr int kMaxListIconSize = 128;
 const wxColour kPaletteListBackgroundColour(0x0C, 0x14, 0x2A);
 const wxColour kPaletteListSelectionColour(0x16, 0x24, 0x43);
 const wxColour kPaletteListTextColour(0xE0, 0xE6, 0xFF);
+constexpr int kCreateBorderButtonId = wxID_HIGHEST + 4100;
 
 int GetConfiguredListIconSize()
 {
@@ -55,6 +57,7 @@ int GetConfiguredListIconSize()
 BEGIN_EVENT_TABLE(BrushPalettePanel, PalettePanel)
 	EVT_CHOICEBOOK_PAGE_CHANGING(wxID_ANY, BrushPalettePanel::OnSwitchingPage)
 	EVT_CHOICEBOOK_PAGE_CHANGED(wxID_ANY, BrushPalettePanel::OnPageChanged)
+	EVT_BUTTON(kCreateBorderButtonId, BrushPalettePanel::OnClickCreateBorder)
 END_EVENT_TABLE()
 
 BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& tilesets, TilesetCategoryType category, wxWindowID id) :
@@ -70,6 +73,12 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 	wxChoicebook* tmp_choicebook = newd wxChoicebook(this, wxID_ANY, wxDefaultPosition, wxSize(180,250));
 	ts_sizer->Add(tmp_choicebook, 1, wxEXPAND);
 	topsizer->Add(ts_sizer, 1, wxEXPAND);
+
+	if(palette_type == TILESET_TERRAIN) {
+		wxButton* createBorderButton = newd wxButton(this, kCreateBorderButtonId, "Create Border");
+		createBorderButton->SetToolTip("Open the Border Editor to create or edit auto-borders");
+		topsizer->Add(createBorderButton, 0, wxEXPAND | wxALL, 5);
+	}
 
 	for(TilesetContainer::const_iterator iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
 		const TilesetCategory* tcg = iter->second->getCategory(category);
@@ -241,6 +250,13 @@ void BrushPalettePanel::OnPageChanged(wxChoicebookEvent& event)
 	}
 	g_gui.ActivatePalette(GetParentPalette());
 	g_gui.SelectBrush();
+}
+
+void BrushPalettePanel::OnClickCreateBorder(wxCommandEvent& WXUNUSED(event))
+{
+	BorderEditorDialog* dialog = new BorderEditorDialog(g_gui.root, "Auto Border Editor");
+	dialog->Show();
+	g_gui.RefreshView();
 }
 
 void BrushPalettePanel::OnSwitchIn() {

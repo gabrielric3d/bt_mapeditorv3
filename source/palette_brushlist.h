@@ -196,6 +196,7 @@ public:
 	// Event handler for child window
 	void OnSwitchingPage(wxChoicebookEvent& event);
 	void OnPageChanged(wxChoicebookEvent& event);
+	void OnClickCreateBorder(wxCommandEvent& event);
 protected:
 	PaletteType palette_type;
 	wxChoicebook* choicebook;

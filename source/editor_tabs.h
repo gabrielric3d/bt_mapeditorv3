@@ -20,6 +20,8 @@
 
 #include "gui_ids.h"
 
+#include <wx/timer.h>
+
 class EditorTab;
 
 class MapTabbook : public wxPanel
@@ -39,17 +41,21 @@ public:
 	wxWindow* GetCurrentPage();
 	EditorTab* GetCurrentTab();
 	EditorTab* GetTab(int idx);
+	void UpdatePulseState();
 
 	// Events
 	void OnAllowNotebookDND(wxAuiNotebookEvent& evt);
 	void OnNotebookPageClose(wxAuiNotebookEvent& evt);
 	void OnNotebookPageChanged(wxAuiNotebookEvent& evt);
+	void OnPulseTimer(wxTimerEvent& evt);
 	void OnSwitchEditorMode(EditorMode mode);
 
 protected:
 	EditorTab* GetInternalTab(int idx);
 	wxAuiNotebook* notebook;
 	std::map<wxWindow*, EditorTab*> conv;
+	wxTimer pulse_timer;
+	bool pulse_active = false;
 
 	friend class MapTab;
 

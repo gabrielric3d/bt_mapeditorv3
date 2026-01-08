@@ -121,16 +121,22 @@ public:
     void OnFavoriteClicked(wxMouseEvent& event);
     wxString GetText() { return m_item_text; };
     bool IsFavorite() const { return m_is_favorite; }
+    bool IsSelected() const { return m_selected; }
+    void SetSelected(bool selected);
 private:
+    void UpdateBackground();
     ThemeColors m_theme;
     wxColour m_text_colour;
     wxColour m_text_colour_hover;
+    wxColour m_background_normal;
+    wxColour m_background_selected;
     wxStaticText* m_title;
     wxStaticText* m_file_path;
     wxStaticText* m_modified_text;
     wxStaticBitmap* m_favorite_toggle;
     wxString m_item_text;
     bool m_is_favorite;
+    bool m_selected;
     wxBitmap m_star_filled;
     wxBitmap m_star_outline;
     wxBitmap m_star_outline_hover;

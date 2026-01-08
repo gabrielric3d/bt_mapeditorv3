@@ -1449,6 +1449,9 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 		int param;
 		if(!brush->isCreature()) {
 			param = g_gui.GetBrushSize();
+			if(param <= 0) {
+				param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
+			}
 		}
 		if(dodraw) {
 			brush->draw(&map, new_tile, &param);
@@ -1517,14 +1520,30 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 			if(tile) {
 				Tile* new_tile = tile->deepCopy(map);
 				if(dodraw) {
-					brush->draw(&map, new_tile, &alt);
+					if(brush->isSpawn() || brush->isCreature()) {
+						int param = g_gui.GetBrushSize();
+						if(param <= 0) {
+							param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
+						}
+						brush->draw(&map, new_tile, &param);
+					} else {
+						brush->draw(&map, new_tile, &alt);
+					}
 				} else {
 					brush->undraw(&map, new_tile);
 				}
 				action->addChange(newd Change(new_tile));
 			} else if(dodraw) {
 				Tile* new_tile = map.allocator(location);
-				brush->draw(&map, new_tile, &alt);
+				if(brush->isSpawn() || brush->isCreature()) {
+					int param = g_gui.GetBrushSize();
+					if(param <= 0) {
+						param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
+					}
+					brush->draw(&map, new_tile, &param);
+				} else {
+					brush->draw(&map, new_tile, &alt);
+				}
 				action->addChange(newd Change(new_tile));
 			}
 		}

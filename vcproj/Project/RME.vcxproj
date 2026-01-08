@@ -218,6 +218,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\source\actions_history_window.cpp" />
     <ClCompile Include="..\..\source\artprovider.cpp" />
+    <ClCompile Include="..\..\source\border_editor_window.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\brush_manager_window.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
@@ -230,6 +231,7 @@
     <ClCompile Include="..\..\source\recent_brushes_window.cpp" />
     <ClInclude Include="..\..\source\actions_history_window.h" />
     <ClInclude Include="..\..\source\artprovider.h" />
+    <ClInclude Include="..\..\source\border_editor_window.h" />
     <ClInclude Include="..\..\source\const.h" />
     <ClInclude Include="..\..\source\duplicated_items_window.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />

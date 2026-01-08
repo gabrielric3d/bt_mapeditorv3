@@ -479,9 +479,12 @@ RecentItem::RecentItem(wxWindow *parent,
           m_text_colour(theme.text),
           m_text_colour_hover(theme.accent),
           m_item_text(item_name),
-          m_is_favorite(is_favorite) {
+          m_is_favorite(is_favorite),
+          m_selected(false) {
     const wxColour favorite_colour(214, 170, 46);
-    SetBackgroundColour(theme.surfaceHighlight);
+    m_background_normal = theme.surfaceHighlight;
+    m_background_selected = theme.controlActive;
+    UpdateBackground();
     m_title = newd wxStaticText(this, wxID_ANY, wxFileNameFromPath(m_item_text));
     wxFont title_font = GetFont().Bold();
     title_font.SetPointSize(title_font.GetPointSize() + 2);
@@ -523,6 +526,19 @@ RecentItem::RecentItem(wxWindow *parent,
     m_modified_text->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
     m_favorite_toggle->Bind(wxEVT_LEFT_UP, &RecentItem::OnFavoriteClicked, this);
     SetSizerAndFit(mainSizer);
+}
+
+void RecentItem::SetSelected(bool selected) {
+    if(m_selected == selected) {
+        return;
+    }
+    m_selected = selected;
+    UpdateBackground();
+}
+
+void RecentItem::UpdateBackground() {
+    SetBackgroundColour(m_selected ? m_background_selected : m_background_normal);
+    Refresh();
 }
 
 void RecentItem::PropagateItemClicked(wxMouseEvent& event) {

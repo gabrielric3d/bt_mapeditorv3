@@ -83,6 +83,7 @@ protected:
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;
 	wxCheckBox* selected_tile_indicator_chkbox;
+	wxCheckBox* spawn_overlay_chkbox;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;
 	wxCheckBox* custom_client_box_chkbox;

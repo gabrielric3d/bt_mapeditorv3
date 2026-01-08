@@ -254,6 +254,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(VIEW_TOOLBARS_INDICATORS, wxITEM_CHECK, OnToolbars);
 	MAKE_ACTION(VIEW_TOOLBARS_STANDARD, wxITEM_CHECK, OnToolbars);
 	MAKE_ACTION(NEW_VIEW, wxITEM_NORMAL, OnNewView);
+	MAKE_ACTION(NEW_DETACHED_VIEW, wxITEM_NORMAL, OnNewDetachedView);
 	MAKE_ACTION(TOGGLE_FULLSCREEN, wxITEM_NORMAL, OnToggleFullscreen);
 
 	MAKE_ACTION(ZOOM_IN, wxITEM_NORMAL, OnZoomIn);
@@ -515,6 +516,7 @@ void MainMenuBar::Update()
 	EnableItem(MAP_STATISTICS, is_local);
 
 	EnableItem(NEW_VIEW, has_map);
+	EnableItem(NEW_DETACHED_VIEW, has_map);
 	EnableItem(ZOOM_IN, has_map);
 	EnableItem(ZOOM_OUT, has_map);
 	EnableItem(ZOOM_NORMAL, has_map);
@@ -1008,6 +1010,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			  m_list_window(nullptr),
 			  m_list_sizer(nullptr),
 			  open_button(nullptr),
+			  m_selected_item(nullptr),
 			  m_recent_files(recent),
 			  m_favorite_files(favorites)
 		{
@@ -1047,6 +1050,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 		void BuildList()
 		{
 			m_list_sizer->Clear(true);
+			m_selected_item = nullptr;
 			auto add_divider = [this]() {
 				auto *divider = newd wxPanel(m_list_window, wxID_ANY);
 				divider->SetBackgroundColour(m_theme.border);
@@ -1087,6 +1091,10 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, true);
 					m_list_sizer->Add(recent_item, 0, wxEXPAND);
 					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
+					if(PathEquals(file, selected_path)) {
+						recent_item->SetSelected(true);
+						m_selected_item = recent_item;
+					}
 					add_divider();
 				}
 			}
@@ -1097,6 +1105,10 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, false);
 					m_list_sizer->Add(recent_item, 0, wxEXPAND);
 					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
+					if(PathEquals(file, selected_path)) {
+						recent_item->SetSelected(true);
+						m_selected_item = recent_item;
+					}
 					add_divider();
 				}
 			}
@@ -1111,6 +1123,11 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			if(!recent_item) {
 				return;
 			}
+			if(m_selected_item && m_selected_item != recent_item) {
+				m_selected_item->SetSelected(false);
+			}
+			recent_item->SetSelected(true);
+			m_selected_item = recent_item;
 			selected_path = recent_item->GetText();
 			open_button->Enable(!selected_path.empty());
 		}
@@ -1146,6 +1163,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 		wxScrolledWindow* m_list_window;
 		wxBoxSizer* m_list_sizer;
 		wxButton* open_button;
+		RecentItem* m_selected_item;
 		wxString selected_path;
 		std::vector<wxString> m_recent_files;
 		std::vector<wxString> m_favorite_files;
@@ -2323,6 +2341,11 @@ void MainMenuBar::OnToolbars(wxCommandEvent& event)
 void MainMenuBar::OnNewView(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.NewMapView();
+}
+
+void MainMenuBar::OnNewDetachedView(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.NewDetachedMapView();
 }
 
 void MainMenuBar::OnToggleFullscreen(wxCommandEvent& WXUNUSED(event))

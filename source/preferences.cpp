@@ -216,6 +216,11 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(selected_tile_indicator_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(selected_tile_indicator_chkbox, "When enabled, the tile under the cursor blinks while you have a brush/paste selection active.");
 
+	spawn_overlay_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Show spawn area overlay");
+	spawn_overlay_chkbox->SetValue(g_settings.getBoolean(Config::SHOW_SPAWN_OVERLAYS));
+	sizer->Add(spawn_overlay_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(spawn_overlay_chkbox, "Shows the pink spawn area outline and center markers (unchecked uses the classic red floor highlight).");
+
 	icon_selection_shadow_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use icon selection shadow");
 	icon_selection_shadow_chkbox->SetValue(g_settings.getBoolean(Config::USE_GUI_SELECTION_SHADOW));
 	sizer->Add(icon_selection_shadow_chkbox, 0, wxLEFT | wxTOP, 5);
@@ -830,6 +835,7 @@ void PreferencesWindow::Apply()
 
 	g_settings.setInteger(Config::HIDE_ITEMS_WHEN_ZOOMED, hide_items_when_zoomed_chkbox->GetValue());
 	g_settings.setInteger(Config::SELECTED_TILE_INDICATOR, selected_tile_indicator_chkbox->GetValue());
+	g_settings.setInteger(Config::SHOW_SPAWN_OVERLAYS, spawn_overlay_chkbox->GetValue());
 	g_settings.setInteger(Config::CUSTOM_CLIENT_BOX, custom_client_box_chkbox->GetValue());
 	g_settings.setInteger(Config::CLIENT_BOX_WIDTH, client_box_width_spin->GetValue());
 	g_settings.setInteger(Config::CLIENT_BOX_HEIGHT, client_box_height_spin->GetValue());

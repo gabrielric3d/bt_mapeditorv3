@@ -116,6 +116,7 @@
             <item name="Standard" action="VIEW_TOOLBARS_STANDARD" help="Show or hide the Standard toolbar."/>
         </menu>
         <item name="$New View" hotkey="Ctrl+Shift+N" action="NEW_VIEW" help="Creates a new view of the current map."/>
+        <item name="New Detached View" hotkey="Ctrl+Shift+D" action="NEW_DETACHED_VIEW" help="Creates a new detached view of the current map that can be moved to another monitor."/>
         <item name="$Enter Fullscreen" hotkey="F11" action="TOGGLE_FULLSCREEN" help="Changes between fullscreen mode and windowed mode."/>
         <item name="$Take Screenshot" hotkey="F10" action="TAKE_SCREENSHOT" help="Saves the current view to the disk."/>
         <item name="$Take Area Screenshot" hotkey="Ctrl+F10" action="TAKE_REGION_SCREENSHOT" help="Stitches multiple views to capture the selected area."/>

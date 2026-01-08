@@ -85,13 +85,6 @@ namespace
 		}
 
 		selection.add(tile, tile->creature);
-		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
-			return;
-		}
-
-		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
-			selection.add(spawnTile, spawnTile->spawn);
-		}
 	}
 }
 

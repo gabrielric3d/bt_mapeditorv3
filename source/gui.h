@@ -31,6 +31,8 @@
 #include "recent_brushes_window.h"
 #include "client_version.h"
 
+#include <map>
+
 class BaseMap;
 class Map;
 
@@ -49,6 +51,7 @@ class MainFrame;
 class WelcomeDialog;
 class MapWindow;
 class MapCanvas;
+class wxFrame;
 
 class SearchResultWindow;
 class DuplicatedItemsWindow;
@@ -350,6 +353,16 @@ public:
 	bool CloseLiveEditors(LiveSocket* sock);
 	bool CloseAllEditors();
 	void NewMapView();
+	void NewDetachedMapView();
+
+	// Detached views management
+	void RegisterDetachedView(Editor* editor, wxFrame* frame);
+	void RegisterDockableView(Editor* editor, MapWindow* window);
+	void UnregisterDetachedView(Editor* editor, wxFrame* frame);
+	void UnregisterDockableView(Editor* editor, MapWindow* window);
+	bool HasDetachedViews(Editor* editor) const;
+	bool CloseDetachedViews(Editor* editor);
+	void UpdateDetachedViewsTitle(Editor* editor);
 
 	// Map
 	Map& GetCurrentMap();
@@ -421,6 +434,10 @@ public:
 
 	BaseMap* secondary_map; // A buffer map
 	BaseMap* doodad_buffer_map; // The map in which doodads are temporarily stored
+
+	// Map to track detached views for each editor
+	std::map<Editor*, std::list<wxFrame*>> detached_views;
+	std::map<Editor*, std::list<MapWindow*>> dockable_views;
 
 	//=========================================================================
 	// Brush references

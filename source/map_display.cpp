@@ -378,12 +378,6 @@ namespace
 			return;
 		}
 		selection.add(tile, tile->creature);
-		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
-			return;
-		}
-		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
-			selection.add(spawnTile, spawnTile->spawn);
-		}
 	}
 
 	void RemoveCreatureWithSpawn(Selection& selection, Tile* tile, Map& map)
@@ -393,14 +387,6 @@ namespace
 		}
 		if(tile->creature->isSelected()) {
 			selection.remove(tile, tile->creature);
-		}
-		if(!g_settings.getInteger(Config::SHOW_SPAWNS)) {
-			return;
-		}
-		for(Tile* spawnTile : GetSpawnTilesForTile(map, tile)) {
-			if(spawnTile->spawn->isSelected()) {
-				selection.remove(spawnTile, spawnTile->spawn);
-			}
 		}
 	}
 

@@ -99,6 +99,7 @@ namespace MenuBar
 		VIEW_TOOLBARS_INDICATORS,
 		VIEW_TOOLBARS_STANDARD,
 		NEW_VIEW,
+		NEW_DETACHED_VIEW,
 		TOGGLE_FULLSCREEN,
 		ZOOM_IN,
 		ZOOM_OUT,
@@ -288,6 +289,7 @@ public:
 	// View Menu
 	void OnToolbars(wxCommandEvent& event);
 	void OnNewView(wxCommandEvent& event);
+	void OnNewDetachedView(wxCommandEvent& event);
 	void OnToggleFullscreen(wxCommandEvent& event);
 	void OnZoomIn(wxCommandEvent& event);
 	void OnZoomOut(wxCommandEvent& event);
