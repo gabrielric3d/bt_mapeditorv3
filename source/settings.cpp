@@ -224,6 +224,9 @@ void Settings::IO(IOMode mode)
 	Int(SHOW_WALL_HOOKS, 0);
 	Int(SHOW_PICKUPABLES, 0);
 	Int(SHOW_MOVEABLES, 0);
+	Int(SHOW_WALL_BORDERS, 0);
+	Int(SHOW_MOUNTAIN_OVERLAY, 0);
+	Int(SHOW_STAIR_DIRECTION, 0);
 
 	section("Version");
 	Int(VERSION_ID, 0);
@@ -335,6 +338,8 @@ void Settings::IO(IOMode mode)
 	String(ACTIONS_HISTORY_LAYOUT, "name=945c6eb52a414f1B817e8befd4479412;caption=Actions;state=2099151;dir=2;layer=0;row=0;pos=0;prop=100000;bestw=170;besth=130;minw=-1;minh=-1;maxw=-1;maxh=-1;floatx=-1;floaty=-1;floatw=221;floath=164");
 	Int(RECENT_BRUSHES_VISIBLE, 0);
 	String(RECENT_BRUSHES_LAYOUT, "");
+	Int(GRID_CHUNK_SIZE, 3000);
+	Int(GRID_VISIBLE_ROWS_MARGIN, 30);
 	Int(WINDOW_HEIGHT, 500);
 	Int(WINDOW_WIDTH, 700);
 	Int(WINDOW_MAXIMIZED, 0);

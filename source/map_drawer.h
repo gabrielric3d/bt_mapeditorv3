@@ -92,6 +92,9 @@ public:
 	bool show_hooks;
 	bool show_pickupables;
 	bool show_moveables;
+	bool show_wall_borders;
+	bool show_mountain_overlay;
+	bool show_stair_direction;
 	bool hide_items_when_zoomed;
 	bool show_selected_tile_indicator;
 	bool custom_client_box;
@@ -166,6 +169,9 @@ public:
 	void DrawLights();
 	void DrawTooltips();
 	void DrawStatsOverlay();
+	void DrawWallBorderLines();
+	void DrawMountainOverlay();
+	void DrawStairDirections();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 

@@ -26,6 +26,7 @@ enum BrushListType {
 	BRUSHLIST_SMALL_ICONS,
 	BRUSHLIST_LISTBOX,
 	BRUSHLIST_TEXT_LISTBOX,
+	BRUSHLIST_SEAMLESS_GRID,
 };
 
 class BrushBoxInterface {
@@ -116,6 +117,110 @@ protected:
 	DECLARE_EVENT_TABLE();
 };
 
+// Seamless grid panel for dense sprite display with pagination
+class SeamlessGridPanel : public wxScrolledWindow, public BrushBoxInterface {
+public:
+	SeamlessGridPanel(wxWindow* parent, const TilesetCategory* _tileset);
+	~SeamlessGridPanel();
+
+	wxWindow* GetSelfWindow() { return this; }
+
+	// Select the first brush
+	void SelectFirstBrush();
+	// Returns the currently selected brush
+	Brush* GetSelectedBrush() const;
+	// Select the brush in the parameter
+	bool SelectBrush(const Brush* brush);
+
+	// Set whether to display item IDs
+	void SetShowItemIDs(bool show) { show_item_ids = show; Refresh(); }
+	bool IsShowingItemIDs() const { return show_item_ids; }
+
+	// Zoom level control methods
+	int GetZoomLevel() const { return zoom_level; }
+	int IncrementZoom();
+	int DecrementZoom();
+	void SetZoomLevel(int level);
+
+	// Cache management
+	void ClearSpriteCache();
+
+	// Timer accessor
+	wxTimer* GetLoadingTimer() { return loading_timer; }
+
+	// Grid recalculation (public so it can be called after sizing)
+	void RecalculateGrid();
+
+	// Event handling
+	void OnMouseClick(wxMouseEvent& event);
+	void OnMouseMove(wxMouseEvent& event);
+	void OnPaint(wxPaintEvent& event);
+	void OnSize(wxSizeEvent& event);
+	void OnScroll(wxScrollWinEvent& event);
+	void OnTimer(wxTimerEvent& event);
+	void OnKeyDown(wxKeyEvent& event);
+
+protected:
+	void DrawItemsToPanel(wxDC& dc);
+	void DrawSpriteAt(wxDC& dc, int x, int y, int index);
+	void UpdateViewableItems();
+	void StartProgressiveLoading();
+	void UpdateGridSize();
+	void ManageSpriteCache();
+	int GetSpriteIndexAt(int x, int y) const;
+	void SelectIndex(int index);
+	void CreateNavigationPanel(wxWindow* parent);
+	void UpdateNavigationPanel();
+	void OnNavigationButtonClicked(wxCommandEvent& event);
+
+private:
+	int columns;
+	int sprite_size;
+	int zoom_level;
+	int selected_index;
+	int hover_index;
+	wxBitmap* buffer;
+	bool show_item_ids;
+
+	// Rendering optimization
+	int first_visible_row;
+	int last_visible_row;
+	int visible_rows_margin;
+	int total_rows;
+	bool need_full_redraw;
+
+	// Progressive loading for large tilesets
+	bool use_progressive_loading;
+	bool is_large_tileset;
+	int loading_step;
+	int max_loading_steps;
+	wxTimer* loading_timer;
+
+	// Chunking properties
+	int chunk_size;
+	int current_chunk;
+	int total_chunks;
+	wxRect prev_chunk_button;
+	wxRect next_chunk_button;
+	wxPanel* navigation_panel;
+
+	// Constants
+	static const int LARGE_TILESET_THRESHOLD = 1000;
+
+	// Cache structure for sprite rendering
+	struct CachedSprite {
+		wxBitmap bitmap;
+		int zoom_level;
+		bool is_valid;
+
+		CachedSprite() : zoom_level(1), is_valid(false) {}
+	};
+
+	std::map<int, CachedSprite> sprite_cache;
+
+	DECLARE_EVENT_TABLE();
+};
+
 // A panel capapable of displaying a collection of brushes
 // Brushes can be arranged in either list or icon fashion
 // Contents are *not* created when the panel is created,
@@ -153,13 +258,22 @@ public:
 
 	// wxWidgets event handlers
 	void OnClickListBoxRow(wxCommandEvent& event);
+	void OnToggleViewMode(wxCommandEvent& event);
+	void OnZoomIn(wxCommandEvent& event);
+	void OnZoomOut(wxCommandEvent& event);
 
 protected:
+	void CleanupBrushbox(BrushBoxInterface* box);
+
 	const TilesetCategory* tileset;
 	wxSizer* sizer;
 	BrushBoxInterface* brushbox;
 	bool loaded;
 	BrushListType list_type;
+	wxButton* toggle_view_button;
+	wxButton* zoom_in_button;
+	wxButton* zoom_out_button;
+	wxBoxSizer* control_sizer;
 
 	DECLARE_EVENT_TABLE();
 };

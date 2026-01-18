@@ -318,7 +318,7 @@
 		<item id="6922" chance="0"/>
 		<item id="6923" chance="0"/>
 		<item id="6924" chance="0"/>
-		
+
 		<border align="inner" to="sea" id="33"/>
 		<border align="inner" to="none" id="1"/>
 		<border align="inner" to="walkable sea" id="33"/>
@@ -699,6 +699,7 @@
 				</actions>
 			</specific>
 		</border>
+
 	</brush>
 	
 	<brush name="dark grass" type="ground" lookid="106" z-order="3100">
@@ -2654,8 +2655,8 @@
 		<item id="15010" chance="2500"/>
 		<item id="15011" chance="2500"/>
 		
-		<border align="outer" id="159"/>
-		<border align="inner" to="none" id="1"/>
+		<!-- <border align="outer" id="159"/>
+		<border align="outer" to="none" id="159"/> -->
 	</brush>
 	
 	<brush name="brown sea floor" type="ground" server_lookid="15232" z-order="2700">
@@ -2928,12 +2929,12 @@
 		<item id="5409" chance="2500"/>
 		<item id="5410" chance="2500"/>
 		
-		<!-- <border align="outer" id="201"/> -->
-		<border align="inner" to="none" id="1"/>
+		<!-- <border align="outer" id="201"/>
+		<border align="outer" to="none" id="201"/> -->
 	</brush>
 	
 	<brush name="grotto" type="ground" server_lookid="15114" z-order="9900">
-		<item id="15114" chance="2500"/>
+		<item id="15114" chance="2500"/>	
 		<item id="15115" chance="2500"/>
 		<item id="15065" chance="2500"/>
 		
@@ -3646,7 +3647,7 @@
 		<item id="25073" chance="1"/>
 		
 		<border align="outer" id="207"/>
-		<border align="inner" to="none" id="1"/>
+		<!-- <border align="inner" to="none" id="1"/> -->
 	</brush>
 	
 	<brush name="krailos purple" type="ground" server_lookid="25074" z-order="1000">
@@ -3854,6 +3855,8 @@
 		<item id="44700" chance="1"/>
 		
 		<optional id="238"/>
+		<border align="outer" id="238"/>
+		<border align="outer" to="none" id="238"/>
 	</brush>
 
 	<brush name="rotten ground 2" type="ground" server_lookid="46071" z-order="3600">
@@ -4182,19 +4185,32 @@
 		<border align="outer" to="none" id="252"/>
 	</brush>
 
-	<brush name="sunken sand" type="ground" server_lookid="45069" z-order="4700">
+	<brush name="sunken sand" type="ground" server_lookid="45069" z-order="4701">
 		<item id="45069" chance="1"/>
 		
-		<!-- <border align="outer" id="258"/> -->
-		<border align="inner" to="none" id="1"/>
+		<border align="outer" id="256"/>
+		<!-- <border align="inner" to="none" id="1"/> -->
 
 	</brush>
 
 	<brush name="sunken desert sand" type="ground" server_lookid="45111" z-order="4700">
 		<item id="45111" chance="1"/>
 
-		<border align="outer" id="257"/>
+		<border align="outer" id="256"/>
+		<border align="inner" to="none" id="1"/>
 
+	</brush>
+
+	<brush name="darkisland sea floor" type="ground" server_lookid="51780" z-order="2700">
+		<item id="51780" chance="500"/>
+		<item id="51781" chance="300"/>
+		<item id="51782" chance="2500"/>
+		<item id="51783" chance="2500"/>
+		<item id="51784" chance="2500"/>
+		<item id="51785" chance="2500"/>
+		
+		<border align="outer" id="260"/>
+		<border align="inner" to="none" id="1"/>
 	</brush>
 
 </materials>

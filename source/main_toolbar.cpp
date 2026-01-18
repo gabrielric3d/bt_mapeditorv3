@@ -190,16 +190,25 @@ MainToolBar::MainToolBar(wxWindow* parent, wxAuiManager* manager)
 	wxBitmap hooks_bitmap = wxArtProvider::GetBitmap(ART_HOOKS_TOOLBAR, wxART_TOOLBAR, icon_size);
 	wxBitmap pickupables_bitmap = wxArtProvider::GetBitmap(ART_PICKUPABLE_TOOLBAR, wxART_TOOLBAR, icon_size);
 	wxBitmap moveables_bitmap = wxArtProvider::GetBitmap(ART_MOVEABLE_TOOLBAR, wxART_TOOLBAR, icon_size);
+	wxBitmap wall_borders_bitmap = wxArtProvider::GetBitmap(ART_WALL_BORDERS_TOOLBAR, wxART_TOOLBAR, icon_size);
+	wxBitmap mountain_overlay_bitmap = wxArtProvider::GetBitmap(ART_MOUNTAIN_OVERLAY_TOOLBAR, wxART_TOOLBAR, icon_size);
+	wxBitmap stair_direction_bitmap = wxArtProvider::GetBitmap(ART_STAIR_DIRECTION_TOOLBAR, wxART_TOOLBAR, icon_size);
 
 	indicators_toolbar = newd wxAuiToolBar(parent, TOOLBAR_INDICATORS, wxDefaultPosition, wxDefaultSize, wxAUI_TB_DEFAULT_STYLE);
 	indicators_toolbar->SetToolBitmapSize(icon_size);
 	indicators_toolbar->AddTool(TOOLBAR_HOOKS, wxEmptyString, hooks_bitmap, wxNullBitmap, wxITEM_CHECK, "Wall Hooks", wxEmptyString, NULL);
 	indicators_toolbar->AddTool(TOOLBAR_PICKUPABLES, wxEmptyString, pickupables_bitmap, wxNullBitmap, wxITEM_CHECK, "Pickupables", wxEmptyString, NULL);
 	indicators_toolbar->AddTool(TOOLBAR_MOVEABLES, wxEmptyString, moveables_bitmap, wxNullBitmap, wxITEM_CHECK, "Moveables", wxEmptyString, NULL);
+	indicators_toolbar->AddTool(TOOLBAR_WALL_BORDERS, wxEmptyString, wall_borders_bitmap, wxNullBitmap, wxITEM_CHECK, "Wall Borders", wxEmptyString, NULL);
+	indicators_toolbar->AddTool(TOOLBAR_MOUNTAIN_OVERLAY, wxEmptyString, mountain_overlay_bitmap, wxNullBitmap, wxITEM_CHECK, "Mountain Overlay", wxEmptyString, NULL);
+	indicators_toolbar->AddTool(TOOLBAR_STAIR_DIRECTION, wxEmptyString, stair_direction_bitmap, wxNullBitmap, wxITEM_CHECK, "Stair Direction", wxEmptyString, NULL);
 	indicators_toolbar->Realize();
 	indicators_toolbar->ToggleTool(TOOLBAR_HOOKS, g_settings.getBoolean(Config::SHOW_WALL_HOOKS));
 	indicators_toolbar->ToggleTool(TOOLBAR_PICKUPABLES, g_settings.getBoolean(Config::SHOW_PICKUPABLES));
 	indicators_toolbar->ToggleTool(TOOLBAR_MOVEABLES, g_settings.getBoolean(Config::SHOW_MOVEABLES));
+	indicators_toolbar->ToggleTool(TOOLBAR_WALL_BORDERS, g_settings.getBoolean(Config::SHOW_WALL_BORDERS));
+	indicators_toolbar->ToggleTool(TOOLBAR_MOUNTAIN_OVERLAY, g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY));
+	indicators_toolbar->ToggleTool(TOOLBAR_STAIR_DIRECTION, g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION));
 	ApplyToolbarTheme(indicators_toolbar);
 	Theme::ApplyText(indicators_toolbar, true);
 
@@ -376,6 +385,9 @@ void MainToolBar::UpdateIndicators()
 	indicators_toolbar->ToggleTool(TOOLBAR_HOOKS, g_settings.getBoolean(Config::SHOW_WALL_HOOKS));
 	indicators_toolbar->ToggleTool(TOOLBAR_PICKUPABLES, g_settings.getBoolean(Config::SHOW_PICKUPABLES));
 	indicators_toolbar->ToggleTool(TOOLBAR_MOVEABLES, g_settings.getBoolean(Config::SHOW_MOVEABLES));
+	indicators_toolbar->ToggleTool(TOOLBAR_WALL_BORDERS, g_settings.getBoolean(Config::SHOW_WALL_BORDERS));
+	indicators_toolbar->ToggleTool(TOOLBAR_MOUNTAIN_OVERLAY, g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY));
+	indicators_toolbar->ToggleTool(TOOLBAR_STAIR_DIRECTION, g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION));
 
 	g_gui.GetAuiManager()->Update();
 }
@@ -671,6 +683,21 @@ void MainToolBar::OnIndicatorsButtonClick(wxCommandEvent& event)
 			break;
 		case TOOLBAR_MOVEABLES:
 			g_settings.setInteger(Config::SHOW_MOVEABLES, toggled);
+			g_gui.root->UpdateIndicatorsMenu();
+			g_gui.RefreshView();
+			break;
+		case TOOLBAR_WALL_BORDERS:
+			g_settings.setInteger(Config::SHOW_WALL_BORDERS, toggled);
+			g_gui.root->UpdateIndicatorsMenu();
+			g_gui.RefreshView();
+			break;
+		case TOOLBAR_MOUNTAIN_OVERLAY:
+			g_settings.setInteger(Config::SHOW_MOUNTAIN_OVERLAY, toggled);
+			g_gui.root->UpdateIndicatorsMenu();
+			g_gui.RefreshView();
+			break;
+		case TOOLBAR_STAIR_DIRECTION:
+			g_settings.setInteger(Config::SHOW_STAIR_DIRECTION, toggled);
 			g_gui.root->UpdateIndicatorsMenu();
 			g_gui.RefreshView();
 			break;

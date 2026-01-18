@@ -1,0 +1,27 @@
+/* XPM */
+static const char *toolbar_stair_direction_xpm[] = {
+/* columns rows colors chars-per-pixel */
+"16 16 5 1 ",
+"  c None",
+". c #000000",
+"X c #CC2929",
+"o c #E84545",
+"+ c #FF6B6B",
+/* pixels */
+"                ",
+"         .      ",
+"        ..      ",
+"       .X.      ",
+"      .XX.      ",
+"  ....XXXX.     ",
+" .ooooXXXXX.    ",
+" .++++oXXXXX.   ",
+" .++++oXXXXX.   ",
+" .ooooXXXXX.    ",
+"  ....XXXX.     ",
+"      .XX.      ",
+"       .X.      ",
+"        ..      ",
+"         .      ",
+"                "
+};

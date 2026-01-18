@@ -2671,7 +2671,12 @@ void GUI::FillDoodadPreviewBuffer()
 			for(const auto &composite : composites) {
 				Position pos = center_pos + composite.first;
 				const ItemVector& items = composite.second;
-				Tile* tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(pos));
+
+				// Check if tile already exists at this position (for multiple entries with same offset)
+				Tile* tile = doodad_buffer_map->getTile(pos);
+				if(!tile) {
+					tile = doodad_buffer_map->allocator(doodad_buffer_map->createTileL(pos));
+				}
 				//std::cout << pos << " = " << center_pos << " + " << buffer_tile->getPosition() << std::endl;
 
 				for(auto item : items) {

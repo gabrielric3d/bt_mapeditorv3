@@ -40,6 +40,9 @@
 #include "../icons/toolbar_hooks.xpm"
 #include "../icons/toolbar_pickupables.xpm"
 #include "../icons/toolbar_moveables.xpm"
+#include "../icons/toolbar_wall_borders.xpm"
+#include "../icons/toolbar_mountain_overlay.xpm"
+#include "../icons/toolbar_stair_direction.xpm"
 #include "../icons/spawns.xpm"
 #include "../icons/house_exit.xpm"
 #include "../icons/pickupable.xpm"
@@ -115,6 +118,12 @@ wxBitmap ArtProvider::CreateBitmap(const wxArtID& id, const wxArtClient& client,
 			return wxBitmap(toolbar_pickupables_xpm);
 		else if(id == ART_MOVEABLE_TOOLBAR)
 			return wxBitmap(toolbar_moveable_xpm);
+		else if(id == ART_WALL_BORDERS_TOOLBAR)
+			return wxBitmap(toolbar_wall_borders_xpm);
+		else if(id == ART_MOUNTAIN_OVERLAY_TOOLBAR)
+			return wxBitmap(toolbar_mountain_overlay_xpm);
+		else if(id == ART_STAIR_DIRECTION_TOOLBAR)
+			return wxBitmap(toolbar_stair_direction_xpm);
 	} else if(client == wxART_LIST) {
 		if(id == ART_MOVE)
 			return wxBitmap(mini_move_xpm);

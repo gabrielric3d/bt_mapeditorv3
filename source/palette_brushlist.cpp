@@ -273,6 +273,7 @@ void BrushPalettePanel::OnSwitchIn() {
 BEGIN_EVENT_TABLE(BrushPanel, wxPanel)
 	// Listbox style
 	EVT_LISTBOX(wxID_ANY, BrushPanel::OnClickListBoxRow)
+	EVT_BUTTON(wxID_ANY, BrushPanel::OnToggleViewMode)
 END_EVENT_TABLE()
 
 BrushPanel::BrushPanel(wxWindow *parent) :
@@ -280,9 +281,33 @@ BrushPanel::BrushPanel(wxWindow *parent) :
 	tileset(nullptr),
 	brushbox(nullptr),
 	loaded(false),
-	list_type(BRUSHLIST_LISTBOX)
+	list_type(BRUSHLIST_LISTBOX),
+	toggle_view_button(nullptr),
+	zoom_in_button(nullptr),
+	zoom_out_button(nullptr),
+	control_sizer(nullptr)
 {
 	sizer = newd wxBoxSizer(wxVERTICAL);
+
+	// Add control buttons at the top
+	control_sizer = newd wxBoxSizer(wxHORIZONTAL);
+
+	toggle_view_button = newd wxButton(this, wxID_ANY, "Grid View", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	toggle_view_button->SetToolTip("Toggle between list and grid view");
+	control_sizer->Add(toggle_view_button, 0, wxALL, 2);
+
+	zoom_in_button = newd wxButton(this, wxID_ANY, "+", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	zoom_in_button->SetToolTip("Zoom in");
+	zoom_in_button->Enable(false);
+	control_sizer->Add(zoom_in_button, 0, wxALL, 2);
+
+	zoom_out_button = newd wxButton(this, wxID_ANY, "-", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+	zoom_out_button->SetToolTip("Zoom out");
+	zoom_out_button->Enable(false);
+	control_sizer->Add(zoom_out_button, 0, wxALL, 2);
+
+	sizer->Add(control_sizer, 0, wxEXPAND | wxALL, 2);
+
 	SetSizerAndFit(sizer);
 }
 
@@ -317,14 +342,40 @@ void BrushPanel::SetListType(wxString ltype)
 		SetListType(BRUSHLIST_LISTBOX);
 	} else if(ltype == "textlistbox") {
 		SetListType(BRUSHLIST_TEXT_LISTBOX);
+	} else if(ltype == "seamless" || ltype == "grid") {
+		SetListType(BRUSHLIST_SEAMLESS_GRID);
 	}
+}
+
+void BrushPanel::CleanupBrushbox(BrushBoxInterface* box)
+{
+	if(!box) return;
+
+	// Special cleanup for SeamlessGridPanel
+	SeamlessGridPanel* gridPanel = dynamic_cast<SeamlessGridPanel*>(box);
+	if(gridPanel) {
+		// Clear sprite cache
+		gridPanel->ClearSpriteCache();
+		// Make sure any loading timer is stopped
+		wxTimer* timer = gridPanel->GetLoadingTimer();
+		if(timer && timer->IsRunning()) {
+			timer->Stop();
+		}
+	}
+
+	// Remove from sizer and destroy
+	sizer->Detach(box->GetSelfWindow());
+	box->GetSelfWindow()->Destroy();
 }
 
 void BrushPanel::InvalidateContents()
 {
-	sizer->Clear(true);
+	// Properly clean up the existing brushbox if it exists
+	if(brushbox) {
+		CleanupBrushbox(brushbox);
+		brushbox = nullptr;
+	}
 	loaded = false;
-	brushbox = nullptr;
 }
 
 void BrushPanel::LoadContents()
@@ -344,12 +395,33 @@ void BrushPanel::LoadContents()
 		case BRUSHLIST_LISTBOX:
 			brushbox = newd BrushListBox(this, tileset);
 			break;
+		case BRUSHLIST_SEAMLESS_GRID:
+			brushbox = newd SeamlessGridPanel(this, tileset);
+			break;
 		default:
 			break;
 	}
 	ASSERT(brushbox != nullptr);
 	sizer->Add(brushbox->GetSelfWindow(), 1, wxEXPAND);
+
+	// Layout and fit
+	sizer->Layout();
+	Layout();
 	Fit();
+
+	// For SeamlessGridPanel, use CallAfter to ensure the size is correct
+	SeamlessGridPanel* gridPanel = dynamic_cast<SeamlessGridPanel*>(brushbox);
+	if(gridPanel) {
+		// Use CallAfter to delay RecalculateGrid until after layout is fully applied
+		CallAfter([gridPanel]() {
+			if(gridPanel) {
+				gridPanel->RecalculateGrid();
+				gridPanel->Refresh();
+				gridPanel->Update();
+			}
+		});
+	}
+
 	brushbox->SelectFirstBrush();
 }
 
@@ -400,6 +472,72 @@ void BrushPanel::OnSwitchIn()
 void BrushPanel::OnSwitchOut()
 {
 	////
+}
+
+void BrushPanel::OnToggleViewMode(wxCommandEvent& event)
+{
+	if(event.GetEventObject() == toggle_view_button) {
+		// Properly cleanup current brushbox first
+		if(brushbox) {
+			CleanupBrushbox(brushbox);
+			brushbox = nullptr;
+		}
+		loaded = false;
+
+		// Toggle between list and grid view
+		if(list_type == BRUSHLIST_SEAMLESS_GRID) {
+			list_type = BRUSHLIST_LISTBOX;
+			toggle_view_button->SetLabel("Grid View");
+			zoom_in_button->Enable(false);
+			zoom_out_button->Enable(false);
+		} else {
+			list_type = BRUSHLIST_SEAMLESS_GRID;
+			toggle_view_button->SetLabel("List View");
+			zoom_in_button->Enable(true);
+			zoom_out_button->Enable(true);
+		}
+
+		// Load new contents
+		LoadContents();
+
+		// Force proper layout update
+		sizer->Layout();
+		Layout();
+
+		// Get parent to relayout as well
+		wxWindow* parent = GetParent();
+		if(parent) {
+			parent->Layout();
+			parent->Refresh();
+		}
+
+		Refresh();
+		Update();
+	} else if(event.GetEventObject() == zoom_in_button && list_type == BRUSHLIST_SEAMLESS_GRID) {
+		OnZoomIn(event);
+	} else if(event.GetEventObject() == zoom_out_button && list_type == BRUSHLIST_SEAMLESS_GRID) {
+		OnZoomOut(event);
+	}
+}
+
+void BrushPanel::OnZoomIn(wxCommandEvent& event)
+{
+	if(list_type == BRUSHLIST_SEAMLESS_GRID && brushbox) {
+		SeamlessGridPanel* grid = dynamic_cast<SeamlessGridPanel*>(brushbox);
+		if(grid) {
+			grid->IncrementZoom();
+		}
+	}
+}
+
+void BrushPanel::OnZoomOut(wxCommandEvent& event)
+{
+	if(list_type == BRUSHLIST_SEAMLESS_GRID && brushbox) {
+		SeamlessGridPanel* grid = dynamic_cast<SeamlessGridPanel*>(brushbox);
+		if(grid) {
+			grid->DecrementZoom();
+		}
+	}
 }
 
 void BrushPanel::OnClickListBoxRow(wxCommandEvent& event)
@@ -864,4 +1002,647 @@ void BrushListBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 			}
 		}
 	}
+}
+// ============================================================================
+// SeamlessGridPanel
+// A direct rendering class for dense sprite grid with zero margins and pagination
+
+BEGIN_EVENT_TABLE(SeamlessGridPanel, wxScrolledWindow)
+EVT_LEFT_DOWN(SeamlessGridPanel::OnMouseClick)
+EVT_MOTION(SeamlessGridPanel::OnMouseMove)
+EVT_PAINT(SeamlessGridPanel::OnPaint)
+EVT_SIZE(SeamlessGridPanel::OnSize)
+EVT_SCROLLWIN(SeamlessGridPanel::OnScroll)
+EVT_TIMER(wxID_ANY, SeamlessGridPanel::OnTimer)
+EVT_KEY_DOWN(SeamlessGridPanel::OnKeyDown)
+END_EVENT_TABLE()
+
+SeamlessGridPanel::SeamlessGridPanel(wxWindow* parent, const TilesetCategory* _tileset) :
+	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxWANTS_CHARS),
+	BrushBoxInterface(_tileset),
+	columns(1),
+	sprite_size(32),
+	zoom_level(1),
+	selected_index(-1),
+	hover_index(-1),
+	buffer(nullptr),
+	show_item_ids(false),
+	first_visible_row(0),
+	last_visible_row(0),
+	visible_rows_margin(30),
+	total_rows(0),
+	need_full_redraw(true),
+	use_progressive_loading(true),
+	is_large_tileset(false),
+	loading_step(0),
+	max_loading_steps(5),
+	loading_timer(nullptr),
+	chunk_size(g_settings.getInteger(Config::GRID_CHUNK_SIZE)),
+	current_chunk(0),
+	total_chunks(1),
+	navigation_panel(nullptr) {
+
+	SetBackgroundStyle(wxBG_STYLE_PAINT);
+	SetBackgroundColour(wxColour(64, 64, 64));
+	SetWindowStyle(GetWindowStyle() | wxWANTS_CHARS);
+
+	is_large_tileset = tileset && tileset->size() > LARGE_TILESET_THRESHOLD;
+
+	if (tileset && tileset->size() > 10000) {
+		total_chunks = (tileset->size() + chunk_size - 1) / chunk_size;
+		CreateNavigationPanel(parent);
+	}
+
+	visible_rows_margin = g_settings.getInteger(Config::GRID_VISIBLE_ROWS_MARGIN);
+
+	if (is_large_tileset && use_progressive_loading) {
+		loading_timer = new wxTimer(this);
+		max_loading_steps = 10;
+	}
+
+	sprite_cache.clear();
+	SetScrollRate(sprite_size, sprite_size);
+	RecalculateGrid();
+	SelectFirstBrush();
+
+	if (is_large_tileset && use_progressive_loading) {
+		StartProgressiveLoading();
+	}
+
+	// Ensure the panel is shown and has minimum size
+	SetMinSize(wxSize(100, 100));
+	Show();
+}
+
+SeamlessGridPanel::~SeamlessGridPanel() {
+	if (buffer) {
+		delete buffer;
+		buffer = nullptr;
+	}
+
+	if (loading_timer) {
+		loading_timer->Stop();
+		delete loading_timer;
+		loading_timer = nullptr;
+	}
+
+	ClearSpriteCache();
+}
+
+void SeamlessGridPanel::StartProgressiveLoading() {
+	if (!loading_timer) return;
+
+	loading_step = 0;
+	visible_rows_margin = 3;
+	need_full_redraw = true;
+
+	if(tileset->size() < 200) {
+		loading_step = max_loading_steps;
+		visible_rows_margin = 30;
+		if(loading_timer->IsRunning()) {
+			loading_timer->Stop();
+		}
+		UpdateViewableItems();
+		Refresh();
+		return;
+	}
+
+	int zoom_factor = zoom_level * zoom_level;
+	int itemsToShowInitially = std::min(100 / zoom_factor, static_cast<int>(tileset->size()));
+	itemsToShowInitially = std::max(20, itemsToShowInitially);
+
+	int itemsPerStep = (tileset->size() - itemsToShowInitially) / max_loading_steps;
+	itemsPerStep = std::max(30, itemsPerStep / zoom_factor);
+
+	if (itemsPerStep < 50) {
+		max_loading_steps = std::max(3, static_cast<int>(tileset->size() / (50 / zoom_factor)));
+	}
+
+	int interval = 200 + (zoom_level - 1) * 50;
+	loading_timer->Start(interval);
+	Refresh();
+}
+
+void SeamlessGridPanel::OnTimer(wxTimerEvent& event) {
+	loading_step++;
+	visible_rows_margin = std::min(3 + loading_step * 5, 30);
+	UpdateViewableItems();
+	Refresh();
+
+	if (loading_step >= max_loading_steps || static_cast<int>(tileset->size()) <= 1000) {
+		loading_timer->Stop();
+		loading_step = max_loading_steps;
+		visible_rows_margin = 30;
+		need_full_redraw = true;
+		Refresh();
+	}
+}
+
+void SeamlessGridPanel::UpdateViewableItems() {
+	if(!tileset || tileset->size() == 0 || total_rows == 0) return;
+
+	int xStart, yStart;
+	GetViewStart(&xStart, &yStart);
+	int ppuX, ppuY;
+	GetScrollPixelsPerUnit(&ppuX, &ppuY);
+
+	if(ppuY > 0) {
+		yStart *= ppuY;
+	} else {
+		yStart = 0;
+	}
+
+	int width, height;
+	GetClientSize(&width, &height);
+
+	// If no valid height, use a reasonable default
+	if(height <= 0) {
+		height = 250; // Default palette height
+	}
+
+	// If sprite_size is 0, use default
+	int effective_sprite_size = sprite_size > 0 ? sprite_size : 32;
+
+	int new_first_row = std::max(0, (yStart / effective_sprite_size) - visible_rows_margin);
+	int new_last_row = ((yStart + height) / effective_sprite_size) + visible_rows_margin;
+
+	// Ensure we don't exceed the total rows
+	if(new_last_row >= total_rows) {
+		new_last_row = total_rows - 1;
+	}
+
+	// Ensure we show at least something
+	if(new_last_row < 0) {
+		new_last_row = total_rows > 0 ? total_rows - 1 : 0;
+	}
+
+	if (new_first_row != first_visible_row || new_last_row != last_visible_row) {
+		first_visible_row = new_first_row;
+		last_visible_row = new_last_row;
+		Refresh();
+	}
+}
+
+void SeamlessGridPanel::ManageSpriteCache() {
+	const size_t MAX_CACHE_SIZE = 2000;
+	if (sprite_cache.size() > MAX_CACHE_SIZE) {
+		sprite_cache.clear();
+	}
+}
+
+void SeamlessGridPanel::ClearSpriteCache() {
+	sprite_cache.clear();
+}
+
+void SeamlessGridPanel::DrawItemsToPanel(wxDC& dc) {
+	if(!tileset || tileset->size() == 0) return;
+
+	if (need_full_redraw) {
+		ManageSpriteCache();
+	}
+
+	int width, height;
+	GetClientSize(&width, &height);
+
+	// Draw loading progress for large datasets
+	if (loading_step < max_loading_steps && tileset->size() > 1000) {
+		int progressWidth = width - 40;
+		int progressHeight = 20;
+		int progressX = 20;
+		int progressY = 20;
+
+		dc.SetBrush(wxBrush(wxColor(200, 200, 200)));
+		dc.SetPen(wxPen(wxColor(100, 100, 100)));
+		dc.DrawRectangle(progressX, progressY, progressWidth, progressHeight);
+
+		float progress = static_cast<float>(loading_step + 1) / max_loading_steps;
+		dc.SetBrush(wxBrush(wxColor(0, 150, 0)));
+		dc.SetPen(wxPen(wxColor(0, 100, 0)));
+		dc.DrawRectangle(progressX, progressY, progressWidth * progress, progressHeight);
+
+		wxString zoomInfo = zoom_level > 1 ? wxString::Format(" (Zoom %dx)", zoom_level) : wxString("");
+		wxString loadingMsg = wxString::Format("Loading %zu items%s... (%d%%)",
+			tileset->size(), zoomInfo.c_str(), static_cast<int>((loading_step + 1) * 100 / max_loading_steps));
+
+		wxSize textSize = dc.GetTextExtent(loadingMsg);
+		dc.SetTextForeground(wxColor(0, 0, 0));
+		dc.DrawText(loadingMsg, (width - textSize.GetWidth()) / 2, progressY + progressHeight + 5);
+
+		int maxItemsToDraw = tileset->size() * progress;
+
+		for(int row = first_visible_row; row <= last_visible_row; ++row) {
+			for(int col = 0; col < columns; ++col) {
+				int index = row * columns + col;
+
+				if (tileset->size() > 10000) {
+					index = current_chunk * chunk_size + index;
+				}
+
+				if(index >= static_cast<int>(tileset->size()) || index >= maxItemsToDraw) break;
+
+				int x = col * sprite_size;
+				int y = row * sprite_size;
+
+				if (y < progressY + progressHeight + 40) continue;
+
+				DrawSpriteAt(dc, x, y, index);
+			}
+		}
+	} else {
+		if (tileset->size() > 10000) {
+			size_t chunk_start = current_chunk * chunk_size;
+			size_t items_in_chunk = std::min(static_cast<size_t>(chunk_size), tileset->size() - chunk_start);
+
+			for(int row = first_visible_row; row <= last_visible_row; ++row) {
+				for(int col = 0; col < columns; ++col) {
+					int local_index = row * columns + col;
+					if(local_index >= static_cast<int>(items_in_chunk)) break;
+
+					int global_index = chunk_start + local_index;
+					int x = col * sprite_size;
+					int y = row * sprite_size;
+
+					DrawSpriteAt(dc, x, y, global_index);
+				}
+			}
+		} else {
+			for(int row = first_visible_row; row <= last_visible_row; ++row) {
+				for(int col = 0; col < columns; ++col) {
+					int index = row * columns + col;
+					if(index >= static_cast<int>(tileset->size())) break;
+
+					int x = col * sprite_size;
+					int y = row * sprite_size;
+
+					DrawSpriteAt(dc, x, y, index);
+				}
+			}
+		}
+	}
+
+	need_full_redraw = false;
+}
+
+void SeamlessGridPanel::DrawSpriteAt(wxDC& dc, int x, int y, int index) {
+	if (index < 0 || index >= static_cast<int>(tileset->size())) return;
+
+	Brush* brush = tileset->brushlist[index];
+	if (!brush) return;
+
+	if (index == selected_index) {
+		wxColor selectColor(120, 120, 200, 180);
+		dc.SetBrush(wxBrush(selectColor));
+		dc.SetPen(wxPen(wxColor(80, 80, 160), 2));
+		dc.DrawRectangle(x, y, sprite_size, sprite_size);
+	} else if (index == hover_index) {
+		wxColor hoverColor(200, 200, 255, 120);
+		dc.SetBrush(wxBrush(hoverColor));
+		dc.SetPen(wxPen(wxColor(150, 150, 230, 180), 1));
+		dc.DrawRectangle(x, y, sprite_size, sprite_size);
+	}
+
+	bool need_to_create_sprite = true;
+
+	if (sprite_cache.count(index) > 0 && sprite_cache[index].is_valid) {
+		if (sprite_cache[index].zoom_level == zoom_level) {
+			dc.DrawBitmap(sprite_cache[index].bitmap, x, y, true);
+			need_to_create_sprite = false;
+		}
+	}
+
+	if (need_to_create_sprite) {
+		Sprite* sprite = g_gui.gfx.getSprite(brush->getLookID());
+		if (sprite) {
+			if (zoom_level == 1) {
+				wxBitmap bmp(32, 32);
+				wxMemoryDC memDC(bmp);
+				memDC.SetBackground(*wxTRANSPARENT_BRUSH);
+				memDC.Clear();
+				sprite->DrawTo(&memDC, SPRITE_SIZE_32x32, 0, 0, 32, 32);
+				memDC.SelectObject(wxNullBitmap);
+
+				CachedSprite cached;
+				cached.bitmap = bmp;
+				cached.zoom_level = zoom_level;
+				cached.is_valid = true;
+				sprite_cache[index] = cached;
+
+				dc.DrawBitmap(bmp, x, y, true);
+			} else {
+				wxBitmap temp_bmp(32, 32);
+				wxMemoryDC temp_dc(temp_bmp);
+				temp_dc.SetBackground(*wxTRANSPARENT_BRUSH);
+				temp_dc.Clear();
+				sprite->DrawTo(&temp_dc, SPRITE_SIZE_32x32, 0, 0, 32, 32);
+				temp_dc.SelectObject(wxNullBitmap);
+
+				wxImage img = temp_bmp.ConvertToImage();
+				img.SetMaskColour(255, 0, 255);
+				img = img.Rescale(sprite_size, sprite_size, wxIMAGE_QUALITY_HIGH);
+				wxBitmap scaled(img);
+
+				CachedSprite cached;
+				cached.bitmap = scaled;
+				cached.zoom_level = zoom_level;
+				cached.is_valid = true;
+				sprite_cache[index] = cached;
+
+				dc.DrawBitmap(scaled, x, y, true);
+			}
+		}
+	}
+
+	if (show_item_ids && brush->isRaw()) {
+		RAWBrush* raw = static_cast<RAWBrush*>(brush);
+		wxFont font = dc.GetFont();
+		font.SetPointSize(std::max(8, 8 + (zoom_level - 1) * 2));
+		dc.SetFont(font);
+
+		wxString idText = wxString::Format("%d", raw->getItemID());
+		wxSize textSize = dc.GetTextExtent(idText);
+		int textHeight = std::max(14, 14 + (zoom_level - 1) * 4);
+
+		wxColor bgColor(0, 0, 0, 140);
+		dc.SetBrush(wxBrush(bgColor));
+		dc.SetPen(wxPen(wxColor(0, 0, 0, 0)));
+		dc.DrawRectangle(x, y + sprite_size - textHeight, textSize.GetWidth() + 4, textHeight);
+
+		dc.SetTextForeground(wxColor(255, 255, 255));
+		dc.DrawText(idText, x + 2, y + sprite_size - textHeight);
+	}
+}
+
+void SeamlessGridPanel::OnPaint(wxPaintEvent& event) {
+	wxAutoBufferedPaintDC dc(this);
+	DoPrepareDC(dc);
+	dc.SetBackground(wxBrush(GetBackgroundColour()));
+	dc.Clear();
+	DrawItemsToPanel(dc);
+}
+
+void SeamlessGridPanel::OnSize(wxSizeEvent& event) {
+	RecalculateGrid();
+	Refresh();
+	event.Skip();
+}
+
+void SeamlessGridPanel::RecalculateGrid() {
+	if(!tileset || tileset->size() == 0) return;
+
+	int width, height;
+	GetClientSize(&width, &height);
+
+	// If no valid size yet, try to get from parent
+	if(width <= 0) {
+		wxWindow* parent = GetParent();
+		if(parent) {
+			parent->GetClientSize(&width, &height);
+		}
+	}
+
+	// Ensure we have a valid width - use sensible minimum
+	if(width < sprite_size) {
+		width = 180; // Reasonable minimum width for palette
+	}
+
+	// Calculate columns based on available width
+	columns = std::max(1, width / sprite_size);
+
+	if (tileset->size() > 10000) {
+		size_t chunk_start = current_chunk * chunk_size;
+		size_t items_in_chunk = std::min(static_cast<size_t>(chunk_size), tileset->size() - chunk_start);
+		total_rows = (items_in_chunk + columns - 1) / columns;
+		int virtual_height = total_rows * sprite_size;
+
+		if (current_chunk < total_chunks - 1) {
+			virtual_height += 40;
+		}
+
+		SetVirtualSize(width, virtual_height);
+	} else {
+		total_rows = (tileset->size() + columns - 1) / columns;
+		int virtual_height = total_rows * sprite_size;
+		SetVirtualSize(width, virtual_height);
+	}
+
+	// Ensure visible rows are calculated correctly
+	first_visible_row = 0;
+	last_visible_row = std::min(total_rows - 1, (height / sprite_size) + visible_rows_margin);
+	if(last_visible_row < 0) last_visible_row = total_rows - 1;
+
+	UpdateViewableItems();
+
+	if (buffer) {
+		delete buffer;
+		buffer = nullptr;
+	}
+
+	ManageSpriteCache();
+	need_full_redraw = true;
+}
+
+void SeamlessGridPanel::OnScroll(wxScrollWinEvent& event) {
+	UpdateViewableItems();
+
+	if (loading_step < max_loading_steps && tileset->size() > 1000) {
+		visible_rows_margin = 3;
+		UpdateViewableItems();
+		Refresh();
+		StartProgressiveLoading();
+	} else {
+		visible_rows_margin = 30;
+		UpdateViewableItems();
+		Refresh();
+	}
+
+	event.Skip();
+}
+
+int SeamlessGridPanel::GetSpriteIndexAt(int x, int y) const {
+	int logX, logY;
+	CalcUnscrolledPosition(x, y, &logX, &logY);
+	int col = logX / sprite_size;
+	int row = logY / sprite_size;
+	int index = row * columns + col;
+
+	if (index >= 0 && index < static_cast<int>(tileset->size()) && col >= 0 && col < columns) {
+		return index;
+	}
+
+	return -1;
+}
+
+void SeamlessGridPanel::OnMouseClick(wxMouseEvent& event) {
+	int xPos, yPos;
+	CalcUnscrolledPosition(event.GetX(), event.GetY(), &xPos, &yPos);
+	int col = xPos / sprite_size;
+	int row = yPos / sprite_size;
+
+	if (col >= 0 && col < columns && row >= 0) {
+		int index = row * columns + col;
+
+		if (tileset->size() > 10000) {
+			size_t chunk_start = current_chunk * chunk_size;
+			size_t items_in_chunk = std::min(static_cast<size_t>(chunk_size), tileset->size() - chunk_start);
+			if (index >= static_cast<int>(items_in_chunk)) return;
+			index = chunk_start + index;
+		}
+
+		if (index >= 0 && index < static_cast<int>(tileset->size())) {
+			selected_index = index;
+			Refresh();
+
+			wxWindow* w = this;
+			while((w = w->GetParent()) && dynamic_cast<PaletteWindow*>(w) == nullptr);
+			if(w) {
+				g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
+			}
+
+			g_gui.SelectBrush(tileset->brushlist[index], tileset->getType());
+		}
+	}
+
+	event.Skip();
+}
+
+void SeamlessGridPanel::OnMouseMove(wxMouseEvent& event) {
+	int old_hover = hover_index;
+	hover_index = GetSpriteIndexAt(event.GetX(), event.GetY());
+
+	if (hover_index != old_hover) {
+		Refresh();
+	}
+
+	event.Skip();
+}
+
+void SeamlessGridPanel::OnKeyDown(wxKeyEvent& event) {
+	int keycode = event.GetKeyCode();
+	int new_index = selected_index;
+
+	switch(keycode) {
+		case WXK_LEFT:
+			if(selected_index > 0) new_index = selected_index - 1;
+			break;
+		case WXK_RIGHT:
+			if(selected_index < static_cast<int>(tileset->size()) - 1) new_index = selected_index + 1;
+			break;
+		case WXK_UP:
+			if(selected_index >= columns) new_index = selected_index - columns;
+			break;
+		case WXK_DOWN:
+			if(selected_index + columns < static_cast<int>(tileset->size())) new_index = selected_index + columns;
+			break;
+		default:
+			event.Skip();
+			return;
+	}
+
+	if(new_index != selected_index) {
+		SelectIndex(new_index);
+	}
+
+	event.Skip();
+}
+
+void SeamlessGridPanel::SelectFirstBrush() {
+	if(tileset && tileset->size() > 0) {
+		selected_index = 0;
+		Refresh();
+	}
+}
+
+Brush* SeamlessGridPanel::GetSelectedBrush() const {
+	if(selected_index >= 0 && selected_index < static_cast<int>(tileset->size())) {
+		return tileset->brushlist[selected_index];
+	}
+	if(tileset && tileset->size() > 0) {
+		return tileset->brushlist[0];
+	}
+	return nullptr;
+}
+
+bool SeamlessGridPanel::SelectBrush(const Brush* whatbrush) {
+	if(!whatbrush || !tileset) return false;
+
+	for(size_t i = 0; i < tileset->size(); ++i) {
+		if(tileset->brushlist[i] == whatbrush) {
+			SelectIndex(i);
+			return true;
+		}
+	}
+	return false;
+}
+
+void SeamlessGridPanel::SelectIndex(int index) {
+	if(index < 0 || index >= static_cast<int>(tileset->size())) return;
+
+	selected_index = index;
+
+	if (tileset->size() > 10000) {
+		int target_chunk = index / chunk_size;
+		if (target_chunk != current_chunk) {
+			current_chunk = target_chunk;
+			ClearSpriteCache();
+			RecalculateGrid();
+			UpdateNavigationPanel();
+		}
+	}
+
+	int row = (index % chunk_size) / columns;
+	int scroll_y = row * sprite_size;
+	int ppuX, ppuY;
+	GetScrollPixelsPerUnit(&ppuX, &ppuY);
+	if(ppuY > 0) {
+		Scroll(-1, scroll_y / ppuY);
+	}
+
+	Refresh();
+}
+
+int SeamlessGridPanel::IncrementZoom() {
+	if(zoom_level < 4) {
+		SetZoomLevel(zoom_level + 1);
+	}
+	return zoom_level;
+}
+
+int SeamlessGridPanel::DecrementZoom() {
+	if(zoom_level > 1) {
+		SetZoomLevel(zoom_level - 1);
+	}
+	return zoom_level;
+}
+
+void SeamlessGridPanel::SetZoomLevel(int level) {
+	if(level < 1) level = 1;
+	if(level > 4) level = 4;
+
+	if(level != zoom_level) {
+		zoom_level = level;
+		sprite_size = 32 * zoom_level;
+		ClearSpriteCache();
+		SetScrollRate(sprite_size, sprite_size);
+		RecalculateGrid();
+		Refresh();
+	}
+}
+
+void SeamlessGridPanel::UpdateGridSize() {
+	sprite_size = 32 * zoom_level;
+	SetScrollRate(sprite_size, sprite_size);
+	RecalculateGrid();
+}
+
+void SeamlessGridPanel::CreateNavigationPanel(wxWindow* parent) {
+	// Implementation would go here if needed for large tilesets
+	// For now, keeping it simple
+}
+
+void SeamlessGridPanel::UpdateNavigationPanel() {
+	// Implementation would go here if needed for large tilesets
+}
+
+void SeamlessGridPanel::OnNavigationButtonClicked(wxCommandEvent& event) {
+	// Implementation would go here if needed for large tilesets
 }

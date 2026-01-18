@@ -155,6 +155,9 @@
             <item name="Show Wall Hoo$ks" hotkey="K" action="SHOW_WALL_HOOKS" help="Show indicators for wall hooks."/>
             <item name="Show Pickupables" action="SHOW_PICKUPABLES" help="Show indicators for pickupable items."/>
             <item name="Show Moveables" action="SHOW_MOVEABLES" help="Show indicators for moveable items."/>
+            <item name="Show Wall $Borders" action="SHOW_WALL_BORDERS" help="Show border lines on walls and terrain edges."/>
+            <item name="Show $Mountain Overlay" action="SHOW_MOUNTAIN_OVERLAY" help="Show transparent overlay on mountain tiles."/>
+            <item name="Show $Stair Direction" action="SHOW_STAIR_DIRECTION" help="Show directional arrows on stairs and ramps."/>
         </menu>
     </menu>
     <menu name="$Window">

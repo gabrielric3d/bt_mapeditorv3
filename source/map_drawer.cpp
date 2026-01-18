@@ -24,6 +24,7 @@
 #endif
 
 #include "editor.h"
+#include "ground_brush.h"
 #include "gui.h"
 #include "sprites.h"
 #include "map_drawer.h"
@@ -165,6 +166,9 @@ void DrawingOptions::LoadFromSettings()
 	show_hooks = g_settings.getBoolean(Config::SHOW_WALL_HOOKS);
 	show_pickupables = g_settings.getBoolean(Config::SHOW_PICKUPABLES);
 	show_moveables = g_settings.getBoolean(Config::SHOW_MOVEABLES);
+	show_wall_borders = g_settings.getBoolean(Config::SHOW_WALL_BORDERS);
+	show_mountain_overlay = g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY);
+	show_stair_direction = g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
 	custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
@@ -333,6 +337,10 @@ void MapDrawer::Draw()
 	DrawBackground();
 	DrawMap();
 	DrawSpawnOverlays();
+	if(options.show_mountain_overlay)
+		DrawMountainOverlay();
+	if(options.show_wall_borders)
+		DrawWallBorderLines();
 	DrawDraggingShadow();
 	DrawHigherFloors();
 	if(options.dragging)
@@ -340,22 +348,26 @@ void MapDrawer::Draw()
 	DrawLiveCursors();
 	DrawBrush();
 	DrawCursorTile();
-	
+
 	// Skip grid in high LOD levels
 	if(options.show_grid && zoom <= 10.f && lod_level < 3)
 		DrawGrid();
-	
+
 	// Skip lights in medium/high LOD levels
 	if(options.isDrawLight() && lod_level < 2)
 		DrawLights();
-	
+
 	if(options.show_ingame_box)
 		DrawIngameBox();
-	
+
 	// Skip tooltips in high LOD levels
 	if(options.isTooltips() && lod_level < 3)
 		DrawTooltips();
-	
+
+	// Draw stair directions on top of everything for visibility
+	if(options.show_stair_direction)
+		DrawStairDirections();
+
 	DrawStatsOverlay();
 }
 
@@ -2137,6 +2149,260 @@ void MapDrawer::DrawSpawnOverlays()
 			std::get<5>(overlay)
 		);
 	}
+}
+
+void MapDrawer::DrawWallBorderLines()
+{
+	int adjustment = getFloorAdjustment(floor);
+	const wxColor border_color(220, 220, 0, 200); // Yellow
+	const int mountain_z_order_threshold = 9000; // Mountains have z-order >= 9000
+
+	// Helper to check if tile has wall or mountain ground
+	auto is_highlighted_tile = [&](Tile* t) -> bool {
+		if(!t) return false;
+		if(t->hasWall()) return true;
+		// Check for mountain ground (high z-order)
+		if(t->ground) {
+			GroundBrush* gb = t->ground->getGroundBrush();
+			if(gb && gb->getZ() >= mountain_z_order_threshold) return true;
+		}
+		return false;
+	};
+
+	glDisable(GL_TEXTURE_2D);
+	glLineWidth(2.0f);
+	glBegin(GL_LINES);
+
+	for(int y = start_y; y <= end_y; ++y) {
+		for(int x = start_x; x <= end_x; ++x) {
+			Tile* tile = editor.getMap().getTile(x, y, floor);
+			if(!tile || !is_highlighted_tile(tile)) continue;
+
+			int sx = x * rme::TileSize - view_scroll_x - adjustment;
+			int sy = y * rme::TileSize - view_scroll_y - adjustment;
+
+			glColor4ub(border_color.Red(), border_color.Green(), border_color.Blue(), border_color.Alpha());
+
+			// Check neighbors - draw line on edge where neighbor is NOT highlighted (outer border only)
+			bool neighbor_north = is_highlighted_tile(editor.getMap().getTile(x, y - 1, floor));
+			bool neighbor_south = is_highlighted_tile(editor.getMap().getTile(x, y + 1, floor));
+			bool neighbor_west = is_highlighted_tile(editor.getMap().getTile(x - 1, y, floor));
+			bool neighbor_east = is_highlighted_tile(editor.getMap().getTile(x + 1, y, floor));
+
+			// Draw line on north edge if no highlighted neighbor to the north
+			if(!neighbor_north) {
+				glVertex2f(sx, sy);
+				glVertex2f(sx + rme::TileSize, sy);
+			}
+			// Draw line on south edge if no highlighted neighbor to the south
+			if(!neighbor_south) {
+				glVertex2f(sx, sy + rme::TileSize);
+				glVertex2f(sx + rme::TileSize, sy + rme::TileSize);
+			}
+			// Draw line on west edge if no highlighted neighbor to the west
+			if(!neighbor_west) {
+				glVertex2f(sx, sy);
+				glVertex2f(sx, sy + rme::TileSize);
+			}
+			// Draw line on east edge if no highlighted neighbor to the east
+			if(!neighbor_east) {
+				glVertex2f(sx + rme::TileSize, sy);
+				glVertex2f(sx + rme::TileSize, sy + rme::TileSize);
+			}
+		}
+	}
+
+	glEnd();
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawMountainOverlay()
+{
+	int adjustment = getFloorAdjustment(floor);
+	const int mountain_z_order_threshold = 9000; // Mountains have z-order >= 9000
+
+	// Helper to check if tile has mountain ground
+	auto is_mountain_tile = [&](Tile* t) -> bool {
+		if(!t || !t->ground) return false;
+		GroundBrush* gb = t->ground->getGroundBrush();
+		return gb && gb->getZ() >= mountain_z_order_threshold;
+	};
+
+	glDisable(GL_TEXTURE_2D);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	for(int y = start_y; y <= end_y; ++y) {
+		for(int x = start_x; x <= end_x; ++x) {
+			Tile* tile = editor.getMap().getTile(x, y, floor);
+			if(!tile || !is_mountain_tile(tile)) continue;
+
+			// Mountain ground at (x,y) renders visually at (x+1, y+1) due to isometric offset
+			int draw_x = x + 1;
+			int draw_y = y + 1;
+
+			int sx = draw_x * rme::TileSize - view_scroll_x - adjustment;
+			int sy = draw_y * rme::TileSize - view_scroll_y - adjustment;
+
+			// Draw semi-transparent overlay (dark with alpha)
+			glColor4ub(0, 0, 0, 128);
+			glBegin(GL_QUADS);
+			glVertex2f(sx, sy);
+			glVertex2f(sx + rme::TileSize, sy);
+			glVertex2f(sx + rme::TileSize, sy + rme::TileSize);
+			glVertex2f(sx, sy + rme::TileSize);
+			glEnd();
+		}
+	}
+
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawStairDirections()
+{
+	int adjustment = getFloorAdjustment(floor);
+	const int half_tile = rme::TileSize / 2;
+
+	// VERY LARGE arrow dimensions
+	const float body_length = 22.0f;  // Length of the arrow body
+	const float body_width = 14.0f;   // Width of the arrow body
+	const float head_length = 16.0f;  // Length of the arrow head
+	const float head_width = 26.0f;   // Width of the arrow head (wider than body)
+
+	glDisable(GL_TEXTURE_2D);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// Helper lambda to draw arrow shape (body + head) like the reference image
+	auto drawArrow = [&](float cx, float cy, int direction, bool is_outline) {
+		// direction: 0=north, 1=south, 2=east, 3=west, 4=down
+		float outline_offset = is_outline ? 3.0f : 0.0f;
+		float bl = body_length + outline_offset;
+		float bw = (body_width + outline_offset) / 2.0f;
+		float hl = head_length + outline_offset;
+		float hw = (head_width + outline_offset) / 2.0f;
+
+		// Calculate total arrow length
+		float total_len = bl + hl;
+		float start_offset = total_len / 2.0f;
+
+		switch(direction) {
+			case 0: // North (up)
+				// Arrow body (rectangle)
+				glBegin(GL_QUADS);
+				glVertex2f(cx - bw, cy + start_offset);
+				glVertex2f(cx + bw, cy + start_offset);
+				glVertex2f(cx + bw, cy + start_offset - bl);
+				glVertex2f(cx - bw, cy + start_offset - bl);
+				glEnd();
+				// Arrow head (triangle)
+				glBegin(GL_TRIANGLES);
+				glVertex2f(cx, cy - start_offset);
+				glVertex2f(cx - hw, cy + start_offset - bl);
+				glVertex2f(cx + hw, cy + start_offset - bl);
+				glEnd();
+				break;
+
+			case 1: // South (down)
+			case 4: // Down (same visual)
+				glBegin(GL_QUADS);
+				glVertex2f(cx - bw, cy - start_offset);
+				glVertex2f(cx + bw, cy - start_offset);
+				glVertex2f(cx + bw, cy - start_offset + bl);
+				glVertex2f(cx - bw, cy - start_offset + bl);
+				glEnd();
+				glBegin(GL_TRIANGLES);
+				glVertex2f(cx, cy + start_offset);
+				glVertex2f(cx - hw, cy - start_offset + bl);
+				glVertex2f(cx + hw, cy - start_offset + bl);
+				glEnd();
+				break;
+
+			case 2: // East (right)
+				glBegin(GL_QUADS);
+				glVertex2f(cx - start_offset, cy - bw);
+				glVertex2f(cx - start_offset, cy + bw);
+				glVertex2f(cx - start_offset + bl, cy + bw);
+				glVertex2f(cx - start_offset + bl, cy - bw);
+				glEnd();
+				glBegin(GL_TRIANGLES);
+				glVertex2f(cx + start_offset, cy);
+				glVertex2f(cx - start_offset + bl, cy - hw);
+				glVertex2f(cx - start_offset + bl, cy + hw);
+				glEnd();
+				break;
+
+			case 3: // West (left)
+				glBegin(GL_QUADS);
+				glVertex2f(cx + start_offset, cy - bw);
+				glVertex2f(cx + start_offset, cy + bw);
+				glVertex2f(cx + start_offset - bl, cy + bw);
+				glVertex2f(cx + start_offset - bl, cy - bw);
+				glEnd();
+				glBegin(GL_TRIANGLES);
+				glVertex2f(cx - start_offset, cy);
+				glVertex2f(cx + start_offset - bl, cy - hw);
+				glVertex2f(cx + start_offset - bl, cy + hw);
+				glEnd();
+				break;
+
+			default:
+				return;
+		}
+	};
+
+	// Collect all stairs to draw - ONLY CURRENT FLOOR
+	struct StairInfo {
+		float cx, cy;
+		int direction;
+	};
+	std::vector<StairInfo> stairs;
+
+	for(int y = start_y; y <= end_y; ++y) {
+		for(int x = start_x; x <= end_x; ++x) {
+			Tile* tile = editor.getMap().getTile(x, y, floor);
+			if(!tile) continue;
+
+			for(Item* item : tile->items) {
+				if(!item) continue;
+				const ItemType& type = g_items.getItemType(item->getID());
+				if(!type.isFloorChange()) continue;
+
+				int sx = x * rme::TileSize - view_scroll_x - adjustment;
+				int sy = y * rme::TileSize - view_scroll_y - adjustment;
+				float cx = sx + half_tile;
+				float cy = sy + half_tile;
+
+				int direction = -1;
+
+				if(type.floorChangeNorth) direction = 0;
+				else if(type.floorChangeSouth) direction = 1;
+				else if(type.floorChangeEast) direction = 2;
+				else if(type.floorChangeWest) direction = 3;
+				else if(type.floorChangeDown) direction = 4;
+
+				if(direction >= 0) {
+					stairs.push_back({cx, cy, direction});
+				}
+
+				break; // Only one arrow per tile
+			}
+		}
+	}
+
+	// Draw black outlines first (behind)
+	glColor4ub(0, 0, 0, 255);
+	for(const auto& stair : stairs) {
+		drawArrow(stair.cx, stair.cy, stair.direction, true);
+	}
+
+	// Draw red fill on top (like the reference image)
+	glColor4ub(220, 50, 50, 255);
+	for(const auto& stair : stairs) {
+		drawArrow(stair.cx, stair.cy, stair.direction, false);
+	}
+
+	glEnable(GL_TEXTURE_2D);
 }
 
 void MapDrawer::DrawIndicator(int x, int y, int indicator, uint8_t r, uint8_t g, uint8_t b, uint8_t a)

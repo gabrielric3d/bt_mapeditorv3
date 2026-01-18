@@ -431,6 +431,7 @@
 			<brush name="deepling spawn"/>
 			<brush name="blue sea floor"/>
 			<brush name="brown sea floor"/>
+			<brush name="darkisland sea floor"/>
 			<brush name="unknowndeepling"/>
 			<brush name="crystal floor"/>
 			<brush name="scattered crystals"/>
@@ -7947,6 +7948,14 @@
 			<brush name="buoy line"/>
 			<brush name="boat template"/>
 			<brush name="small boat"/>
+
+			<brush name="algae choked sunken canoe"/>
+			<brush name="coralbound wrecked canoe"/>
+			<brush name="abyssal vine-entangled canoe"/>
+			<brush name="shattered starfish canoe wreck"/>
+			<brush name="shattered ice canoe wreck 1"/>
+			<brush name="shattered ice canoe wreck 2"/>
+
 			<brush name="fossil volute"/>
 			<brush name="moist stones"/>
 			<brush name="small moist stones"/>
@@ -7988,7 +7997,49 @@
 			<brush name="enormous deepling statue (elevated)"/>
 			<brush name="enormous deepling statue (non elevated) - red gem"/>
 			<brush name="coral1"/>
-			<item fromid="51644" toid="51779"/>
+			<brush name="coral2"/>
+			<brush name="new sea rock2"/>
+			<brush name="new sea rock3"/>
+			<brush name="new sea rock4"/>
+			<brush name="new sea rock5"/>
+			<brush name="new sea rock6"/>
+			<brush name="new sea rock7"/>
+			<brush name="new sea rock8"/>
+			<brush name="new sea rock9"/>
+			<brush name="new sea rock10"/>
+			<brush name="new sea rock11"/>
+			<brush name="new sea rock12"/>
+			<brush name="new sea rock13"/>
+			<brush name="new sea rock14"/>
+			<brush name="new sea rock15"/>
+			<brush name="new sea rock16"/>
+			<brush name="new sea rock17"/>
+			<brush name="new sea rock18"/>
+			<brush name="new sea rock19"/>
+			<brush name="new sea rock20"/>
+			<brush name="new sea rock21"/>
+			<brush name="new sea rock22"/>
+			<brush name="new sea rock23"/>
+			<brush name="new sea rock24"/>
+			<brush name="new sea rock25"/>
+			<brush name="new sea rock26"/>
+			<brush name="new sea rock27"/>
+			<brush name="new sea rock28"/>
+			<brush name="new sea rock29"/>
+			<brush name="new sea rock30"/>
+			<brush name="new sea rock31"/>
+			<brush name="new sea rock32"/>
+			<brush name="new sea rock33"/>
+			<brush name="new sea rock34"/>
+			<brush name="new sea rock35"/>
+			<item fromid="51644" toid="51674"/>
+			<item id="51735"/>
+			<item fromid="51738" toid="51739"/>
+			<item id="51742"/>
+			<item fromid="51747" toid="51748"/>
+			<item id="51751"/>
+			<item id="51764"/>
+			<item fromid="51773" toid="51779"/>
 		</doodad>
 	</tileset>
 </materials>
