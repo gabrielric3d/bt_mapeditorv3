@@ -71,6 +71,8 @@ public:
 	void OnRightClick(wxMouseEvent& event);
 	void OnApplyReplaceBox1(wxCommandEvent& event);
 	void OnApplyReplaceBox2(wxCommandEvent& event);
+	void OnCopyServerID(wxCommandEvent& event);
+	void OnCopyClientID(wxCommandEvent& event);
 
 private:
 	int icon_pixel_size;
@@ -105,6 +107,8 @@ public:
 	void OnRightClick(wxMouseEvent& event);
 	void OnApplyReplaceBox1(wxCommandEvent& event);
 	void OnApplyReplaceBox2(wxCommandEvent& event);
+	void OnCopyServerID(wxCommandEvent& event);
+	void OnCopyClientID(wxCommandEvent& event);
 protected:
 	// Used internally to deselect all buttons before selecting a newd one.
 	void DeselectAll();

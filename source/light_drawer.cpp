@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include "light_drawer.h"
+#include "settings.h"
 
 LightDrawer::LightDrawer() :
 	texture(0),
@@ -80,8 +81,9 @@ void LightDrawer::draw(int map_x, int map_y, int width, int height, int scroll_x
 	const int draw_height = buffer_height * rme::TileSize;
 
 	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	GLint filter = g_settings.getBoolean(Config::USE_ANTIALIASING) ? GL_LINEAR : GL_NEAREST;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, buffer_width, buffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());

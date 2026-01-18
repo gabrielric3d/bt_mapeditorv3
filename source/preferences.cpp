@@ -226,6 +226,11 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(icon_selection_shadow_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(icon_selection_shadow_chkbox, "When this option is checked, selected items in the palette menu will be shaded.");
 
+	use_antialiasing_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use texture anti-aliasing");
+	use_antialiasing_chkbox->SetValue(g_settings.getBoolean(Config::USE_ANTIALIASING));
+	sizer->Add(use_antialiasing_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(use_antialiasing_chkbox, "When enabled, sprites are rendered with smooth filtering (bilinear interpolation). Disable for a pixelated look.");
+
 	use_memcached_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use memcached sprites");
 	use_memcached_chkbox->SetValue(g_settings.getBoolean(Config::USE_MEMCACHED_SPRITES));
 	sizer->Add(use_memcached_chkbox, 0, wxLEFT | wxTOP, 5);
@@ -789,6 +794,14 @@ void PreferencesWindow::Apply()
 	
 	g_settings.setInteger(Config::SPRITE_CACHE_SIZE, sprite_cache_size_spin->GetValue());
 	g_settings.setInteger(Config::USE_OPTIMIZED_MAP_LOADING, use_optimized_map_loading_chkbox->GetValue());
+
+	// Check if anti-aliasing setting changed and reload textures if needed
+	bool antialiasing_changed = g_settings.getBoolean(Config::USE_ANTIALIASING) != use_antialiasing_chkbox->GetValue();
+	g_settings.setInteger(Config::USE_ANTIALIASING, use_antialiasing_chkbox->GetValue());
+	if(antialiasing_changed) {
+		g_gui.gfx.reloadTextureFiltering();
+	}
+
 	g_settings.setInteger(Config::HARD_REFRESH_RATE, refresh_rate_spin->GetValue());
 	if(icon_background_choice->GetSelection() == 0) {
 		if(g_settings.getInteger(Config::ICON_BACKGROUND) != 0) {
@@ -922,9 +935,20 @@ void PreferencesWindow::Apply()
 	}
 	g_settings.setInteger(Config::CHECK_SIGNATURES, check_sigs_chkbox->GetValue());
 
+	// Save version IDs before reload (pointers will become invalid)
+	std::vector<ClientVersionID> version_ids;
+	for(const VersionDirControl& control : version_dir_controls) {
+		version_ids.push_back(control.version ? control.version->getID() : CLIENT_VERSION_NONE);
+	}
+
 	// Make sure to reload client paths
 	ClientVersion::saveVersions();
 	ClientVersion::loadVersions();
+
+	// Update version pointers after reload (old pointers are now invalid)
+	for(size_t i = 0; i < version_dir_controls.size() && i < version_ids.size(); ++i) {
+		version_dir_controls[i].version = ClientVersion::get(version_ids[i]);
+	}
 
 	g_settings.save();
 

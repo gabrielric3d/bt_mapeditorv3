@@ -30,7 +30,7 @@
 			<item id="1056" chance="0" />
 			 -- This needs to be here for backwards compability --
 			
-			<door id="6249" type="normal" open="false" />
+			<door id="6249" type="normal" open="false" />""
 			<door id="6250" type="normal" open="false" />
 			<door id="6251" type="normal" open="true" />
 			<door id="6255" type="locked" open="false" />
@@ -2092,6 +2092,21 @@
 		</wall>
 		<wall type="pole">
 			<item id="43659" chance="1" />
+		</wall>
+	</brush>
+
+	<brush name="blue spikey wall" type="wall" server_lookid="27716">
+		<wall type="pole">
+			<item id="27725" chance="1" />
+		</wall>
+		<wall type="horizontal">
+			<item id="27716" chance="1" />
+		</wall>
+		<wall type="vertical">
+			<item id="27719" chance="1" />
+		</wall>
+		<wall type="corner">
+			<item id="27722" chance="1" />
 		</wall>
 	</brush>
 </materials>

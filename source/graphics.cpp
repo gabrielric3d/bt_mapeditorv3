@@ -143,6 +143,21 @@ void GraphicManager::cleanSoftwareSprites()
 	}
 }
 
+void GraphicManager::reloadTextureFiltering()
+{
+	// Unload all GL textures so they get recreated with new filtering settings
+	for(ImageMap::iterator iter = image_space.begin(); iter != image_space.end(); ++iter) {
+		iter->second->clean(INT_MAX); // Force unload by setting time to max
+	}
+	for(SpriteMap::iterator iter = sprite_space.begin(); iter != sprite_space.end(); ++iter) {
+		GameSprite* gs = dynamic_cast<GameSprite*>(iter->second);
+		if(gs) {
+			gs->clean(INT_MAX); // Force unload templates
+		}
+	}
+	loaded_textures = 0;
+}
+
 Sprite* GraphicManager::getSprite(int id)
 {
 	SpriteMap::iterator it = sprite_space.find(id);
@@ -1190,8 +1205,9 @@ void GameSprite::Image::createGLTexture(GLuint textureId)
 	g_gui.gfx.loaded_textures += 1;
 
 	glBindTexture(GL_TEXTURE_2D, textureId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // Linear Filtering
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // Linear Filtering
+	GLint filter = g_settings.getBoolean(Config::USE_ANTIALIASING) ? GL_LINEAR : GL_NEAREST;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F); // GL_CLAMP_TO_EDGE
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rme::SpritePixels, rme::SpritePixels, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
@@ -1462,8 +1478,9 @@ void GameSprite::EditorImage::createGLTexture(GLuint textureId)
 	g_gui.gfx.loaded_textures += 1;
 
 	glBindTexture(GL_TEXTURE_2D, id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // Linear Filtering
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // Linear Filtering
+	GLint filter = g_settings.getBoolean(Config::USE_ANTIALIASING) ? GL_LINEAR : GL_NEAREST;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F); // GL_CLAMP_TO_EDGE
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rme::SpritePixels, rme::SpritePixels, 0, GL_RGBA, GL_UNSIGNED_BYTE, imageData);

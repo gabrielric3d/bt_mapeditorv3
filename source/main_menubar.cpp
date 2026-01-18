@@ -220,6 +220,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SELECT_MODE_LASSO, wxITEM_CHECK, OnSelectionLassoToggle);
 
 	MAKE_ACTION(AUTOMAGIC, wxITEM_CHECK, OnToggleAutomagic);
+	MAKE_ACTION(USE_GROUND_CARPET_BORDER, wxITEM_CHECK, OnToggleGroundCarpetBorder);
 	MAKE_ACTION(BORDERIZE_SELECTION, wxITEM_NORMAL, OnBorderizeSelection);
 	MAKE_ACTION(BORDERIZE_MAP, wxITEM_NORMAL, OnBorderizeMap);
 	MAKE_ACTION(RANDOMIZE_SELECTION, wxITEM_NORMAL, OnRandomizeSelection);
@@ -595,6 +596,7 @@ void MainMenuBar::LoadValues()
 	CheckItem(SELECT_MODE_LASSO, g_settings.getBoolean(Config::SELECTION_LASSO));
 
 	CheckItem(AUTOMAGIC, g_settings.getBoolean(Config::USE_AUTOMAGIC));
+	CheckItem(USE_GROUND_CARPET_BORDER, g_settings.getBoolean(Config::USE_GROUND_CARPET_BORDER));
 
 	CheckItem(SHOW_SHADE, g_settings.getBoolean(Config::SHOW_SHADE));
 	CheckItem(SHOW_INGAME_BOX, g_settings.getBoolean(Config::SHOW_INGAME_BOX));
@@ -1673,6 +1675,15 @@ void MainMenuBar::OnToggleAutomagic(wxCommandEvent& WXUNUSED(event))
 		g_gui.SetStatusText("Automagic enabled.");
 	else
 		g_gui.SetStatusText("Automagic disabled.");
+}
+
+void MainMenuBar::OnToggleGroundCarpetBorder(wxCommandEvent& WXUNUSED(event))
+{
+	g_settings.setInteger(Config::USE_GROUND_CARPET_BORDER, IsItemChecked(MenuBar::USE_GROUND_CARPET_BORDER));
+	if(g_settings.getInteger(Config::USE_GROUND_CARPET_BORDER))
+		g_gui.SetStatusText("Ground carpet border enabled.");
+	else
+		g_gui.SetStatusText("Ground carpet border disabled.");
 }
 
 void MainMenuBar::OnBorderizeSelection(wxCommandEvent& WXUNUSED(event))

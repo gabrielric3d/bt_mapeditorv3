@@ -2655,8 +2655,8 @@
 		<item id="15010" chance="2500"/>
 		<item id="15011" chance="2500"/>
 		
-		<!-- <border align="outer" id="159"/>
-		<border align="outer" to="none" id="159"/> -->
+		<border align="outer" id="261,159"/>
+		<border align="outer" to="none" id="261,159"/>
 	</brush>
 	
 	<brush name="brown sea floor" type="ground" server_lookid="15232" z-order="2700">
@@ -3376,7 +3376,7 @@
 		<border align="inner" to="none" id="1"/>
 	</brush>
 	
-	<brush name="crystal dirt" type="ground" server_lookid="21942" z-order="1300">
+	<brush name="crystal dirt" type="ground" server_lookid="21942" z-order="2300">
 		<item id="21942" chance="2500"/>
 		<item id="21943" chance="500"/>
 		<item id="21944" chance="500"/>
@@ -3386,8 +3386,8 @@
 		<item id="21948" chance="1000"/>
 		<item id="21949" chance="1000"/>
 		
-		<!-- <border align="outer" id="176"/>
-		<border align="inner" to="none" id="1"/> -->
+		<border align="outer" id="257,176"/>
+		<!-- <border align="inner" to="none" id="1"/> -->
 	</brush>
 	
 	<brush name="unknown4" type="ground" server_lookid="22167" z-order="2100">
@@ -3854,9 +3854,10 @@
 	<brush name="new ice mountain" type="ground" server_lookid="44700" z-order="9901" solo_optional="true">
 		<item id="44700" chance="1"/>
 		
-		<optional id="238"/>
-		<border align="outer" id="238"/>
-		<border align="outer" to="none" id="238"/>
+		<!-- <optional id="238"/> -->
+		<border align="outer" id="238" not-to="grotto"/>
+		<border align="outer" to="none" id="238" not-to="grotto"/>
+		<border align="outer" to="grotto" id="262"/>
 	</brush>
 
 	<brush name="rotten ground 2" type="ground" server_lookid="46071" z-order="3600">
@@ -3894,13 +3895,16 @@
 		<optional id="241"/>
 	</brush>
 
-	<brush name="ice ground 3" type="ground" server_lookid="44405" z-order="1">
+	<brush name="ice ground 3" type="ground" server_lookid="44405" z-order="2000">
 		<item id="44405" chance="2"/>
 		<item id="44406" chance="1"/>
 		<item id="44407" chance="1"/>
 		<item id="44408" chance="1"/>
 		<item id="44409" chance="1"/>
 		<item id="44410" chance="1"/>
+
+		<border align="outer" id="261"/>
+		<border align="outer" to="none" id="261"/>
 	</brush>
 
 	<brush name="ice mountain 4" type="ground" server_lookid="40801" z-order="1">
@@ -4185,10 +4189,10 @@
 		<border align="outer" to="none" id="252"/>
 	</brush>
 
-	<brush name="sunken sand" type="ground" server_lookid="45069" z-order="4701">
+	<brush name="sunken sand" type="ground" server_lookid="45069" z-order="1701">
 		<item id="45069" chance="1"/>
 		
-		<border align="outer" id="256"/>
+		<border align="outer" id="257"/>
 		<!-- <border align="inner" to="none" id="1"/> -->
 
 	</brush>
@@ -4212,5 +4216,13 @@
 		<border align="outer" id="260"/>
 		<border align="inner" to="none" id="1"/>
 	</brush>
+
+	<brush name="ice ground 4" type="ground" server_lookid="44646" z-order="2000">
+		<item id="44646" chance="2"/>
+
+		<border align="outer" id="263"/>
+		<border align="outer" to="none" id="263"/>
+	</brush>
+
 
 </materials>

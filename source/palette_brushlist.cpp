@@ -568,6 +568,8 @@ BEGIN_EVENT_TABLE(BrushIconBox, wxScrolledWindow)
 	EVT_RIGHT_DOWN(BrushIconBox::OnRightClick)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushIconBox::OnApplyReplaceBox1)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushIconBox::OnApplyReplaceBox2)
+	EVT_MENU(PALETTE_POPUP_MENU_COPY_SERVER_ID, BrushIconBox::OnCopyServerID)
+	EVT_MENU(PALETTE_POPUP_MENU_COPY_CLIENT_ID, BrushIconBox::OnCopyClientID)
 END_EVENT_TABLE()
 
 BrushIconBox::BrushIconBox(wxWindow *parent, const TilesetCategory *_tileset, RenderSize rsz) :
@@ -748,10 +750,16 @@ void BrushIconBox::OnRightClick(wxMouseEvent& event)
 {
 	Brush* brush = GetSelectedBrush();
 	if(brush && brush->isRaw()) {
-		wxMenu menu;
-		menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
-		menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
-		PopupMenu(&menu, event.GetPosition());
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			wxMenu menu;
+			menu.Append(PALETTE_POPUP_MENU_COPY_SERVER_ID, wxString::Format("Copy Server ID (%d)", raw->getItemID()));
+			menu.Append(PALETTE_POPUP_MENU_COPY_CLIENT_ID, wxString::Format("Copy Client ID (%d)", raw->getLookID()));
+			menu.AppendSeparator();
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+			PopupMenu(&menu, event.GetPosition());
+		}
 	}
 }
 
@@ -791,6 +799,34 @@ void BrushIconBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 	}
 }
 
+void BrushIconBox::OnCopyServerID(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			if(wxTheClipboard->Open()) {
+				wxTheClipboard->SetData(new wxTextDataObject(std::to_string(raw->getItemID())));
+				wxTheClipboard->Close();
+			}
+		}
+	}
+}
+
+void BrushIconBox::OnCopyClientID(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			if(wxTheClipboard->Open()) {
+				wxTheClipboard->SetData(new wxTextDataObject(std::to_string(raw->getLookID())));
+				wxTheClipboard->Close();
+			}
+		}
+	}
+}
+
 // ============================================================================
 // BrushListBox
 
@@ -801,6 +837,8 @@ BEGIN_EVENT_TABLE(BrushListBox, wxVListBox)
 	EVT_RIGHT_DOWN(BrushListBox::OnRightClick)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushListBox::OnApplyReplaceBox1)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushListBox::OnApplyReplaceBox2)
+	EVT_MENU(PALETTE_POPUP_MENU_COPY_SERVER_ID, BrushListBox::OnCopyServerID)
+	EVT_MENU(PALETTE_POPUP_MENU_COPY_CLIENT_ID, BrushListBox::OnCopyClientID)
 END_EVENT_TABLE()
 
 BrushListBox::BrushListBox(wxWindow* parent, const TilesetCategory* tileset) :
@@ -954,10 +992,16 @@ void BrushListBox::OnRightClick(wxMouseEvent& event)
 	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
 		Brush* brush = tileset->brushlist[n];
 		if(brush && brush->isRaw()) {
-			wxMenu menu;
-			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
-			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
-			PopupMenu(&menu, event.GetPosition());
+			RAWBrush* raw = brush->asRaw();
+			if(raw) {
+				wxMenu menu;
+				menu.Append(PALETTE_POPUP_MENU_COPY_SERVER_ID, wxString::Format("Copy Server ID (%d)", raw->getItemID()));
+				menu.Append(PALETTE_POPUP_MENU_COPY_CLIENT_ID, wxString::Format("Copy Client ID (%d)", raw->getLookID()));
+				menu.AppendSeparator();
+				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
+				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+				PopupMenu(&menu, event.GetPosition());
+			}
 		}
 	}
 }
@@ -1003,6 +1047,41 @@ void BrushListBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 		}
 	}
 }
+
+void BrushListBox::OnCopyServerID(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && brush->isRaw()) {
+			RAWBrush* raw = brush->asRaw();
+			if(raw) {
+				if(wxTheClipboard->Open()) {
+					wxTheClipboard->SetData(new wxTextDataObject(std::to_string(raw->getItemID())));
+					wxTheClipboard->Close();
+				}
+			}
+		}
+	}
+}
+
+void BrushListBox::OnCopyClientID(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && brush->isRaw()) {
+			RAWBrush* raw = brush->asRaw();
+			if(raw) {
+				if(wxTheClipboard->Open()) {
+					wxTheClipboard->SetData(new wxTextDataObject(std::to_string(raw->getLookID())));
+					wxTheClipboard->Close();
+				}
+			}
+		}
+	}
+}
+
 // ============================================================================
 // SeamlessGridPanel
 // A direct rendering class for dense sprite grid with zero margins and pagination

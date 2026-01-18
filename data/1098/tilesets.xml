@@ -387,6 +387,7 @@
 			<brush name="snow 2"/>
 			<brush name="ice"/>
 			<brush name="ice ground 3"/>
+			<brush name="ice ground 4"/>
 			<brush name="light swampdirt"/>
 			<brush name="swamp"/>
 			<brush name="dark swamp"/>
@@ -1430,6 +1431,7 @@
 			<brush name="oramond railing7"/>
 			<brush name="krailos spikes1"/>
 			<brush name="krailos spikes2"/>
+			<brush name="blue spikey wall"/>
 		</terrain>
 	</tileset>
 

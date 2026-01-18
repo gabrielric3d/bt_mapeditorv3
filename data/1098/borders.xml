@@ -377,7 +377,7 @@
 		<borderitem edge="s" item="935"/>
 	</border>
 	
-	<border id="29" type="optional"> -- normal mountain gravel border --
+	<!-- <border id="29" type="optional"> -- normal mountain gravel border --
 		<borderitem edge="n"   item="4471"/>
 		<borderitem edge="e"   item="4468"/>
 		<borderitem edge="s"   item="4469"/>
@@ -403,7 +403,7 @@
 		<borderitem edge="e"   item="4826"/>
 		<borderitem edge="s"   item="4827"/>
 		<borderitem edge="dse" item="877"/>
-	</border>
+	</border> -->
 
 	<border id="59">
 		<borderitem edge="n"   item="7989"/>
@@ -2929,5 +2929,69 @@
 		<borderitem edge="dne" item="51793"/>
 		<borderitem edge="dsw" item="51791"/>
 		<borderitem edge="dse" item="51790"/>
+	</border>
+
+	<border id="261"> -- stone ice
+		<borderitem edge="n"      item="46197"/>
+		<borderitem edge="w"      item="46199"/>
+		<borderitem edge="e"      item="46198"/>
+		<borderitem edge="s"      item="46196"/>
+		<borderitem edge="cnw"    item="46203"/>
+		<borderitem edge="cne"    item="46202"/>
+		<borderitem edge="csw"    item="46201"/>
+		<borderitem edge="cse"    item="46200"/>
+		<borderitem edge="dnw"    item="46207"/>
+		<borderitem edge="dne" 	  item="46206"/>
+		<borderitem edge="dsw"    item="46205"/>
+		<borderitem edge="dse"    item="46204"/>
+	</border>
+
+	<border id="262"> -- ice mountain inside border
+		<borderitem edge="n"      item="44701"/>
+		<borderitem edge="w"      item="44702"/>
+		<borderitem edge="e"      item="44704"/>
+		<borderitem edge="s"      item="44703"/>
+		<borderitem edge="cnw"    item="44712"/>
+		<borderitem edge="cne"    item="44711"/>
+		<borderitem edge="csw"    item="44710"/>
+		<borderitem edge="cse"    item="44709"/>
+		<borderitem edge="dnw"    item="44705"/>
+		<borderitem edge="dne" 	  item="44706"/>
+		<borderitem edge="dsw"    item="44708"/>
+		<borderitem edge="dse"    item="44707"/>
+	</border>
+
+	<border id="263"> -- ice ground 4
+		<borderitem edge="n"      item="44647"/>
+		<borderitem edge="w"      item="44650"/>
+		<borderitem edge="e"      item="44648"/>
+		<borderitem edge="s"      item="44649"/>
+
+		<borderitem edge="cnw"    item="44651"/>
+		<borderitem edge="cne"    item="44652"/>
+		<borderitem edge="csw"    item="44653"/>
+		<borderitem edge="cse"    item="44654"/>
+
+		<borderitem edge="dnw"    item="44655"/>
+		<borderitem edge="dne" 	  item="44656"/>
+		<borderitem edge="dsw"    item="44657"/>
+		<borderitem edge="dse"    item="44658"/>
+	</border>
+
+	<border id="264"> -- snow ground border 5
+		<borderitem edge="n"      item="44800"/>
+		<borderitem edge="w"      item="44803"/>
+		<borderitem edge="e"      item="44801"/>
+		<borderitem edge="s"      item="44802"/>
+
+		<borderitem edge="cnw"    item="44804"/>
+		<borderitem edge="cne"    item="44805"/>
+		<borderitem edge="csw"    item="44806"/>
+		<borderitem edge="cse"    item="44807"/>
+
+		<borderitem edge="dnw"    item="44808"/>
+		<borderitem edge="dne" 	  item="44809"/>
+		<borderitem edge="dsw"    item="44810"/>
+		<borderitem edge="dse"    item="44811"/>
 	</border>
 </materials>

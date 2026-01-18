@@ -303,8 +303,10 @@ wxString BrushSizePanel::GetName() const
 
 void BrushSizePanel::SetToolbarIconSize(bool d)
 {
-	InvalidateContents();
-	large_icons = d;
+	if(large_icons != d) {
+		InvalidateContents();
+		large_icons = d;
+	}
 }
 
 void BrushSizePanel::OnSwitchIn() {
@@ -602,8 +604,10 @@ wxString BrushToolPanel::GetName() const
 
 void BrushToolPanel::SetToolbarIconSize(bool d)
 {
-	InvalidateContents();
-	large_icons = d;
+	if(large_icons != d) {
+		InvalidateContents();
+		large_icons = d;
+	}
 }
 
 void BrushToolPanel::DeselectAll()

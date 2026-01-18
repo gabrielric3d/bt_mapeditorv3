@@ -69,6 +69,7 @@ namespace MenuBar
 		SELECT_MODE_VISIBLE,
 		SELECT_MODE_LASSO,
 		AUTOMAGIC,
+		USE_GROUND_CARPET_BORDER,
 		BORDERIZE_SELECTION,
 		BORDERIZE_MAP,
 		RANDOMIZE_SELECTION,
@@ -255,6 +256,7 @@ public:
 	void OnClearHouseTiles(wxCommandEvent& event);
 	void OnClearModifiedState(wxCommandEvent& event);
 	void OnToggleAutomagic(wxCommandEvent& event);
+	void OnToggleGroundCarpetBorder(wxCommandEvent& event);
 	void OnSelectionTypeChange(wxCommandEvent& event);
 	void OnSelectionLassoToggle(wxCommandEvent& event);
 	void OnCut(wxCommandEvent& event);

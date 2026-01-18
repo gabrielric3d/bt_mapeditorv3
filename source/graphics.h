@@ -292,6 +292,7 @@ public:
 
 	void clear();
 	void cleanSoftwareSprites();
+	void reloadTextureFiltering();
 
 	Sprite* getSprite(int id);
 	GameSprite* getCreatureSprite(int id);

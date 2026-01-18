@@ -17,9 +17,13 @@
 
 #include "main.h"
 
+#include <sstream>
+
 #include "ground_brush.h"
+#include "carpet_brush.h"
 #include "items.h"
 #include "basemap.h"
+#include "settings.h"
 
 uint32_t GroundBrush::border_types[256];
 
@@ -241,7 +245,10 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 				optional_border = it->second;
 			}
 		} else if(childName == "border") {
-			AutoBorder* autoBorder;
+			// Collect AutoBorder pointers for all IDs (supports comma-separated list)
+			std::vector<AutoBorder*> autoBorders;
+			bool hasGroundEquivalent = false;
+
 			if(!(attribute = childNode.attribute("id"))) {
 				if(!(attribute = childNode.attribute("ground_equivalent"))) {
 					continue;
@@ -261,73 +268,134 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 					warnings.push_back("Ground dependency equivalent does not use the same brush as ground border.\n");
 				}
 
-				autoBorder = newd AutoBorder(0); // Empty id basically
+				AutoBorder* autoBorder = newd AutoBorder(0); // Empty id basically
+				autoBorder->ground = true;
 				autoBorder->load(childNode, warnings, this, ground_equivalent);
+				autoBorders.push_back(autoBorder);
+				hasGroundEquivalent = true;
 			} else {
-				int32_t id = attribute.as_int();
-				if(id == 0) {
-					autoBorder = nullptr;
-				} else {
-					auto it = g_brushes.borders.find(id);
-					if(it == g_brushes.borders.end() || !it->second) {
-						warnings.push_back("\nCould not find border id " + std::to_string(id));
-						continue;
+				// Parse comma-separated IDs
+				std::string idStr = attribute.as_string();
+				std::stringstream ss(idStr);
+				std::string token;
+
+				while(std::getline(ss, token, ',')) {
+					// Trim whitespace
+					size_t start = token.find_first_not_of(" \t");
+					size_t end = token.find_last_not_of(" \t");
+					if(start == std::string::npos) continue;
+					token = token.substr(start, end - start + 1);
+
+					int32_t id = std::stoi(token);
+					if(id == 0) {
+						autoBorders.push_back(nullptr);
+					} else {
+						auto it = g_brushes.borders.find(id);
+						if(it == g_brushes.borders.end() || !it->second) {
+							warnings.push_back("\nCould not find border id " + std::to_string(id));
+							continue;
+						}
+						autoBorders.push_back(it->second);
 					}
-					autoBorder = it->second;
 				}
 			}
 
-			BorderBlock* borderBlock = newd BorderBlock;
-			borderBlock->super = false;
-			borderBlock->autoborder = autoBorder;
+			if(autoBorders.empty()) {
+				continue;
+			}
+
+			// Parse common attributes once
+			uint32_t toValue = 0xFFFFFFFF;
+			bool isOuter = true;
+			bool isSuper = false;
 
 			if((attribute = childNode.attribute("to"))) {
 				const std::string& value = attribute.as_string();
 				if(value == "all") {
-					borderBlock->to = 0xFFFFFFFF;
+					toValue = 0xFFFFFFFF;
 				} else if(value == "none") {
-					borderBlock->to = 0;
+					toValue = 0;
 				} else {
 					Brush* tobrush = g_brushes.getBrush(value);
 					if(!tobrush) {
 						warnings.push_back("To brush " + wxstr(value) + " doesn't exist.");
 						continue;
 					}
-					borderBlock->to = tobrush->getID();
+					toValue = tobrush->getID();
 				}
-			} else {
-				borderBlock->to = 0xFFFFFFFF;
+			}
+
+			// Parse not-to attribute for exclusions (comma-separated list of brush names)
+			std::vector<uint32_t> notToValues;
+			if((attribute = childNode.attribute("not-to"))) {
+				std::string notToStr = attribute.as_string();
+				std::stringstream ss(notToStr);
+				std::string brushName;
+				while(std::getline(ss, brushName, ',')) {
+					// Trim whitespace
+					size_t start = brushName.find_first_not_of(" \t");
+					size_t end = brushName.find_last_not_of(" \t");
+					if(start != std::string::npos && end != std::string::npos) {
+						brushName = brushName.substr(start, end - start + 1);
+					}
+					if(!brushName.empty()) {
+						Brush* notToBrush = g_brushes.getBrush(brushName);
+						if(!notToBrush) {
+							warnings.push_back("Not-to brush " + wxstr(brushName) + " doesn't exist.");
+						} else {
+							notToValues.push_back(notToBrush->getID());
+						}
+					}
+				}
 			}
 
 			if((attribute = childNode.attribute("super")) && attribute.as_bool()) {
-				borderBlock->super = true;
+				isSuper = true;
 			}
 
 			if((attribute = childNode.attribute("align"))) {
 				const std::string& value = attribute.as_string();
 				if(value == "outer") {
-					borderBlock->outer = true;
+					isOuter = true;
 				} else if(value == "inner") {
-					borderBlock->outer = false;
+					isOuter = false;
 				} else {
-					borderBlock->outer = true;
+					isOuter = true;
 				}
 			}
 
-			if(borderBlock->outer) {
-				if(borderBlock->to == 0) {
+			// Update border flags once (same for all borders in the group)
+			if(isOuter) {
+				if(toValue == 0) {
 					has_zilch_outer_border = true;
 				} else {
 					has_outer_border = true;
 				}
 			} else {
-				if(borderBlock->to == 0) {
+				if(toValue == 0) {
 					has_zilch_inner_border = true;
 				} else {
 					has_inner_border = true;
 				}
 			}
 
+			// Create BorderBlock for each border ID
+			std::vector<BorderBlock*> createdBlocks;
+			int32_t layerOrder = 0;
+			for(AutoBorder* autoBorder : autoBorders) {
+				BorderBlock* borderBlock = newd BorderBlock;
+				borderBlock->super = isSuper;
+				borderBlock->autoborder = autoBorder;
+				borderBlock->to = toValue;
+				borderBlock->not_to = notToValues;
+				borderBlock->outer = isOuter;
+				borderBlock->layer_order = layerOrder++;
+
+				createdBlocks.push_back(borderBlock);
+				borders.push_back(borderBlock);
+			}
+
+			// Parse specific cases and add to all created blocks
 			for(pugi::xml_node subChildNode = childNode.first_child(); subChildNode; subChildNode = subChildNode.next_sibling()) {
 				if(as_lower_str(subChildNode.name()) != "specific") {
 					continue;
@@ -356,10 +424,10 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 									continue;
 								}
 
-								AutoBorder* autoBorder = it->second;
-								ASSERT(autoBorder != nullptr);
+								AutoBorder* matchAutoBorder = it->second;
+								ASSERT(matchAutoBorder != nullptr);
 
-								uint32_t match_itemid = autoBorder->tiles[edge_id];
+								uint32_t match_itemid = matchAutoBorder->tiles[edge_id];
 								if(!specificCaseBlock) {
 									specificCaseBlock = newd SpecificCaseBlock();
 								}
@@ -421,8 +489,8 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 									continue;
 								}
 
-								AutoBorder* autoBorder = itt->second;
-								ASSERT(autoBorder != nullptr);
+								AutoBorder* replaceAutoBorder = itt->second;
+								ASSERT(replaceAutoBorder != nullptr);
 
 								ItemType* type = g_items.getRawItemType(with_id);
 								if(!type) {
@@ -434,7 +502,7 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 									specificCaseBlock = newd SpecificCaseBlock();
 								}
 
-								specificCaseBlock->to_replace_id = autoBorder->tiles[edge_id];
+								specificCaseBlock->to_replace_id = replaceAutoBorder->tiles[edge_id];
 								specificCaseBlock->with_id = with_id;
 							} else if(actionName == "replace_item") {
 								if(!(attribute = actionChild.attribute("id"))) {
@@ -468,8 +536,12 @@ bool GroundBrush::load(pugi::xml_node node, wxArrayString& warnings)
 						}
 					}
 				}
+
+				// Add specific case to the first border block only
+				if(specificCaseBlock && !createdBlocks.empty()) {
+					createdBlocks[0]->specific_cases.push_back(specificCaseBlock);
+				}
 			}
-			borders.push_back(borderBlock);
 		} else if(childName == "friend") {
 			const std::string& name = childNode.attribute("name").as_string();
 			if(!name.empty()) {
@@ -572,17 +644,34 @@ void GroundBrush::draw(BaseMap* map, Tile* tile, void* parameter)
 	tile->addItem(Item::Create(id));
 }
 
+// Helper function to check if a brush ID is in the not_to exclusion list
+static bool isExcludedBrush(const GroundBrush::BorderBlock* bb, uint32_t brushId) {
+	for(uint32_t excludedId : bb->not_to) {
+		if(excludedId == brushId) {
+			return true;
+		}
+	}
+	return false;
+}
+
 const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, GroundBrush* second) {
 	//printf("Border from %s to %s : ", first->getName().c_str(), second->getName().c_str());
 	if(first) {
 		if(second) {
+			uint32_t secondId = second->getID();
+			uint32_t firstId = first->getID();
 			if(first->getZ() < second->getZ() && second->hasOuterBorder()) {
 				if(first->hasInnerBorder()) {
 					for(std::vector<BorderBlock*>::iterator it = first->borders.begin(); it != first->borders.end(); ++it) {
 						BorderBlock* bb = *it;
 						if(bb->outer) {
 							continue;
-						} else if(bb->to == second->getID() || bb->to == 0xFFFFFFFF) {
+						}
+						// Check not_to exclusions
+						if(isExcludedBrush(bb, secondId)) {
+							continue;
+						}
+						if(bb->to == secondId || bb->to == 0xFFFFFFFF) {
 							//printf("%d\n", bb->autoborder);
 							return bb;
 						}
@@ -592,7 +681,12 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 					BorderBlock* bb = *it;
 					if(!bb->outer) {
 						continue;
-					} else if(bb->to == first->getID()) {
+					}
+					// Check not_to exclusions
+					if(isExcludedBrush(bb, firstId)) {
+						continue;
+					}
+					if(bb->to == firstId) {
 						//printf("%d\n", bb->autoborder);
 						return bb;
 					} else if(bb->to == 0xFFFFFFFF) {
@@ -605,7 +699,12 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 					BorderBlock* bb = *it;
 					if(bb->outer) {
 						continue;
-					} else if(bb->to == second->getID()) {
+					}
+					// Check not_to exclusions
+					if(isExcludedBrush(bb, secondId)) {
+						continue;
+					}
+					if(bb->to == secondId) {
 						//printf("%d\n", bb->autoborder);
 						return bb;
 					} else if(bb->to == 0xFFFFFFFF) {
@@ -638,6 +737,62 @@ const GroundBrush::BorderBlock* GroundBrush::getBrushTo(GroundBrush* first, Grou
 	}
 	//printf("None\n");
 	return nullptr;
+}
+
+std::vector<const GroundBrush::BorderBlock*> GroundBrush::getBrushesTo(GroundBrush* first, GroundBrush* second) {
+	std::vector<const BorderBlock*> result;
+
+	if(first) {
+		if(second) {
+			uint32_t secondId = second->getID();
+			uint32_t firstId = first->getID();
+			if(first->getZ() < second->getZ() && second->hasOuterBorder()) {
+				if(first->hasInnerBorder()) {
+					for(BorderBlock* bb : first->borders) {
+						if(bb->outer) continue;
+						// Check not_to exclusions
+						if(isExcludedBrush(bb, secondId)) continue;
+						if(bb->to == secondId || bb->to == 0xFFFFFFFF) {
+							result.push_back(bb);
+						}
+					}
+				}
+				for(BorderBlock* bb : second->borders) {
+					if(!bb->outer) continue;
+					// Check not_to exclusions
+					if(isExcludedBrush(bb, firstId)) continue;
+					if(bb->to == firstId || bb->to == 0xFFFFFFFF) {
+						result.push_back(bb);
+					}
+				}
+			} else if(first->hasInnerBorder()) {
+				for(BorderBlock* bb : first->borders) {
+					if(bb->outer) continue;
+					// Check not_to exclusions
+					if(isExcludedBrush(bb, secondId)) continue;
+					if(bb->to == secondId || bb->to == 0xFFFFFFFF) {
+						result.push_back(bb);
+					}
+				}
+			}
+		} else if(first->hasInnerZilchBorder()) {
+			for(BorderBlock* bb : first->borders) {
+				if(bb->outer) continue;
+				if(bb->to == 0) {
+					result.push_back(bb);
+				}
+			}
+		}
+	} else if(second && second->hasOuterZilchBorder()) {
+		for(BorderBlock* bb : second->borders) {
+			if(!bb->outer) continue;
+			if(bb->to == 0) {
+				result.push_back(bb);
+			}
+		}
+	}
+
+	return result;
 }
 
 void GroundBrush::doBorders(BaseMap* map, Tile* tile)
@@ -753,6 +908,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 							BorderCluster borderCluster;
 							borderCluster.alignment = tiledata;
 							borderCluster.z = 0x7FFFFFFF; // Above all other borders
+							borderCluster.layer_order = 0;
 							borderCluster.border = other->optional_border;
 
 							borderList.push_back(borderCluster);
@@ -762,37 +918,40 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 						}
 
 						if(!only_mountain) {
-							const BorderBlock* borderBlock = getBrushTo(borderBrush, other);
-							if(borderBlock && borderBlock->autoborder) {
-								bool found = false;
-								for(BorderCluster& borderCluster : borderList) {
-									if(borderCluster.border == borderBlock->autoborder) {
-										borderCluster.alignment |= tiledata;
-										if(borderCluster.z < other->getZ()) {
-											borderCluster.z = other->getZ();
-										}
+							std::vector<const BorderBlock*> borderBlocks = getBrushesTo(borderBrush, other);
+							for(const BorderBlock* borderBlock : borderBlocks) {
+								if(borderBlock && borderBlock->autoborder) {
+									bool found = false;
+									for(BorderCluster& borderCluster : borderList) {
+										if(borderCluster.border == borderBlock->autoborder) {
+											borderCluster.alignment |= tiledata;
+											if(borderCluster.z < other->getZ()) {
+												borderCluster.z = other->getZ();
+											}
 
+											if(!borderBlock->specific_cases.empty()) {
+												if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
+													specificList.push_back(borderBlock);
+												}
+											}
+
+											found = true;
+											break;
+										}
+									}
+
+									if(!found) {
+										BorderCluster borderCluster;
+										borderCluster.alignment = tiledata;
+										borderCluster.z = other->getZ();
+										borderCluster.layer_order = borderBlock->layer_order;
+										borderCluster.border = borderBlock->autoborder;
+
+										borderList.push_back(borderCluster);
 										if(!borderBlock->specific_cases.empty()) {
 											if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
 												specificList.push_back(borderBlock);
 											}
-										}
-
-										found = true;
-										break;
-									}
-								}
-
-								if(!found) {
-									BorderCluster borderCluster;
-									borderCluster.alignment = tiledata;
-									borderCluster.z = other->getZ();
-									borderCluster.border = borderBlock->autoborder;
-
-									borderList.push_back(borderCluster);
-									if(!borderBlock->specific_cases.empty()) {
-										if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
-											specificList.push_back(borderBlock);
 										}
 									}
 								}
@@ -812,23 +971,22 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 				}
 
 				if(tiledata != 0) {
-					const BorderBlock* borderBlock = getBrushTo(borderBrush, nullptr);
-					if(!borderBlock) {
-						continue;
-					}
+					std::vector<const BorderBlock*> borderBlocks = getBrushesTo(borderBrush, nullptr);
+					for(const BorderBlock* borderBlock : borderBlocks) {
+						if(borderBlock && borderBlock->autoborder) {
+							BorderCluster borderCluster;
+							borderCluster.alignment = tiledata;
+							borderCluster.z = 5000;
+							borderCluster.layer_order = borderBlock->layer_order;
+							borderCluster.border = borderBlock->autoborder;
 
-					if(borderBlock->autoborder) {
-						BorderCluster borderCluster;
-						borderCluster.alignment = tiledata;
-						borderCluster.z = 5000;
-						borderCluster.border = borderBlock->autoborder;
+							borderList.push_back(borderCluster);
 
-						borderList.push_back(borderCluster);
-					}
-
-					if(!borderBlock->specific_cases.empty()) {
-						if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
-							specificList.push_back(borderBlock);
+							if(!borderBlock->specific_cases.empty()) {
+								if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
+									specificList.push_back(borderBlock);
+								}
+							}
 						}
 					}
 				}
@@ -846,20 +1004,21 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 			}
 
 			if(tiledata != 0) {
-				const BorderBlock* borderBlock = getBrushTo(nullptr, other);
-				if(borderBlock) {
-					if(borderBlock->autoborder) {
+				std::vector<const BorderBlock*> borderBlocks = getBrushesTo(nullptr, other);
+				for(const BorderBlock* borderBlock : borderBlocks) {
+					if(borderBlock && borderBlock->autoborder) {
 						BorderCluster borderCluster;
 						borderCluster.alignment = tiledata;
 						borderCluster.z = other->getZ();
+						borderCluster.layer_order = borderBlock->layer_order;
 						borderCluster.border = borderBlock->autoborder;
 
 						borderList.push_back(borderCluster);
-					}
 
-					if(!borderBlock->specific_cases.empty()) {
-						if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
-							specificList.push_back(borderBlock);
+						if(!borderBlock->specific_cases.empty()) {
+							if(std::find(specificList.begin(), specificList.end(), borderBlock) == specificList.end()) {
+								specificList.push_back(borderBlock);
+							}
 						}
 					}
 				}
@@ -869,6 +1028,7 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 					BorderCluster borderCluster;
 					borderCluster.alignment = tiledata;
 					borderCluster.z = 0x7FFFFFFF; // Above other zilch borders
+					borderCluster.layer_order = 0;
 					borderCluster.border = other->optional_border;
 
 					borderList.push_back(borderCluster);
@@ -884,6 +1044,9 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 	std::sort(borderList.begin(), borderList.end());
 	tile->cleanBorders();
 
+	// Check if carpet-style border mode is enabled
+	bool useCarpetBorder = g_settings.getInteger(Config::USE_GROUND_CARPET_BORDER) != 0;
+
 	while(!borderList.empty()) {
 		BorderCluster& borderCluster = borderList.back();
 		if(!borderCluster.border) {
@@ -891,34 +1054,43 @@ void GroundBrush::doBorders(BaseMap* map, Tile* tile)
 			continue;
 		}
 
-		BorderType directions[4] = {
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x000000FF) >> 0),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x0000FF00) >> 8),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0x00FF0000) >> 16),
-			static_cast<BorderType>((border_types[borderCluster.alignment] & 0xFF000000) >> 24)
-		};
-
-		for(int32_t i = 0; i < 4; ++i) {
-			BorderType direction = directions[i];
-			if(direction == BORDER_NONE) {
-				break;
-			}
-
-			if(borderCluster.border->tiles[direction]) {
+		if(useCarpetBorder) {
+			// Carpet-style border: use single border item based on alignment
+			BorderType direction = static_cast<BorderType>(CarpetBrush::carpet_types[borderCluster.alignment]);
+			if(direction != BORDER_NONE && borderCluster.border->tiles[direction]) {
 				tile->addBorderItem(Item::Create(borderCluster.border->tiles[direction]));
-			} else {
-				if(direction == NORTHWEST_DIAGONAL) {
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[WEST_HORIZONTAL]));
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[NORTH_HORIZONTAL]));
-				} else if(direction == NORTHEAST_DIAGONAL) {
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[EAST_HORIZONTAL]));
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[NORTH_HORIZONTAL]));
-				} else if(direction == SOUTHWEST_DIAGONAL) {
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[SOUTH_HORIZONTAL]));
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[WEST_HORIZONTAL]));
-				} else if(direction == SOUTHEAST_DIAGONAL) {
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[SOUTH_HORIZONTAL]));
-					tile->addBorderItem(Item::Create(borderCluster.border->tiles[EAST_HORIZONTAL]));
+			}
+		} else {
+			// Normal border: use multiple border items
+			BorderType directions[4] = {
+				static_cast<BorderType>((border_types[borderCluster.alignment] & 0x000000FF) >> 0),
+				static_cast<BorderType>((border_types[borderCluster.alignment] & 0x0000FF00) >> 8),
+				static_cast<BorderType>((border_types[borderCluster.alignment] & 0x00FF0000) >> 16),
+				static_cast<BorderType>((border_types[borderCluster.alignment] & 0xFF000000) >> 24)
+			};
+
+			for(int32_t i = 0; i < 4; ++i) {
+				BorderType direction = directions[i];
+				if(direction == BORDER_NONE) {
+					break;
+				}
+
+				if(borderCluster.border->tiles[direction]) {
+					tile->addBorderItem(Item::Create(borderCluster.border->tiles[direction]));
+				} else {
+					if(direction == NORTHWEST_DIAGONAL) {
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[WEST_HORIZONTAL]));
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[NORTH_HORIZONTAL]));
+					} else if(direction == NORTHEAST_DIAGONAL) {
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[EAST_HORIZONTAL]));
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[NORTH_HORIZONTAL]));
+					} else if(direction == SOUTHWEST_DIAGONAL) {
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[SOUTH_HORIZONTAL]));
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[WEST_HORIZONTAL]));
+					} else if(direction == SOUTHEAST_DIAGONAL) {
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[SOUTH_HORIZONTAL]));
+						tile->addBorderItem(Item::Create(borderCluster.border->tiles[EAST_HORIZONTAL]));
+					}
 				}
 			}
 		}

@@ -18,6 +18,7 @@
 #ifndef RME_GROUND_BRUSH_H
 #define RME_GROUND_BRUSH_H
 
+#include <vector>
 #include "brush.h"
 
 //=============================================================================
@@ -54,6 +55,7 @@ public:
 	virtual void undraw(BaseMap* map, Tile* tile);
 	static void doBorders(BaseMap* map, Tile* tile);
 	static const BorderBlock* getBrushTo(GroundBrush* first, GroundBrush* second);
+	static std::vector<const BorderBlock*> getBrushesTo(GroundBrush* first, GroundBrush* second);
 
 	virtual int32_t getZ() const { return z_order; }
 	bool useSoloOptionalBorder() const { return use_only_optional; }
@@ -64,16 +66,6 @@ public:
 	bool hasOuterBorder() const { return has_outer_border || optional_border; }
 	bool hasInnerBorder() const { return has_inner_border; }
 	bool hasOptionalBorder() const { return optional_border != nullptr; }
-
-protected: // Members
-	int32_t z_order;
-	bool has_zilch_outer_border;
-	bool has_zilch_inner_border;
-	bool has_outer_border;
-	bool has_inner_border;
-	AutoBorder* optional_border;
-	bool use_only_optional; // If this is true, there will be no normal border under the gravel
-	bool randomize;
 
 	struct SpecificCaseBlock {
 		SpecificCaseBlock() : match_group(0), group_match_alignment(BORDER_NONE), to_replace_id(0), with_id(0), delete_all(false) {}
@@ -89,10 +81,22 @@ protected: // Members
 		bool outer;
 		bool super;
 		uint32_t to;
+		std::vector<uint32_t> not_to; // Brushes to exclude from this border
+		int32_t layer_order; // Order within same z-level (0 = bottom, higher = on top)
 
 		AutoBorder* autoborder;
 		std::vector<SpecificCaseBlock*> specific_cases;
 	};
+
+protected: // Members
+	int32_t z_order;
+	bool has_zilch_outer_border;
+	bool has_zilch_inner_border;
+	bool has_outer_border;
+	bool has_inner_border;
+	AutoBorder* optional_border;
+	bool use_only_optional; // If this is true, there will be no normal border under the gravel
+	bool randomize;
 
 	struct ItemChanceBlock {
 		int chance;
@@ -102,10 +106,12 @@ protected: // Members
 	struct BorderCluster {
 		uint32_t alignment;
 		int32_t z;
+		int32_t layer_order; // Order within same z-level
 		const AutoBorder* border;
 
 		bool operator<(const BorderCluster& other) const {
-			return other.z > z;
+			if(z != other.z) return z < other.z;
+			return layer_order < other.layer_order;
 		}
 	};
 

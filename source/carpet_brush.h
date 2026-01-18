@@ -51,6 +51,8 @@ class CarpetBrush : public Brush
 		virtual std::string getName() const { return name; }
 		virtual void setName(const std::string& newName) { name = newName; }
 
+		static uint32_t carpet_types[256];
+
 	protected:
 		uint16_t getRandomCarpet(BorderType alignment);
 
@@ -70,8 +72,6 @@ class CarpetBrush : public Brush
 		CarpetNode carpet_items[14];
 		std::string name;
 		uint16_t look_id;
-
-		static uint32_t carpet_types[256];
 };
 
 #endif
