@@ -40778,19 +40778,20 @@ e o newmarketitems.json vai estar em appdata
 
 	<item id="33220" name="tahm kench statue">
 		<attribute key="forcesave" value="1" />
-		<attribute key="description" 
-			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
-			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		<attribute key="description"
+			value="Gives a selectable bonus upon use. Only the owner of this furniture can activate the buffs. Cooldown varies depending on the selected bonus. Not limited by extra copies.&#xA;+25% Boss Loot (1 hour)&#xA;+5% Experience (1 hour)&#xA;+15% Damage (1 hour)&#xA;+20% Damage in Hunting Grounds (1 hour)&#xA;+20% Damage in Dungeons (1 hours)&#xA;+20% Damage in Quests (1 hours)"
+			pt="Concede um bônus selecionável ao usar. Apenas o dono desta furniture pode ativar os buffs. O tempo de recarga varia de acordo com o bônus selecionado. Não é limitado por cópias extras.&#xA;+25% de Loot de Chefes (1 hora)&#xA;+5% de Experiência (1 hora)&#xA;+15% de Dano (1 hora)&#xA;+20% de Dano em Hunting Grounds (1 hora)&#xA;+20% de Dano em Dungeons (1 horas)&#xA;+20% de Dano em Quests (1 horas)"
 		/>
 	</item>
 
 	<item id="33219" name="umbral seraphim statue">
 		<attribute key="forcesave" value="1" />
-		<attribute key="description" 
-			value="Gives a selectable bonus upon use. Has a variable cooldown depending on the buff. Not limited by extra copies.&#xA;+1 Dungeon Charge&#xA;+1 Hunting Ground Charge&#xA;+1 Tower Arena Discount&#xA;+5% Experience (2hours)&#xA;+15% Boss Loot rate (2 hours)&#xA;+20% Elite Chance (2 hours)&#xA;+20% Orb Chance (2 hours)&#xA;+10% Damage (2 hours)&#xA;+10% Healing (2 hours)&#xA;+3% Critical Chance (2 hours)" 
-			pt="Concede um bônus selecionável ao usar. Possui tempo de recarga variável dependendo do bônus. Não é limitado por cópias extras.&#xA;+1 Carga de Dungeon&#xA;+1 Carga de Hunting Ground&#xA;+1 Desconto na Tower Arena&#xA;+5% de Experiência (2 horas)&#xA;+15% de Chance de Loot de Chefes (2 horas)&#xA;+20% de Chance de Elite (2 horas)&#xA;+20% de Chance de Orbe (2 horas)&#xA;+10% de Dano (2 horas)&#xA;+10% de Cura (2 horas)&#xA;+3% de Chance Crítica (2 horas)"
+		<attribute key="description"
+			value="Gives a selectable bonus upon use. Only the owner of this furniture can activate the buffs. Cooldown varies depending on the selected bonus. Not limited by extra copies.&#xA;+25% Boss Loot (1 hour)&#xA;+5% Experience (1 hour)&#xA;+15% Damage (1 hour)&#xA;+20% Damage in Hunting Grounds (1 hour)&#xA;+20% Damage in Dungeons (1 hours)&#xA;+20% Damage in Quests (1 hours)"
+			pt="Concede um bônus selecionável ao usar. Apenas o dono desta furniture pode ativar os buffs. O tempo de recarga varia de acordo com o bônus selecionado. Não é limitado por cópias extras.&#xA;+25% de Loot de Chefes (1 hora)&#xA;+5% de Experiência (1 hora)&#xA;+15% de Dano (1 hora)&#xA;+20% de Dano em Hunting Grounds (1 hora)&#xA;+20% de Dano em Dungeons (1 horas)&#xA;+20% de Dano em Quests (1 horas)"
 		/>
 	</item>
+
 
 	<item id="33311" name="task reseter">
 	    <attribute key="description" 
@@ -40971,7 +40972,7 @@ e o newmarketitems.json vai estar em appdata
 		/>
 	</item>
 	<item id="51822" name="relic container dois">
-		<attribute key="containerSize" value="15" />
+		<attribute key="containerSize" value="150" />
 	</item>
 
 
