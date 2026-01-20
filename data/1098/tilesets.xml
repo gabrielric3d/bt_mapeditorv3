@@ -287,6 +287,7 @@
 			<brush name="snowy mountain"/>
 			<brush name="ice mountain"/>
 			<brush name="new ice mountain"/>
+			<brush name="new ice mountain 2"/>
 			<brush name="ice mountain 3"/>
 			<brush name="ice mountain 4"/>
 			<brush name="earth mountain"/>
@@ -462,6 +463,7 @@
 			<brush name="mushroom railing"/>
 			<brush name="black border"/>
 			<brush name="black border mountain"/>
+			<brush name="black border mountain mid"/>
 			<brush name="clouds"/>
 			<brush name="clouds2"/>
 			<brush name="clouds3"/>
@@ -1311,7 +1313,6 @@
 			<brush name="jade floor ornaments"/>
 			<brush name="zao floor ornaments"/>
 			<brush name="deepling floor ornaments"/>
-			<brush name="invisible walkable tile"/>
 		</terrain>
 	</tileset>
 	<tileset name="City Walls">
@@ -1552,7 +1553,6 @@
 
 	<tileset name="Stairs / Ramps / Ladders">
 		<terrain>
-			<item fromid="459"/>
 			<brush name="ramp"/>						-- ramp --
 			<brush name="snowy ramp"/>
 			<brush name="earth ramp"/>
@@ -1641,6 +1641,15 @@
 			<item fromid="13189"/>
 			<item fromid="19518"/>
 			<item fromid="26019"/>
+		</terrain>
+	</tileset>
+
+	<tileset name="Technical Items">
+		<terrain>
+			<item id="459"/>
+			<brush name="invisible walkable tile"/>
+			<item id="1548"/>
+			<brush name="transparency tile"/>
 		</terrain>
 	</tileset>
 
