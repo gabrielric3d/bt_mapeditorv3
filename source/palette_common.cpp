@@ -19,6 +19,7 @@
 
 #include "palette_common.h"
 #include "brush.h"
+#include "raw_brush.h"
 #include "sprites.h"
 #include "gui.h"
 #include "common_windows.h"
@@ -796,8 +797,24 @@ BrushButton::BrushButton(wxWindow* parent, Brush* _brush, RenderSize sz, uint32_
 {
 	ASSERT(sz != RENDER_SIZE_64x64);
 	ASSERT(brush);
-	SetSprite(brush->getLookID());
+	int look_id = brush->getLookID();
+	SetSprite(look_id);
 	SetToolTip(wxstr(brush->getName()));
+
+	// Set fallback color for technical tiles (invisible walkable/blocking tiles)
+	// Check by server ID for RAWBrush or by name for other brush types
+	std::string brush_name = brush->getName();
+	bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
+	bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
+	bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
+
+	if (is_stairs) {
+		SetFallbackColor(wxColor(200, 200, 0)); // Yellow for stairs
+	} else if (is_walkable) {
+		SetFallbackColor(wxColor(200, 0, 0)); // Red for transparent walkable
+	} else if (is_not_walkable) {
+		SetFallbackColor(wxColor(0, 200, 200)); // Cyan for transparent not walkable
+	}
 }
 
 BrushButton::~BrushButton()

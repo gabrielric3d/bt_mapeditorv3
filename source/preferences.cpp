@@ -255,6 +255,11 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	performance_sizer->Add(cache_size_sizer, 0, wxLEFT | wxTOP | wxBOTTOM, 5);
 	SetWindowToolTip(sprite_cache_size_spin, "Maximum number of sprites to keep in memory when using the sprite cache.");
 
+	use_disk_sprite_cache_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use disk sprite cache");
+	use_disk_sprite_cache_chkbox->SetValue(g_settings.getBoolean(Config::USE_DISK_SPRITE_CACHE));
+	performance_sizer->Add(use_disk_sprite_cache_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(use_disk_sprite_cache_chkbox, "Cache sprites to disk for faster startup on subsequent launches.\nOnly works when 'Load sprites into memory' is enabled.\nCache is automatically invalidated when .spr or .dat files change.");
+
 	use_optimized_map_loading_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use optimized map loading");
 	use_optimized_map_loading_chkbox->SetValue(g_settings.getBoolean(Config::USE_OPTIMIZED_MAP_LOADING));
 	performance_sizer->Add(use_optimized_map_loading_chkbox, 0, wxLEFT | wxBOTTOM, 5);
@@ -793,6 +798,7 @@ void PreferencesWindow::Apply()
 	g_settings.setInteger(Config::USE_SPRITE_CACHE, use_sprite_cache_chkbox->GetValue());
 	
 	g_settings.setInteger(Config::SPRITE_CACHE_SIZE, sprite_cache_size_spin->GetValue());
+	g_settings.setInteger(Config::USE_DISK_SPRITE_CACHE, use_disk_sprite_cache_chkbox->GetValue());
 	g_settings.setInteger(Config::USE_OPTIMIZED_MAP_LOADING, use_optimized_map_loading_chkbox->GetValue());
 
 	// Check if anti-aliasing setting changed and reload textures if needed

@@ -85,6 +85,7 @@ void DrawingOptions::SetDefault()
 	show_hooks = false;
 	show_pickupables = false;
 	show_moveables = false;
+	show_only_grounds = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
 	custom_client_box = false;
@@ -127,6 +128,7 @@ void DrawingOptions::SetIngame()
 	show_hooks = false;
 	show_pickupables = false;
 	show_moveables = false;
+	show_only_grounds = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
 	custom_client_box = false;
@@ -169,6 +171,7 @@ void DrawingOptions::LoadFromSettings()
 	show_wall_borders = g_settings.getBoolean(Config::SHOW_WALL_BORDERS);
 	show_mountain_overlay = g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY);
 	show_stair_direction = g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION);
+	show_only_grounds = g_settings.getBoolean(Config::SHOW_ONLY_GROUNDS);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
 	custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
@@ -1808,6 +1811,10 @@ void MapDrawer::DrawTile(TileLocation* location)
 
 	if(!hidden && !tile->items.empty()) {
 		for(Item* item : tile->items) {
+			// Skip non-border items when show_only_grounds is enabled
+			if(options.show_only_grounds && !item->isBorder())
+				continue;
+
 			if(show_tooltips && position.z == floor)
 				WriteTooltip(item, tooltip);
 

@@ -19,6 +19,7 @@
 
 #include "sprites.h"
 #include "graphics.h"
+#include "sprite_cache.h"
 #include "artprovider.h"
 #include "filehandle.h"
 #include "settings.h"
@@ -67,6 +68,8 @@ GraphicManager::GraphicManager() :
 	has_transparency(false),
 	has_frame_durations(false),
 	has_frame_groups(false),
+	spr_signature(0),
+	dat_signature(0),
 	loaded_textures(0),
 	lastclean(0)
 {
@@ -93,6 +96,11 @@ GraphicManager::~GraphicManager()
 bool GraphicManager::hasTransparency() const
 {
 	return has_transparency;
+}
+
+bool GraphicManager::isExtended() const
+{
+	return is_extended;
 }
 
 bool GraphicManager::isUnloaded() const
@@ -421,6 +429,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 
 	uint32_t datSignature;
 	file.getU32(datSignature);
+	dat_signature = datSignature; // Save for cache validation
 	//get max id
 	file.getU16(item_count);
 	file.getU16(creature_count);
@@ -769,6 +778,7 @@ bool GraphicManager::loadSpriteData(const FileName& datafile, wxString& error, w
 
 	uint32_t sprSignature;
 	safe_get(U32, sprSignature);
+	spr_signature = sprSignature; // Save for cache validation
 
 	uint32_t total_pics = 0;
 	if(is_extended) {
@@ -1874,4 +1884,109 @@ void GraphicManager::touchSpriteCache(GameSprite::NormalImage* sprite)
 		last->in_cache = false;
 		sprite_cache.pop_back();
 	}
+}
+
+std::string GraphicManager::getSpriteCachePath() const {
+	if(!client_version) {
+		return "";
+	}
+	FileName local_path = client_version->getLocalDataPath();
+	return SpriteCache::getCachePath(nstr(local_path.GetFullPath()));
+}
+
+bool GraphicManager::loadSpriteDataFromCache(const std::string& cache_path, wxString& error) {
+	SpriteCache cache;
+
+	std::vector<uint32_t> sprite_offsets;
+	std::vector<uint16_t> sprite_sizes;
+	std::vector<uint8_t*> sprite_dumps;
+
+	g_gui.SetLoadDone(10, "Loading sprites from cache...");
+
+	if(!cache.loadFromCache(cache_path, sprite_offsets, sprite_sizes, sprite_dumps)) {
+		error = "Failed to load sprite data from cache";
+		return false;
+	}
+
+	// Apply loaded data to image_space
+	// Iterate through all sprite IDs in the cache (same as loadSpriteData does)
+	uint32_t total_sprites = static_cast<uint32_t>(sprite_sizes.size());
+	uint32_t sprites_loaded = 0;
+	uint32_t update_interval = std::max(1u, total_sprites / 50);
+
+	for(uint32_t id = 1; id < total_sprites; ++id) {
+		ImageMap::iterator it = image_space.find(id);
+		if(it != image_space.end()) {
+			GameSprite::NormalImage* spr = dynamic_cast<GameSprite::NormalImage*>(it->second);
+			if(spr && sprite_sizes[id] > 0 && sprite_dumps[id] != nullptr) {
+				spr->id = id;
+				spr->fileOffset = sprite_offsets[id];
+				spr->size = sprite_sizes[id];
+				spr->dump = sprite_dumps[id];
+				sprite_dumps[id] = nullptr; // Transfer ownership
+			}
+		}
+
+		sprites_loaded++;
+		if(sprites_loaded % update_interval == 0) {
+			int sub_progress = 10 + static_cast<int>((sprites_loaded * 10) / total_sprites);
+			g_gui.SetLoadDone(sub_progress, wxString::Format("Loading sprites from cache (%u/%u)...", sprites_loaded, total_sprites));
+		}
+	}
+
+	// Clean up any remaining dumps that weren't transferred
+	for(size_t i = 0; i < sprite_dumps.size(); ++i) {
+		delete[] sprite_dumps[i];
+	}
+
+	unloaded = false;
+	return true;
+}
+
+bool GraphicManager::saveSpriteDataToCache(const std::string& cache_path, const FileName& spr_file, const FileName& dat_file) {
+	SpriteCache cache;
+
+	// Collect sprite data from image_space
+	std::vector<uint32_t> sprite_ids;
+	std::vector<uint16_t> sprite_sizes;
+	std::vector<uint8_t*> sprite_dumps;
+
+	// Find max ID to reserve appropriate size
+	uint32_t max_id = 0;
+	for(ImageMap::const_iterator it = image_space.begin(); it != image_space.end(); ++it) {
+		if(it->first > 0 && static_cast<uint32_t>(it->first) > max_id) {
+			max_id = static_cast<uint32_t>(it->first);
+		}
+	}
+
+	sprite_ids.resize(max_id + 1, 0);
+	sprite_sizes.resize(max_id + 1, 0);
+	sprite_dumps.resize(max_id + 1, nullptr);
+
+	for(ImageMap::const_iterator it = image_space.begin(); it != image_space.end(); ++it) {
+		int id = it->first;
+		if(id <= 0) {
+			continue;
+		}
+
+		const GameSprite::NormalImage* spr = dynamic_cast<const GameSprite::NormalImage*>(it->second);
+		if(spr && spr->size > 0 && spr->dump != nullptr) {
+			sprite_ids[id] = id;
+			sprite_sizes[id] = spr->size;
+			sprite_dumps[id] = spr->dump; // Just reference, don't copy
+		}
+	}
+
+	return cache.saveToCache(
+		cache_path,
+		nstr(spr_file.GetFullPath()),
+		nstr(dat_file.GetFullPath()),
+		spr_signature,
+		dat_signature,
+		is_extended,
+		has_transparency,
+		sprite_ids,
+		sprite_sizes,
+		sprite_dumps
+	);
 }

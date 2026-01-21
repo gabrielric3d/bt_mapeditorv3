@@ -95,6 +95,7 @@ public:
 	bool show_wall_borders;
 	bool show_mountain_overlay;
 	bool show_stair_direction;
+	bool show_only_grounds;
 	bool hide_items_when_zoomed;
 	bool show_selected_tile_indicator;
 	bool custom_client_box;

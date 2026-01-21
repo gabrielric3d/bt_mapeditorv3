@@ -23,6 +23,7 @@
 #include <deque>
 
 #include "client_version.h"
+#include "sprite_cache.h"
 
 #include <wx/artprov.h>
 
@@ -316,6 +317,11 @@ public:
 	bool loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings);
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
 
+	// Disk sprite cache methods
+	bool loadSpriteDataFromCache(const std::string& cache_path, wxString& error);
+	bool saveSpriteDataToCache(const std::string& cache_path, const FileName& spr_file, const FileName& dat_file);
+	std::string getSpriteCachePath() const;
+
 	// Cleans old & unused textures according to config settings
 	void garbageCollection();
 	void addSpriteToCleanup(GameSprite* spr);
@@ -328,6 +334,7 @@ public:
 	wxFileName getSpritesFileName() const { return sprites_file; }
 
 	bool hasTransparency() const;
+	bool isExtended() const;
 	bool isUnloaded() const;
 
 	ClientVersion *client_version;
@@ -354,6 +361,10 @@ private:
 	bool has_frame_groups;
 	wxFileName metadata_file;
 	wxFileName sprites_file;
+
+	// Disk cache signatures (saved during loadSpriteData for cache saving)
+	uint32_t spr_signature;
+	uint32_t dat_signature;
 
 	int loaded_textures;
 	int lastclean;

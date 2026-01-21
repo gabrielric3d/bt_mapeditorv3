@@ -77,6 +77,7 @@ protected:
 	wxCheckBox* use_lazy_loading_chkbox;
 	wxCheckBox* use_sprite_cache_chkbox;
 	wxSpinCtrl* sprite_cache_size_spin;
+	wxCheckBox* use_disk_sprite_cache_chkbox;
 	wxCheckBox* use_optimized_map_loading_chkbox;
 	wxCheckBox* use_antialiasing_chkbox;
 	wxSpinCtrl* refresh_rate_spin;

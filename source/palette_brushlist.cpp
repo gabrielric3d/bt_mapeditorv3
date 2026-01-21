@@ -903,10 +903,36 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 	const int padding = 4;
 	const int icon_x = rect.GetX() + padding;
 	const int icon_y = rect.GetY() + std::max(0, (rect.GetHeight() - icon_pixel_size) / 2);
-	Sprite* spr = g_gui.gfx.getSprite(tileset->brushlist[n]->getLookID());
-	if(spr) {
-		spr->DrawTo(&dc, SPRITE_SIZE_32x32, icon_x, icon_y, icon_pixel_size, icon_pixel_size);
+
+	Brush* brush = tileset->brushlist[n];
+	int look_id = brush->getLookID();
+
+	// Check for technical tiles (invisible walkable/blocking tiles) by name
+	std::string brush_name = brush->getName();
+	bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
+	bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
+	bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
+
+	if (is_stairs || is_walkable || is_not_walkable) {
+		// Draw colored square for technical tiles
+		wxColor techColor;
+		if (is_stairs) {
+			techColor = wxColor(200, 200, 0); // Yellow for stairs
+		} else if (is_walkable) {
+			techColor = wxColor(200, 0, 0); // Red for transparent walkable
+		} else if (is_not_walkable) {
+			techColor = wxColor(0, 200, 200); // Cyan for transparent not walkable
+		}
+		dc.SetBrush(wxBrush(techColor));
+		dc.SetPen(wxPen(techColor, 1));
+		dc.DrawRectangle(icon_x + 2, icon_y + 2, icon_pixel_size - 4, icon_pixel_size - 4);
+	} else {
+		Sprite* spr = g_gui.gfx.getSprite(look_id);
+		if(spr) {
+			spr->DrawTo(&dc, SPRITE_SIZE_32x32, icon_x, icon_y, icon_pixel_size, icon_pixel_size);
+		}
 	}
+
 	if(IsSelected(n)) {
 		dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
 	} else {
@@ -915,7 +941,7 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 	const int text_x = icon_x + icon_pixel_size + padding;
 	const int char_height = dc.GetCharHeight();
 	const int text_y = rect.GetY() + std::max(0, (rect.GetHeight() - char_height) / 2);
-	dc.DrawText(wxstr(tileset->brushlist[n]->getName()), text_x, text_y);
+	dc.DrawText(wxstr(brush->getName()), text_x, text_y);
 }
 
 wxCoord BrushListBox::OnMeasureItem(size_t n) const
@@ -1390,8 +1416,30 @@ void SeamlessGridPanel::DrawSpriteAt(wxDC& dc, int x, int y, int index) {
 	}
 
 	if (need_to_create_sprite) {
-		Sprite* sprite = g_gui.gfx.getSprite(brush->getLookID());
-		if (sprite) {
+		int look_id = brush->getLookID();
+		Sprite* sprite = g_gui.gfx.getSprite(look_id);
+
+		// Check for technical tiles (invisible walkable/blocking tiles) by name
+		std::string brush_name = brush->getName();
+		bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
+		bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
+		bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
+
+		if (is_stairs || is_walkable || is_not_walkable) {
+			// Draw colored square for technical tiles
+			wxColor techColor;
+			if (is_stairs) {
+				techColor = wxColor(200, 200, 0); // Yellow for stairs
+			} else if (is_walkable) {
+				techColor = wxColor(200, 0, 0); // Red for transparent walkable
+			} else if (is_not_walkable) {
+				techColor = wxColor(0, 200, 200); // Cyan for transparent not walkable
+			}
+
+			dc.SetBrush(wxBrush(techColor));
+			dc.SetPen(wxPen(techColor.IsOk() ? techColor : *wxBLACK, 1));
+			dc.DrawRectangle(x + 2, y + 2, sprite_size - 4, sprite_size - 4);
+		} else if (sprite) {
 			if (zoom_level == 1) {
 				wxBitmap bmp(32, 32);
 				wxMemoryDC memDC(bmp);

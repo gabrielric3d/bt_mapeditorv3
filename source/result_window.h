@@ -19,6 +19,9 @@
 #define RME_RESULT_WINDOW_H_
 
 #include "main.h"
+#include "position.h"
+
+#include <vector>
 
 class SearchResultWindow : public wxPanel
 {
@@ -26,15 +29,28 @@ public:
 	SearchResultWindow(wxWindow* parent);
 	virtual ~SearchResultWindow();
 
-	void Clear();
+	void Clear(bool clearFilter = false);
 	void AddPosition(wxString description, Position pos);
 
 	void OnClickResult(wxCommandEvent&);
 	void OnClickExport(wxCommandEvent&);
 	void OnClickClear(wxCommandEvent&);
+	void OnSearchChanged(wxCommandEvent&);
 
 protected:
+	struct SearchResultEntry {
+		wxString description;
+		Position pos;
+	};
+
+	void ClearListItems();
+	void RefreshResults();
+	bool MatchesFilter(const wxString& description) const;
+
+	wxTextCtrl* search_ctrl;
 	wxListBox* result_list;
+	wxString search_query;
+	std::vector<SearchResultEntry> results;
 
 	DECLARE_EVENT_TABLE()
 };

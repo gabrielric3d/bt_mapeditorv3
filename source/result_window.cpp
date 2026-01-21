@@ -31,6 +31,12 @@ SearchResultWindow::SearchResultWindow(wxWindow* parent) :
 	wxPanel(parent, wxID_ANY)
 {
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
+	wxSizer* searchSizer = newd wxBoxSizer(wxHORIZONTAL);
+	searchSizer->Add(newd wxStaticText(this, wxID_ANY, "Search:"), wxSizerFlags(0).Center().Border(wxRIGHT, 5));
+	search_ctrl = newd wxTextCtrl(this, wxID_ANY);
+	searchSizer->Add(search_ctrl, wxSizerFlags(1).Center());
+	sizer->Add(searchSizer, wxSizerFlags(0).Expand().Border(wxALL, 5));
+
 	result_list = newd wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(200, 330), 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB);
 	sizer->Add(result_list, wxSizerFlags(1).Expand());
 
@@ -39,6 +45,8 @@ SearchResultWindow::SearchResultWindow(wxWindow* parent) :
 	buttonsSizer->Add(newd wxButton(this, wxID_CLEAR, "Clear"), wxSizerFlags(0).Center());
 	sizer->Add(buttonsSizer, wxSizerFlags(0).Center().DoubleBorder());
 	SetSizerAndFit(sizer);
+
+	search_ctrl->Bind(wxEVT_TEXT, &SearchResultWindow::OnSearchChanged, this);
 }
 
 SearchResultWindow::~SearchResultWindow()
@@ -46,17 +54,29 @@ SearchResultWindow::~SearchResultWindow()
 	Clear();
 }
 
-void SearchResultWindow::Clear()
+void SearchResultWindow::Clear(bool clearFilter)
 {
-	for(uint32_t n = 0; n < result_list->GetCount(); ++n) {
-		delete reinterpret_cast<Position*>(result_list->GetClientData(n));
+	ClearListItems();
+	results.clear();
+
+	if(clearFilter && search_ctrl) {
+		search_ctrl->ChangeValue("");
+		search_query.clear();
 	}
-	result_list->Clear();
 }
 
 void SearchResultWindow::AddPosition(wxString description, Position pos)
 {
-	result_list->Append(description << " (" << pos.x << "," << pos.y << "," << pos.z << ")", newd Position(pos));
+	SearchResultEntry entry;
+	entry.description = description;
+	entry.pos = pos;
+	results.push_back(entry);
+
+	if(MatchesFilter(description)) {
+		wxString text = description;
+		text << " (" << pos.x << "," << pos.y << "," << pos.z << ")";
+		result_list->Append(text, newd Position(pos));
+	}
 }
 
 void SearchResultWindow::OnClickResult(wxCommandEvent& event)
@@ -92,5 +112,44 @@ void SearchResultWindow::OnClickExport(wxCommandEvent& WXUNUSED(event))
 
 void SearchResultWindow::OnClickClear(wxCommandEvent& WXUNUSED(event))
 {
-	Clear();
+	Clear(true);
+}
+
+void SearchResultWindow::OnSearchChanged(wxCommandEvent& event)
+{
+	search_query = event.GetString();
+	search_query.MakeLower();
+	RefreshResults();
+}
+
+void SearchResultWindow::ClearListItems()
+{
+	for(uint32_t n = 0; n < result_list->GetCount(); ++n) {
+		delete reinterpret_cast<Position*>(result_list->GetClientData(n));
+	}
+	result_list->Clear();
+}
+
+void SearchResultWindow::RefreshResults()
+{
+	result_list->Freeze();
+	ClearListItems();
+	for(const SearchResultEntry& entry : results) {
+		if(!MatchesFilter(entry.description))
+			continue;
+		wxString text = entry.description;
+		text << " (" << entry.pos.x << "," << entry.pos.y << "," << entry.pos.z << ")";
+		result_list->Append(text, newd Position(entry.pos));
+	}
+	result_list->Thaw();
+}
+
+bool SearchResultWindow::MatchesFilter(const wxString& description) const
+{
+	if(search_query.empty())
+		return true;
+
+	wxString lower = description;
+	lower.MakeLower();
+	return lower.Find(search_query) != wxNOT_FOUND;
 }

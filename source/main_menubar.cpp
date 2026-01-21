@@ -291,6 +291,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SHOW_WALL_BORDERS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_MOUNTAIN_OVERLAY, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_STAIR_DIRECTION, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_ONLY_GROUNDS, wxITEM_CHECK, OnChangeViewSettings);
 
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
@@ -2545,6 +2546,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 	g_settings.setInteger(Config::SHOW_WALL_BORDERS, IsItemChecked(MenuBar::SHOW_WALL_BORDERS));
 	g_settings.setInteger(Config::SHOW_MOUNTAIN_OVERLAY, IsItemChecked(MenuBar::SHOW_MOUNTAIN_OVERLAY));
 	g_settings.setInteger(Config::SHOW_STAIR_DIRECTION, IsItemChecked(MenuBar::SHOW_STAIR_DIRECTION));
+	g_settings.setInteger(Config::SHOW_ONLY_GROUNDS, IsItemChecked(MenuBar::SHOW_ONLY_GROUNDS));
 
 	g_gui.RefreshView();
 	g_gui.root->GetAuiToolBar()->UpdateIndicators();

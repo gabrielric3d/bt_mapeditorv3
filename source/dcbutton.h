@@ -44,6 +44,7 @@ public:
 	bool GetValue() const;
 
 	void SetSprite(int id);
+	void SetFallbackColor(const wxColor& color);
 
 	void OnPaint(wxPaintEvent&);
 	void OnClick(wxMouseEvent&);
@@ -55,6 +56,8 @@ protected:
 	RenderSize size;
 	Sprite* sprite;
 	Sprite* overlay;
+	wxColor fallback_color;
+	bool has_fallback_color;
 
 	DECLARE_DYNAMIC_CLASS(DCButton)
 	DECLARE_EVENT_TABLE()

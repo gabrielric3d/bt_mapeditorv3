@@ -48,6 +48,8 @@
 #include "live_client.h"
 #include "live_tab.h"
 #include "live_server.h"
+#include "sprite_cache.h"
+#include "filehandle.h"
 
 #include <algorithm>
 
@@ -428,17 +430,57 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 	}
 
 	g_gui.SetLoadDone(10, "Loading sprites file...");
-	
+
 	wxFileName sprites_path = g_gui.gfx.getSpritesFileName();
-	
+
 	// Update stats with sprite count
 	stats.current_file = sprites_path.GetFullName();
 	g_gui.SetLoadingStats(stats);
-	if(!g_gui.gfx.loadSpriteData(sprites_path.GetFullPath(), error, warnings)) {
-		error = "Couldn't load sprites: " + error;
-		g_gui.DestroyLoadBar();
-		UnloadVersion();
-		return false;
+
+	// Try to load from disk cache if enabled
+	bool loaded_from_cache = false;
+	bool use_disk_cache = g_settings.getBoolean(Config::USE_DISK_SPRITE_CACHE) &&
+	                      g_settings.getBoolean(Config::USE_MEMCACHED_SPRITES);
+	std::string cache_path = g_gui.gfx.getSpriteCachePath();
+
+	if(use_disk_cache && !cache_path.empty()) {
+		SpriteCache cache_validator;
+		std::string spr_path_str = nstr(sprites_path.GetFullPath());
+		std::string dat_path_str = nstr(metadata_path.GetFullPath());
+
+		// We need to read signatures from the files first
+		FileReadHandle spr_fh(spr_path_str);
+		FileReadHandle dat_fh(dat_path_str);
+		uint32_t spr_sig = 0, dat_sig = 0;
+		if(spr_fh.isOk()) spr_fh.getU32(spr_sig);
+		if(dat_fh.isOk()) dat_fh.getU32(dat_sig);
+
+		// Use the is_extended and has_transparency flags that were determined during loadSpriteMetadata
+		if(cache_validator.isValidCache(cache_path, spr_path_str, dat_path_str, spr_sig, dat_sig,
+		                                 g_gui.gfx.isExtended(), g_gui.gfx.hasTransparency())) {
+			g_gui.SetLoadDone(10, "Loading sprites from cache...");
+			if(g_gui.gfx.loadSpriteDataFromCache(cache_path, error)) {
+				loaded_from_cache = true;
+			} else {
+				// Cache load failed, will fall back to normal loading
+				error.Clear();
+			}
+		}
+	}
+
+	if(!loaded_from_cache) {
+		if(!g_gui.gfx.loadSpriteData(sprites_path.GetFullPath(), error, warnings)) {
+			error = "Couldn't load sprites: " + error;
+			g_gui.DestroyLoadBar();
+			UnloadVersion();
+			return false;
+		}
+
+		// Save to cache if enabled and we loaded sprites into memory
+		if(use_disk_cache && !cache_path.empty() && g_settings.getBoolean(Config::USE_MEMCACHED_SPRITES)) {
+			g_gui.SetLoadDone(19, "Saving sprite cache...");
+			g_gui.gfx.saveSpriteDataToCache(cache_path, sprites_path, metadata_path);
+		}
 	}
 
 	g_gui.SetLoadDone(20, "Loading items.otb file...");
