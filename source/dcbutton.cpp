@@ -36,7 +36,8 @@ DCButton::DCButton() :
 	state(false),
 	size(RENDER_SIZE_16x16),
 	sprite(nullptr),
-	overlay(nullptr)
+	overlay(nullptr),
+	has_fallback_color(false)
 {
 	SetSprite(0);
 }
@@ -47,7 +48,8 @@ DCButton::DCButton(wxWindow* parent, wxWindowID id, wxPoint pos, int type, Rende
 	state(false),
 	size(sz),
 	sprite(nullptr),
-	overlay(nullptr)
+	overlay(nullptr),
+	has_fallback_color(false)
 {
 	SetSprite(sprite_id);
 }
@@ -64,6 +66,13 @@ void DCButton::SetSprite(int _sprid)
 	} else {
 		sprite = nullptr;
 	}
+	Refresh();
+}
+
+void DCButton::SetFallbackColor(const wxColor& color)
+{
+	fallback_color = color;
+	has_fallback_color = color.IsOk();
 	Refresh();
 }
 
@@ -153,7 +162,16 @@ void DCButton::OnPaint(wxPaintEvent& event)
 		pdc.DrawLine(0 ,size_y-1,size_y,size_y-1);
 	}
 
-	if(sprite) {
+	// Draw fallback color for technical tiles (takes priority over sprite)
+	if(has_fallback_color) {
+		pdc.SetBrush(wxBrush(fallback_color));
+		pdc.SetPen(wxPen(fallback_color, 1));
+		if(size == RENDER_SIZE_16x16) {
+			pdc.DrawRectangle(4, 4, 12, 12);
+		} else if(size == RENDER_SIZE_32x32) {
+			pdc.DrawRectangle(4, 4, 28, 28);
+		}
+	} else if(sprite) {
 		if(size == RENDER_SIZE_16x16) {
 			// Draw the picture!
 			sprite->DrawTo(&pdc, SPRITE_SIZE_16x16, 2, 2);

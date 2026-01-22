@@ -20,6 +20,7 @@
 #include <wx/display.h>
 #include <wx/choicdlg.h>
 #include <wx/toolbar.h>
+#include <wx/generic/msgdlgg.h>
 
 #include "gui.h"
 #include "main_menubar.h"
@@ -2740,7 +2741,8 @@ long GUI::PopupDialog(wxWindow* parent, wxString title, wxString text, long styl
 	if(text.empty())
 		return wxID_ANY;
 
-	wxMessageDialog dlg(parent, text, title, style);
+	// Use wxGenericMessageDialog for dark mode support (native wxMessageDialog doesn't support dark mode)
+	wxGenericMessageDialog dlg(parent, text, title, style);
 	return dlg.ShowModal();
 }
 

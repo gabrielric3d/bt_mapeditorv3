@@ -171,6 +171,9 @@ Application::~Application()
 
 bool Application::OnInit()
 {
+	// Enable dark mode support - must be called before creating any windows
+	SetAppearance(wxAppBase::Appearance::System);
+
 #ifdef _WIN32
 	EnsureConsoleAttached();
 #endif

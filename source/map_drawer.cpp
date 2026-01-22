@@ -1353,6 +1353,16 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, const Item*
 	if(!sprite)
 		return;
 
+	// Check if this is a mountain ground and mountain overlay is enabled
+	// If so, render only the first tile (cx=0, cy=0) at the current position
+	bool mountain_overlay_mode = false;
+	if(options.show_mountain_overlay && type.isGroundTile() && tile->ground == item) {
+		GroundBrush* gb = item->getGroundBrush();
+		if(gb && gb->getZ() >= 9000) {
+			mountain_overlay_mode = true;
+		}
+	}
+
 	int screenx = draw_x - sprite->getDrawOffset().x;
 	int screeny = draw_y - sprite->getDrawOffset().y;
 
@@ -1422,17 +1432,62 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Tile* tile, const Item*
 	}
 
 	int frame = item->getFrame();
-	for(int cx = 0; cx != sprite->width; cx++) {
-		for(int cy = 0; cy != sprite->height; cy++) {
-			for(int cf = 0; cf != sprite->layers; cf++) {
-				int texnum = sprite->getHardwareID(cx,cy,cf,
-					subtype,
-					pattern_x,
-					pattern_y,
-					pattern_z,
-					frame
-				);
-				glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, alpha);
+
+	// Mountain overlay mode: render the full sprite with low opacity
+	// and draw a yellow X pattern indicator at the tile position
+	if(mountain_overlay_mode) {
+		// Draw the full sprite at normal position with low opacity
+		for(int cx = 0; cx != sprite->width; cx++) {
+			for(int cy = 0; cy != sprite->height; cy++) {
+				for(int cf = 0; cf != sprite->layers; cf++) {
+					int texnum = sprite->getHardwareID(cx, cy, cf,
+						subtype,
+						pattern_x,
+						pattern_y,
+						pattern_z,
+						frame
+					);
+					glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, 80);
+				}
+			}
+		}
+
+		// Draw orange X pattern indicator at the actual tile position (draw_x, draw_y)
+		// The indicator should be at the tile where the mountain ground is placed
+		int indicator_x = draw_x + rme::TileSize; // Offset to match visual position
+		int indicator_y = draw_y + rme::TileSize;
+		glDisable(GL_TEXTURE_2D);
+		glColor4ub(255, 165, 0, 200); // Orange color
+		glLineWidth(1.0f);
+		glBegin(GL_LINES);
+		// Diagonal from top-left to bottom-right
+		glVertex2f(indicator_x + 2, indicator_y + 2);
+		glVertex2f(indicator_x + rme::TileSize - 2, indicator_y + rme::TileSize - 2);
+		// Diagonal from top-right to bottom-left
+		glVertex2f(indicator_x + rme::TileSize - 2, indicator_y + 2);
+		glVertex2f(indicator_x + 2, indicator_y + rme::TileSize - 2);
+		glEnd();
+		// Draw border
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(indicator_x, indicator_y);
+		glVertex2f(indicator_x + rme::TileSize, indicator_y);
+		glVertex2f(indicator_x + rme::TileSize, indicator_y + rme::TileSize);
+		glVertex2f(indicator_x, indicator_y + rme::TileSize);
+		glEnd();
+		glEnable(GL_TEXTURE_2D);
+	} else {
+		for(int cx = 0; cx != sprite->width; cx++) {
+			for(int cy = 0; cy != sprite->height; cy++) {
+				for(int cf = 0; cf != sprite->layers; cf++) {
+					int texnum = sprite->getHardwareID(cx,cy,cf,
+						subtype,
+						pattern_x,
+						pattern_y,
+						pattern_z,
+						frame
+					);
+					glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, alpha);
+				}
 			}
 		}
 	}
@@ -1473,6 +1528,16 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, const It
 	GameSprite* sprite = type.sprite;
 	if(!sprite)
 		return;
+
+	// Check if this is a mountain ground and mountain overlay is enabled
+	// If so, render only the first tile (cx=0, cy=0) at the current position
+	bool mountain_overlay_mode = false;
+	if(options.show_mountain_overlay && type.isGroundTile()) {
+		GroundBrush* gb = item->getGroundBrush();
+		if(gb && gb->getZ() >= 9000) {
+			mountain_overlay_mode = true;
+		}
+	}
 
 	int screenx = draw_x - sprite->getDrawOffset().x;
 	int screeny = draw_y - sprite->getDrawOffset().y;
@@ -1535,17 +1600,61 @@ void MapDrawer::BlitItem(int& draw_x, int& draw_y, const Position& pos, const It
 	}
 
 	int frame = item->getFrame();
-	for(int cx = 0; cx != sprite->width; ++cx) {
-		for(int cy = 0; cy != sprite->height; ++cy) {
-			for(int cf = 0; cf != sprite->layers; ++cf) {
-				int texnum = sprite->getHardwareID(cx,cy,cf,
-					subtype,
-					pattern_x,
-					pattern_y,
-					pattern_z,
-					frame
-				);
-				glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, alpha);
+
+	// Mountain overlay mode: render the full sprite with low opacity
+	// and draw an orange X pattern indicator
+	if(mountain_overlay_mode) {
+		// Draw the full sprite at normal position with low opacity
+		for(int cx = 0; cx != sprite->width; ++cx) {
+			for(int cy = 0; cy != sprite->height; ++cy) {
+				for(int cf = 0; cf != sprite->layers; ++cf) {
+					int texnum = sprite->getHardwareID(cx, cy, cf,
+						subtype,
+						pattern_x,
+						pattern_y,
+						pattern_z,
+						frame
+					);
+					glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, 80);
+				}
+			}
+		}
+
+		// Draw orange X pattern indicator at the actual tile position
+		int indicator_x = draw_x + rme::TileSize;
+		int indicator_y = draw_y + rme::TileSize;
+		glDisable(GL_TEXTURE_2D);
+		glColor4ub(255, 165, 0, 200); // Orange color
+		glLineWidth(1.0f);
+		glBegin(GL_LINES);
+		// Diagonal from top-left to bottom-right
+		glVertex2f(indicator_x + 2, indicator_y + 2);
+		glVertex2f(indicator_x + rme::TileSize - 2, indicator_y + rme::TileSize - 2);
+		// Diagonal from top-right to bottom-left
+		glVertex2f(indicator_x + rme::TileSize - 2, indicator_y + 2);
+		glVertex2f(indicator_x + 2, indicator_y + rme::TileSize - 2);
+		glEnd();
+		// Draw border
+		glBegin(GL_LINE_LOOP);
+		glVertex2f(indicator_x, indicator_y);
+		glVertex2f(indicator_x + rme::TileSize, indicator_y);
+		glVertex2f(indicator_x + rme::TileSize, indicator_y + rme::TileSize);
+		glVertex2f(indicator_x, indicator_y + rme::TileSize);
+		glEnd();
+		glEnable(GL_TEXTURE_2D);
+	} else {
+		for(int cx = 0; cx != sprite->width; ++cx) {
+			for(int cy = 0; cy != sprite->height; ++cy) {
+				for(int cf = 0; cf != sprite->layers; ++cf) {
+					int texnum = sprite->getHardwareID(cx,cy,cf,
+						subtype,
+						pattern_x,
+						pattern_y,
+						pattern_z,
+						frame
+					);
+					glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, alpha);
+				}
 			}
 		}
 	}
@@ -2163,63 +2272,174 @@ void MapDrawer::DrawWallBorderLines()
 	int adjustment = getFloorAdjustment(floor);
 	const wxColor border_color(220, 220, 0, 200); // Yellow
 	const int mountain_z_order_threshold = 9000; // Mountains have z-order >= 9000
+	const int half_tile = rme::TileSize / 2; // 16 pixels - center of tile
 
-	// Helper to check if tile has wall or mountain ground
-	auto is_highlighted_tile = [&](Tile* t) -> bool {
-		if(!t) return false;
-		if(t->hasWall()) return true;
-		// Check for mountain ground (high z-order)
-		if(t->ground) {
-			GroundBrush* gb = t->ground->getGroundBrush();
-			if(gb && gb->getZ() >= mountain_z_order_threshold) return true;
+	// Helper to check if tile is a mountain (z-order >= 9000)
+	auto is_mountain_tile = [&](Tile* t) -> bool {
+		if(!t || !t->ground) return false;
+		GroundBrush* gb = t->ground->getGroundBrush();
+		return gb && gb->getZ() >= mountain_z_order_threshold;
+	};
+
+	// Helper to check if tile has a wall
+	auto is_wall_tile = [&](Tile* t) -> bool {
+		return t && t->hasWall();
+	};
+
+	// Helper to detect wall orientation by analyzing pixel density along axes
+	// Returns: 0 = unknown, 1 = horizontal, 2 = vertical, 3 = corner (both)
+	auto detect_wall_orientation = [&](GameSprite* sprite) -> int {
+		if(!sprite || sprite->spriteList.empty()) return 0;
+		auto* img = sprite->spriteList[0];
+		if(!img) return 0;
+		uint8_t* rgba = img->getRGBAData();
+		if(!rgba) return 0;
+
+		// Count pixels in each row and column
+		int row_counts[32] = {0};
+		int col_counts[32] = {0};
+		int total_pixels = 0;
+
+		for(int py = 0; py < rme::SpritePixels; ++py) {
+			for(int px = 0; px < rme::SpritePixels; ++px) {
+				int pixel_index = (py * rme::SpritePixels + px) * 4;
+				if(rgba[pixel_index + 3] > 0) {
+					row_counts[py]++;
+					col_counts[px]++;
+					total_pixels++;
+				}
+			}
 		}
-		return false;
+
+		delete[] rgba;
+
+		if(total_pixels == 0) return 0;
+
+		// Find max row density and max column density
+		int max_row = 0, max_col = 0;
+		int rows_with_pixels = 0, cols_with_pixels = 0;
+
+		for(int i = 0; i < 32; ++i) {
+			if(row_counts[i] > max_row) max_row = row_counts[i];
+			if(col_counts[i] > max_col) max_col = col_counts[i];
+			if(row_counts[i] > 0) rows_with_pixels++;
+			if(col_counts[i] > 0) cols_with_pixels++;
+		}
+
+		// Calculate "spread" - how many rows/cols have significant pixels
+		// A horizontal wall has pixels spread across many columns but few rows
+		// A vertical wall has pixels spread across many rows but few columns
+
+		float row_spread = (float)rows_with_pixels / 32.0f;
+		float col_spread = (float)cols_with_pixels / 32.0f;
+
+		// If spread is similar in both directions, it's a corner
+		float spread_ratio = row_spread / col_spread;
+
+		if(spread_ratio > 1.4f) return 2;      // More rows than cols = Vertical
+		if(spread_ratio < 0.7f) return 1;      // More cols than rows = Horizontal
+		return 3;                               // Similar spread = Corner
 	};
 
 	glDisable(GL_TEXTURE_2D);
-	glLineWidth(2.0f);
+	glLineWidth(3.0f);
+	glEnable(GL_LINE_STIPPLE);
+	glLineStipple(1, 0xFFFE); // Dashed pattern: long dash with small gap
 	glBegin(GL_LINES);
 
 	for(int y = start_y; y <= end_y; ++y) {
 		for(int x = start_x; x <= end_x; ++x) {
 			Tile* tile = editor.getMap().getTile(x, y, floor);
-			if(!tile || !is_highlighted_tile(tile)) continue;
+			if(!tile) continue;
+
+			bool is_mountain = is_mountain_tile(tile);
+			bool is_wall = is_wall_tile(tile);
+
+			if(!is_mountain && !is_wall) continue;
 
 			int sx = x * rme::TileSize - view_scroll_x - adjustment;
 			int sy = y * rme::TileSize - view_scroll_y - adjustment;
 
 			glColor4ub(border_color.Red(), border_color.Green(), border_color.Blue(), border_color.Alpha());
 
-			// Check neighbors - draw line on edge where neighbor is NOT highlighted (outer border only)
-			bool neighbor_north = is_highlighted_tile(editor.getMap().getTile(x, y - 1, floor));
-			bool neighbor_south = is_highlighted_tile(editor.getMap().getTile(x, y + 1, floor));
-			bool neighbor_west = is_highlighted_tile(editor.getMap().getTile(x - 1, y, floor));
-			bool neighbor_east = is_highlighted_tile(editor.getMap().getTile(x + 1, y, floor));
+			if(is_mountain) {
+				// MOUNTAINS: Draw rectangle border around the group
+				// Check neighbors (only mountains count as neighbors for mountains)
+				bool neighbor_north = is_mountain_tile(editor.getMap().getTile(x, y - 1, floor));
+				bool neighbor_south = is_mountain_tile(editor.getMap().getTile(x, y + 1, floor));
+				bool neighbor_west = is_mountain_tile(editor.getMap().getTile(x - 1, y, floor));
+				bool neighbor_east = is_mountain_tile(editor.getMap().getTile(x + 1, y, floor));
 
-			// Draw line on north edge if no highlighted neighbor to the north
-			if(!neighbor_north) {
-				glVertex2f(sx, sy);
-				glVertex2f(sx + rme::TileSize, sy);
+				// Border rectangle - no offset, aligned with tile position
+				float border_left = sx;
+				float border_right = sx + rme::TileSize;
+				float border_top = sy;
+				float border_bottom = sy + rme::TileSize;
+
+				// Draw outer edges only (edges not shared with neighbors)
+				if(!neighbor_north) {
+					glVertex2f(border_left, border_top);
+					glVertex2f(border_right, border_top);
+				}
+				if(!neighbor_south) {
+					glVertex2f(border_left, border_bottom);
+					glVertex2f(border_right, border_bottom);
+				}
+				if(!neighbor_west) {
+					glVertex2f(border_left, border_top);
+					glVertex2f(border_left, border_bottom);
+				}
+				if(!neighbor_east) {
+					glVertex2f(border_right, border_top);
+					glVertex2f(border_right, border_bottom);
+				}
+			} else if(is_wall) {
+				// WALLS: Draw center line based on neighboring walls
+				// Check wall neighbors in cardinal directions
+				bool wall_north = is_wall_tile(editor.getMap().getTile(x, y - 1, floor));
+				bool wall_south = is_wall_tile(editor.getMap().getTile(x, y + 1, floor));
+				bool wall_west = is_wall_tile(editor.getMap().getTile(x - 1, y, floor));
+				bool wall_east = is_wall_tile(editor.getMap().getTile(x + 1, y, floor));
+
+				float center_x = sx + half_tile;
+				float center_y = sy + half_tile;
+
+				// Draw partial lines based on which neighbors exist
+				// Horizontal segments
+				if(wall_west) {
+					// Line from left edge to center
+					glVertex2f(sx, center_y);
+					glVertex2f(center_x, center_y);
+				}
+				if(wall_east) {
+					// Line from center to right edge
+					glVertex2f(center_x, center_y);
+					glVertex2f(sx + rme::TileSize, center_y);
+				}
+				// Vertical segments
+				if(wall_north) {
+					// Line from top edge to center
+					glVertex2f(center_x, sy);
+					glVertex2f(center_x, center_y);
+				}
+				if(wall_south) {
+					// Line from center to bottom edge
+					glVertex2f(center_x, center_y);
+					glVertex2f(center_x, sy + rme::TileSize);
+				}
+
+				// If isolated wall (no neighbors), draw full horizontal line
+				if(!wall_north && !wall_south && !wall_west && !wall_east) {
+					glVertex2f(sx, center_y);
+					glVertex2f(sx + rme::TileSize, center_y);
+				}
 			}
-			// Draw line on south edge if no highlighted neighbor to the south
-			if(!neighbor_south) {
-				glVertex2f(sx, sy + rme::TileSize);
-				glVertex2f(sx + rme::TileSize, sy + rme::TileSize);
-			}
-			// Draw line on west edge if no highlighted neighbor to the west
-			if(!neighbor_west) {
-				glVertex2f(sx, sy);
-				glVertex2f(sx, sy + rme::TileSize);
-			}
-			// Draw line on east edge if no highlighted neighbor to the east
-			if(!neighbor_east) {
-				glVertex2f(sx + rme::TileSize, sy);
-				glVertex2f(sx + rme::TileSize, sy + rme::TileSize);
-			}
+
 		}
 	}
 
 	glEnd();
+	glDisable(GL_LINE_STIPPLE);
 	glEnable(GL_TEXTURE_2D);
 }
 
