@@ -24,6 +24,7 @@
 #include "map_window.h"
 #include "map_tab.h"
 #include "border_editor_window.h"
+#include "doodad_editor_window.h"
 #include <wx/dnd.h>
 #include <wx/menu.h>
 
@@ -35,6 +36,7 @@ const wxColour kPaletteListBackgroundColour(0x0C, 0x14, 0x2A);
 const wxColour kPaletteListSelectionColour(0x16, 0x24, 0x43);
 const wxColour kPaletteListTextColour(0xE0, 0xE6, 0xFF);
 constexpr int kCreateBorderButtonId = wxID_HIGHEST + 4100;
+constexpr int kCreateDoodadButtonId = wxID_HIGHEST + 4101;
 
 int GetConfiguredListIconSize()
 {
@@ -58,6 +60,7 @@ BEGIN_EVENT_TABLE(BrushPalettePanel, PalettePanel)
 	EVT_CHOICEBOOK_PAGE_CHANGING(wxID_ANY, BrushPalettePanel::OnSwitchingPage)
 	EVT_CHOICEBOOK_PAGE_CHANGED(wxID_ANY, BrushPalettePanel::OnPageChanged)
 	EVT_BUTTON(kCreateBorderButtonId, BrushPalettePanel::OnClickCreateBorder)
+	EVT_BUTTON(kCreateDoodadButtonId, BrushPalettePanel::OnClickCreateDoodad)
 END_EVENT_TABLE()
 
 BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& tilesets, TilesetCategoryType category, wxWindowID id) :
@@ -78,6 +81,12 @@ BrushPalettePanel::BrushPalettePanel(wxWindow* parent, const TilesetContainer& t
 		wxButton* createBorderButton = newd wxButton(this, kCreateBorderButtonId, "Create Border");
 		createBorderButton->SetToolTip("Open the Border Editor to create or edit auto-borders");
 		topsizer->Add(createBorderButton, 0, wxEXPAND | wxALL, 5);
+	}
+
+	if(palette_type == TILESET_DOODAD) {
+		wxButton* createDoodadButton = newd wxButton(this, kCreateDoodadButtonId, "Create Doodad");
+		createDoodadButton->SetToolTip("Open the Doodad Editor to create or edit doodad brushes");
+		topsizer->Add(createDoodadButton, 0, wxEXPAND | wxALL, 5);
 	}
 
 	for(TilesetContainer::const_iterator iter = tilesets.begin(); iter != tilesets.end(); ++iter) {
@@ -255,6 +264,13 @@ void BrushPalettePanel::OnPageChanged(wxChoicebookEvent& event)
 void BrushPalettePanel::OnClickCreateBorder(wxCommandEvent& WXUNUSED(event))
 {
 	BorderEditorDialog* dialog = new BorderEditorDialog(g_gui.root, "Auto Border Editor");
+	dialog->Show();
+	g_gui.RefreshView();
+}
+
+void BrushPalettePanel::OnClickCreateDoodad(wxCommandEvent& WXUNUSED(event))
+{
+	DoodadEditorDialog* dialog = new DoodadEditorDialog(g_gui.root, "Doodad Brush Editor");
 	dialog->Show();
 	g_gui.RefreshView();
 }

@@ -221,6 +221,7 @@
     <ClCompile Include="..\..\source\border_editor_window.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\brush_manager_window.cpp" />
+    <ClCompile Include="..\..\source\brush_tips_window.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
     <ClCompile Include="..\..\source\duplicated_items_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
@@ -236,6 +237,7 @@
     <ClInclude Include="..\..\source\duplicated_items_window.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />
     <ClInclude Include="..\..\source\brush_manager_window.h" />
+    <ClInclude Include="..\..\source\brush_tips_window.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />
     <ClInclude Include="..\..\source\otml.h" />
     <ClInclude Include="..\..\source\browse_tile_window.h" />
@@ -257,6 +259,8 @@
     <ClInclude Include="..\..\source\definitions.h" />
     <ClInclude Include="..\..\source\doodad_brush.h" />
     <ClCompile Include="..\..\source\doodad_brush.cpp" />
+    <ClInclude Include="..\..\source\doodad_editor_window.h" />
+    <ClCompile Include="..\..\source\doodad_editor_window.cpp" />
     <ClCompile Include="..\..\source\eraser_brush.cpp" />
     <ClInclude Include="..\..\source\extension.h" />
     <ClInclude Include="..\..\source\extension_window.h" />
@@ -307,9 +311,11 @@
     <ClInclude Include="..\..\source\table_brush.h" />
     <ClInclude Include="..\..\source\threads.h" />
     <ClInclude Include="..\..\source\graphics.h" />
+    <ClInclude Include="..\..\source\sprite_cache.h" />
     <ClInclude Include="..\..\source\hotkey_utils.h" />
     <ClInclude Include="..\..\source\hotkey_window.h" />
     <ClCompile Include="..\..\source\graphics.cpp" />
+    <ClCompile Include="..\..\source\sprite_cache.cpp" />
     <ClCompile Include="..\..\source\hotkey_utils.cpp" />
     <ClCompile Include="..\..\source\hotkey_window.cpp" />
     <ClInclude Include="..\..\source\pngfiles.h" />

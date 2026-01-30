@@ -423,3 +423,62 @@ bool DoodadBrush::hasCompositeObjects(int ab) const
 	ASSERT(ab_ptr);
 	return ab_ptr->composite_chance > 0;
 }
+
+int DoodadBrush::getCompositeCount(int variation) const
+{
+	if(alternatives.empty()) return 0;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	return ab_ptr->composite_items.size();
+}
+
+const CompositeTileList& DoodadBrush::getCompositeAt(int variation, int index) const
+{
+	static CompositeTileList empty;
+	if(alternatives.empty()) return empty;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	if(index < 0 || index >= (int)ab_ptr->composite_items.size()) return empty;
+	return ab_ptr->composite_items[index].items;
+}
+
+int DoodadBrush::getCompositeChanceAt(int variation, int index) const
+{
+	if(alternatives.empty()) return 0;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	if(index < 0 || index >= (int)ab_ptr->composite_items.size()) return 0;
+	return ab_ptr->composite_items[index].chance;
+}
+
+int DoodadBrush::getSingleCount(int variation) const
+{
+	if(alternatives.empty()) return 0;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	return ab_ptr->single_items.size();
+}
+
+uint16_t DoodadBrush::getSingleItemId(int variation, int index) const
+{
+	if(alternatives.empty()) return 0;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	if(index < 0 || index >= (int)ab_ptr->single_items.size()) return 0;
+	return ab_ptr->single_items[index].item ? ab_ptr->single_items[index].item->getID() : 0;
+}
+
+int DoodadBrush::getSingleItemChance(int variation, int index) const
+{
+	if(alternatives.empty()) return 0;
+	variation %= alternatives.size();
+	const AlternativeBlock* ab_ptr = alternatives[variation];
+	ASSERT(ab_ptr);
+	if(index < 0 || index >= (int)ab_ptr->single_items.size()) return 0;
+	return ab_ptr->single_items[index].chance;
+}

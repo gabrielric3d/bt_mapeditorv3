@@ -315,6 +315,7 @@ public:
 	void OnSwitchingPage(wxChoicebookEvent& event);
 	void OnPageChanged(wxChoicebookEvent& event);
 	void OnClickCreateBorder(wxCommandEvent& event);
+	void OnClickCreateDoodad(wxCommandEvent& event);
 protected:
 	PaletteType palette_type;
 	wxChoicebook* choicebook;

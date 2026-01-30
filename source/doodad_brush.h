@@ -58,6 +58,14 @@ public:
 	bool hasSingleObjects(int variation) const;
 	bool hasCompositeObjects(int variation) const;
 
+	// Access methods for editor
+	int getCompositeCount(int variation) const;
+	const CompositeTileList& getCompositeAt(int variation, int index) const;
+	int getCompositeChanceAt(int variation, int index) const;
+	int getSingleCount(int variation) const;
+	uint16_t getSingleItemId(int variation, int index) const;
+	int getSingleItemChance(int variation, int index) const;
+
 	bool placeOnBlocking() const { return on_blocking; }
 	bool placeOnDuplicate() const { return on_duplicate; }
 	bool doNewBorders() const { return do_new_borders; }

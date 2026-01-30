@@ -8,6 +8,7 @@ ${CMAKE_CURRENT_LIST_DIR}/basemap.h
 ${CMAKE_CURRENT_LIST_DIR}/border_editor_window.h
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.h
+${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.h
@@ -26,6 +27,7 @@ ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
 ${CMAKE_CURRENT_LIST_DIR}/definitions.h
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.h
+${CMAKE_CURRENT_LIST_DIR}/doodad_editor_window.h
 ${CMAKE_CURRENT_LIST_DIR}/duplicated_items_window.h
 ${CMAKE_CURRENT_LIST_DIR}/editor.h
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
@@ -125,6 +127,7 @@ ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
@@ -139,6 +142,7 @@ ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
 ${CMAKE_CURRENT_LIST_DIR}/doodad_brush.cpp
+${CMAKE_CURRENT_LIST_DIR}/doodad_editor_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/duplicated_items_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor.cpp
 ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.cpp
@@ -149,6 +153,7 @@ ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gif_recorder.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp
+${CMAKE_CURRENT_LIST_DIR}/sprite_cache.cpp
 ${CMAKE_CURRENT_LIST_DIR}/ground_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gui.cpp
 ${CMAKE_CURRENT_LIST_DIR}/house_brush.cpp

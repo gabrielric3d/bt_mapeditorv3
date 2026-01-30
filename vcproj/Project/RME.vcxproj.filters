@@ -112,6 +112,9 @@
     <ClInclude Include="..\..\source\graphics.h">
       <Filter>gui\graphics</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\sprite_cache.h">
+      <Filter>gui\graphics</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\hotkey_utils.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -296,6 +299,9 @@
     <ClInclude Include="..\..\source\doodad_brush.h">
       <Filter>editor\brushes</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\doodad_editor_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\carpet_brush.h">
       <Filter>editor\brushes</Filter>
     </ClInclude>
@@ -413,6 +419,9 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\graphics.cpp">
+      <Filter>gui\graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\sprite_cache.cpp">
       <Filter>gui\graphics</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\hotkey_utils.cpp">
@@ -588,6 +597,9 @@
     </ClCompile>
     <ClCompile Include="..\..\source\doodad_brush.cpp">
       <Filter>editor\brushes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\doodad_editor_window.cpp">
+      <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\creature_brush.cpp">
       <Filter>editor\brushes</Filter>
