@@ -25,10 +25,9 @@
 
 class GroundBrush : public TerrainBrush
 {
-protected:
+public:
 	struct BorderBlock;
 
-public:
 	static void init();
 
 	struct DrawParams {

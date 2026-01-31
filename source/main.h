@@ -50,6 +50,11 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4275)
+#endif
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
 #   include <wx/wx.h>
@@ -78,6 +83,10 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 #include <wx/ipc.h>
 #include <wx/grid.h>
 #include <wx/clipbrd.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 // PugiXML
 #include "ext/pugixml.hpp"

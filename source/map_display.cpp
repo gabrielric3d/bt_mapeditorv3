@@ -1497,40 +1497,43 @@ void MapCanvas::OnMouseAux2Release(wxMouseEvent& event)
 
 void MapCanvas::OnMouseAuxEvent(wxMouseEvent& event)
 {
-	switch(event.GetEventType()) {
+	const auto eventType = event.GetEventType();
 #ifdef wxEVT_AUX1_DOWN
-		case wxEVT_AUX1_DOWN:
-			OnMouseAux1Click(event);
-			return;
+	if(eventType == wxEVT_AUX1_DOWN) {
+		OnMouseAux1Click(event);
+		return;
+	}
 #endif
 #ifdef wxEVT_AUX1_UP
-		case wxEVT_AUX1_UP:
-			OnMouseAux1Release(event);
-			return;
+	if(eventType == wxEVT_AUX1_UP) {
+		OnMouseAux1Release(event);
+		return;
+	}
 #endif
 #ifdef wxEVT_AUX2_DOWN
-		case wxEVT_AUX2_DOWN:
-			OnMouseAux2Click(event);
-			return;
+	if(eventType == wxEVT_AUX2_DOWN) {
+		OnMouseAux2Click(event);
+		return;
+	}
 #endif
 #ifdef wxEVT_AUX2_UP
-		case wxEVT_AUX2_UP:
-			OnMouseAux2Release(event);
-			return;
+	if(eventType == wxEVT_AUX2_UP) {
+		OnMouseAux2Release(event);
+		return;
+	}
 #endif
 #ifdef wxEVT_AUX1_DCLICK
-		case wxEVT_AUX1_DCLICK:
-			OnMouseAux1DoubleClick(event);
-			return;
+	if(eventType == wxEVT_AUX1_DCLICK) {
+		OnMouseAux1DoubleClick(event);
+		return;
+	}
 #endif
 #ifdef wxEVT_AUX2_DCLICK
-		case wxEVT_AUX2_DCLICK:
-			OnMouseAux2DoubleClick(event);
-			return;
-#endif
-		default:
-			break;
+	if(eventType == wxEVT_AUX2_DCLICK) {
+		OnMouseAux2DoubleClick(event);
+		return;
 	}
+#endif
 	event.Skip();
 }
 
