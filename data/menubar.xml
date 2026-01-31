@@ -169,6 +169,9 @@
         <item name="$Recent Brushes" action="WIN_RECENT_BRUSHES" help="Displays the recent brushes window."/>
         <item name="$Browse Field Panel" action="WIN_BROWSE_FIELD" help="Displays the dockable Browse Field panel."/>
         <item name="$Brush Manager" action="BRUSH_MANAGER" help="Shows the brush XML manager."/>
+        <item name="$Structure Manager" action="STRUCTURE_MANAGER" help="Save and place reusable structures."/>
+        <item name="Brush $Tips" action="BRUSH_TIPS" help="Shows brush tips and shortcuts."/>
+        <item name="$Area Decoration" action="AREA_DECORATION" help="Opens the area decoration tool for placing decorative items in regions."/>
         <item name="$New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
         <separator/>
         <item name="$Terrain Palette" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>
