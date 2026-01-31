@@ -30,6 +30,9 @@
 #include "find_item_window.h"
 #include "duplicated_items_window.h"
 #include "brush_manager_window.h"
+#include "brush_tips_window.h"
+#include "structure_manager_window.h"
+#include "area_decoration_dialog.h"
 #include "settings.h"
 #include "browse_tile_window.h"
 #include "hotkey_window.h"
@@ -275,6 +278,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SHOW_TECHNICAL_ITEMS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_GRID, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_CREATURES, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CREATURE_IDLE_ANIMATION, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_SPAWNS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_SPAWN_CREATURESLIST, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_SPECIAL, wxITEM_CHECK, OnChangeViewSettings);
@@ -298,6 +302,9 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(WIN_RECENT_BRUSHES, wxITEM_NORMAL, OnRecentBrushesWindow);
 	MAKE_ACTION(WIN_BROWSE_FIELD, wxITEM_NORMAL, OnBrowseFieldWindow);
 	MAKE_ACTION(BRUSH_MANAGER, wxITEM_NORMAL, OnBrushManager);
+	MAKE_ACTION(STRUCTURE_MANAGER, wxITEM_NORMAL, OnStructureManager);
+	MAKE_ACTION(BRUSH_TIPS, wxITEM_NORMAL, OnBrushTipsWindow);
+	MAKE_ACTION(AREA_DECORATION, wxITEM_NORMAL, OnAreaDecoration);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 	MAKE_ACTION(TAKE_REGION_SCREENSHOT, wxITEM_NORMAL, OnTakeRegionScreenshot);
@@ -544,6 +551,9 @@ void MainMenuBar::Update()
 	EnableItem(WIN_RECENT_BRUSHES, loaded);
 	EnableItem(WIN_BROWSE_FIELD, loaded);
 	EnableItem(BRUSH_MANAGER, loaded);
+	EnableItem(STRUCTURE_MANAGER, has_map);
+	EnableItem(BRUSH_TIPS, true);
+	EnableItem(AREA_DECORATION, loaded);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
@@ -611,6 +621,7 @@ void MainMenuBar::LoadValues()
 	CheckItem(SHOW_GRID, g_settings.getBoolean(Config::SHOW_GRID));
 	CheckItem(HIGHLIGHT_ITEMS, g_settings.getBoolean(Config::HIGHLIGHT_ITEMS));
 	CheckItem(SHOW_CREATURES, g_settings.getBoolean(Config::SHOW_CREATURES));
+	CheckItem(SHOW_CREATURE_IDLE_ANIMATION, g_settings.getBoolean(Config::SHOW_CREATURE_IDLE_ANIMATION));
 	CheckItem(SHOW_SPAWNS, g_settings.getBoolean(Config::SHOW_SPAWNS));
 	CheckItem(SHOW_SPAWN_CREATURESLIST, g_settings.getBoolean(Config::SHOW_SPAWN_CREATURESLIST));
 	CheckItem(SHOW_SPECIAL, g_settings.getBoolean(Config::SHOW_SPECIAL_TILES));
@@ -648,6 +659,19 @@ std::vector<wxString> MainMenuBar::GetRecentFiles()
         files[i] = recentFiles.GetHistoryFile(i);
     }
     return files;
+}
+
+void MainMenuBar::SetAcceleratorsEnabled(bool enabled)
+{
+	if(!frame) {
+		return;
+	}
+
+	if(enabled) {
+		RefreshAcceleratorTable();
+	} else {
+		frame->SetAcceleratorTable(wxAcceleratorTable());
+	}
 }
 
 void MainMenuBar::UpdateFloorMenu()
@@ -2533,6 +2557,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 	g_settings.setInteger(Config::SHOW_ONLY_TILEFLAGS, IsItemChecked(MenuBar::SHOW_ONLY_COLORS));
 	g_settings.setInteger(Config::SHOW_ONLY_MODIFIED_TILES, IsItemChecked(MenuBar::SHOW_ONLY_MODIFIED));
 	g_settings.setInteger(Config::SHOW_CREATURES, IsItemChecked(MenuBar::SHOW_CREATURES));
+	g_settings.setInteger(Config::SHOW_CREATURE_IDLE_ANIMATION, IsItemChecked(MenuBar::SHOW_CREATURE_IDLE_ANIMATION));
 	g_settings.setInteger(Config::SHOW_SPAWNS, IsItemChecked(MenuBar::SHOW_SPAWNS));
 	g_settings.setInteger(Config::SHOW_SPAWN_CREATURESLIST, IsItemChecked(MenuBar::SHOW_SPAWN_CREATURESLIST));
 	g_settings.setInteger(Config::SHOW_HOUSES, IsItemChecked(MenuBar::SHOW_HOUSES));
@@ -2619,6 +2644,32 @@ void MainMenuBar::OnBrushManager(wxCommandEvent& WXUNUSED(event))
 
 	BrushManagerDialog dialog(frame);
 	dialog.ShowModal();
+}
+
+void MainMenuBar::OnStructureManager(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	StructureManagerDialog* dialog = newd StructureManagerDialog(frame);
+	dialog->Show();
+}
+
+void MainMenuBar::OnBrushTipsWindow(wxCommandEvent& WXUNUSED(event))
+{
+	BrushTipsDialog dialog(frame);
+	dialog.ShowModal();
+}
+
+void MainMenuBar::OnAreaDecoration(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	AreaDecorationDialog* dialog = newd AreaDecorationDialog(frame);
+	dialog->Show();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

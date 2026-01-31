@@ -15,41 +15,16 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
-#ifndef RME_COPYBUFFER_H_
-#define RME_COPYBUFFER_H_
+#ifndef RME_BRUSH_TIPS_WINDOW_H_
+#define RME_BRUSH_TIPS_WINDOW_H_
 
-#include <wx/dataobj.h>
+#include <wx/dialog.h>
 
-#include "position.h"
-#include "basemap.h"
-
-class Editor;
-
-class CopyBuffer
+class BrushTipsDialog : public wxDialog
 {
 public:
-	CopyBuffer();
-	virtual ~CopyBuffer();
-
-	// In-editor implantation
-	void copy(Editor& editor, int floor);
-	void cut(Editor& editor, int floor);
-	void paste(Editor& editor, const Position& toPosition);
-	bool canPaste() const;
-	// Returns the upper-left corner of the copybuffer
-	Position getPosition() const;
-
-	// Clears the copybuffer (eg. resets it)
-	void clear();
-
-	size_t GetTileCount();
-
-	BaseMap& getBufferMap();
-	void setBuffer(BaseMap* newTiles, const Position& newCopyPos);
-
-private:
-	Position copyPos;
-	BaseMap* tiles;
+	explicit BrushTipsDialog(wxWindow* parent);
+	~BrushTipsDialog() = default;
 };
 
 #endif

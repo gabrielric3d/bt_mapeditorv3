@@ -84,7 +84,9 @@ protected:
 	wxDirPickerCtrl* screenshot_directory_picker;
 	wxChoice* screenshot_format_choice;
 	wxCheckBox* hide_items_when_zoomed_chkbox;
+	wxCheckBox* full_detail_zoom_out_chkbox;
 	wxCheckBox* selected_tile_indicator_chkbox;
+	wxCheckBox* autoborder_preview_chkbox;
 	wxCheckBox* spawn_overlay_chkbox;
 	wxColourPickerCtrl* cursor_color_pick;
 	wxColourPickerCtrl* cursor_alt_color_pick;
@@ -120,6 +122,7 @@ protected:
 
 	wxCheckBox* switch_mousebtn_chkbox;
 	wxCheckBox* doubleclick_properties_chkbox;
+	wxChoice* raw_palette_select_modifier_choice;
 	wxCheckBox* inversed_scroll_chkbox;
 	wxSlider* scroll_speed_slider;
 	wxSlider* zoom_speed_slider;

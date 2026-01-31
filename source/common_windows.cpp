@@ -627,6 +627,8 @@ void ExportMiniMapWindow::CheckValues()
 
 BEGIN_EVENT_TABLE(KeyForwardingTextCtrl, wxTextCtrl)
 	EVT_KEY_DOWN(KeyForwardingTextCtrl::OnKeyDown)
+	EVT_SET_FOCUS(KeyForwardingTextCtrl::OnFocus)
+	EVT_KILL_FOCUS(KeyForwardingTextCtrl::OnKillFocus)
 END_EVENT_TABLE()
 
 void KeyForwardingTextCtrl::OnKeyDown(wxKeyEvent& event)
@@ -635,8 +637,21 @@ void KeyForwardingTextCtrl::OnKeyDown(wxKeyEvent& event)
 		event.GetKeyCode() == WXK_PAGEDOWN || event.GetKeyCode() == WXK_PAGEUP) {
 		GetParent()->GetEventHandler()->AddPendingEvent(event);
 	} else {
+		event.StopPropagation();
 		event.Skip();
 	}
+}
+
+void KeyForwardingTextCtrl::OnFocus(wxFocusEvent& event)
+{
+	g_gui.DisableHotkeys();
+	event.Skip();
+}
+
+void KeyForwardingTextCtrl::OnKillFocus(wxFocusEvent& event)
+{
+	g_gui.EnableHotkeys();
+	event.Skip();
 }
 
 // ============================================================================

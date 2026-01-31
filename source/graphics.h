@@ -217,6 +217,8 @@ public:
 	uint16_t minimap_color;
 
 	bool has_light = false;
+	bool has_idle_frame_group = false;
+	bool animate_always = false;
 	SpriteLight light;
 
 	std::vector<NormalImage*> spriteList;

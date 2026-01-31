@@ -39,6 +39,18 @@ BaseMap& CopyBuffer::getBufferMap()
 	return *tiles;
 }
 
+void CopyBuffer::setBuffer(BaseMap* newTiles, const Position& newCopyPos)
+{
+	clear();
+
+	if(newTiles) {
+		tiles = newTiles;
+	} else {
+		tiles = newd BaseMap();
+	}
+	copyPos = newCopyPos;
+}
+
 CopyBuffer::~CopyBuffer()
 {
 	clear();

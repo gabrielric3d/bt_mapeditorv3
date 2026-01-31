@@ -478,31 +478,47 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 			file.getU8(group_count);
 		}
 
+		const bool has_creature_groups = has_frame_groups && id > item_count;
+		bool loaded_group = false;
+		bool idle_group_seen = false;
+		bool idle_group_animated = false;
+		uint8_t selected_frames = 0;
+		bool selected_is_idle = false;
+		const uint8_t idle_group_type = 0;
+
 		for(uint32_t k = 0; k < group_count; ++k) {
-			// Skipping the group type
-			if(has_frame_groups && id > item_count) {
-				file.skip(1);
+			uint8_t group_type = idle_group_type;
+			if(has_creature_groups) {
+				file.getU8(group_type);
 			}
 
 			// Size and GameSprite data
-			file.getByte(sType->width);
-			file.getByte(sType->height);
+			uint8_t width = 0;
+			uint8_t height = 0;
+			file.getByte(width);
+			file.getByte(height);
 
 			// Skipping the exact size
-			if((sType->width > 1) || (sType->height > 1)){
+			if((width > 1) || (height > 1)) {
 				file.skip(1);
 			}
 
-			file.getU8(sType->layers); // Number of blendframes (some sprites consist of several merged sprites)
-			file.getU8(sType->pattern_x);
-			file.getU8(sType->pattern_y);
+			uint8_t layers = 0;
+			uint8_t pattern_x = 0;
+			uint8_t pattern_y = 0;
+			uint8_t pattern_z = 0;
+			uint8_t frames = 0;
+			file.getU8(layers); // Number of blendframes (some sprites consist of several merged sprites)
+			file.getU8(pattern_x);
+			file.getU8(pattern_y);
 			if(dat_format <= DAT_FORMAT_74)
-				sType->pattern_z = 1;
+				pattern_z = 1;
 			else
-				file.getU8(sType->pattern_z);
-			file.getU8(sType->frames); // Length of animation
+				file.getU8(pattern_z);
+			file.getU8(frames); // Length of animation
 
-			if(sType->frames > 1) {
+			Animator* animator = nullptr;
+			if(frames > 1) {
 				uint8_t async = 0;
 				int loop_count = 0;
 				int8_t start_frame = 0;
@@ -511,28 +527,55 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 					file.get32(loop_count);
 					file.getSByte(start_frame);
 				}
-				sType->animator = newd Animator(sType->frames, start_frame, loop_count, async == 1);
+				animator = newd Animator(frames, start_frame, loop_count, async == 1);
 				if(has_frame_durations) {
-					for(int i = 0; i < sType->frames; i++) {
+					for(int i = 0; i < frames; i++) {
 						uint32_t min;
 						uint32_t max;
 						file.getU32(min);
 						file.getU32(max);
-						FrameDuration* frame_duration = sType->animator->getFrameDuration(i);
+						FrameDuration* frame_duration = animator->getFrameDuration(i);
 						frame_duration->setValues(int(min), int(max));
 					}
-					sType->animator->reset();
+					animator->reset();
 				}
 			}
 
-			sType->numsprites =
-				(int)sType->width * (int)sType->height *
-				(int)sType->layers *
-				(int)sType->pattern_x * (int)sType->pattern_y * sType->pattern_z *
-				(int)sType->frames;
+			const uint32_t numsprites =
+				(int)width * (int)height *
+				(int)layers *
+				(int)pattern_x * (int)pattern_y * pattern_z *
+				(int)frames;
+
+			const bool is_idle_group = has_creature_groups && group_type == idle_group_type;
+			if(is_idle_group) {
+				idle_group_seen = true;
+				if(frames > 1) {
+					idle_group_animated = true;
+				}
+			}
+
+			bool should_store_group = false;
+			if(!has_creature_groups) {
+				should_store_group = !loaded_group;
+			} else if(!sType->animate_always) {
+				should_store_group = is_idle_group || !loaded_group;
+			} else {
+				if(is_idle_group && frames > 1) {
+					should_store_group = true;
+				} else if(!idle_group_animated) {
+					should_store_group = !loaded_group || frames > selected_frames ||
+						(selected_is_idle && !is_idle_group);
+				}
+			}
+
+			std::vector<GameSprite::NormalImage*> group_sprites;
+			if(should_store_group) {
+				group_sprites.reserve(numsprites);
+			}
 
 			// Read the sprite ids
-			for(uint32_t i = 0; i < sType->numsprites; ++i) {
+			for(uint32_t i = 0; i < numsprites; ++i) {
 				uint32_t sprite_id;
 				if(is_extended) {
 					file.getU32(sprite_id);
@@ -547,9 +590,35 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 					img->id = sprite_id;
 					image_space[sprite_id] = img;
 				}
-				sType->spriteList.push_back(static_cast<GameSprite::NormalImage*>(image_space[sprite_id]));
+				if(should_store_group) {
+					group_sprites.push_back(static_cast<GameSprite::NormalImage*>(image_space[sprite_id]));
+				}
+			}
+
+			if(should_store_group) {
+				if(sType->animator) {
+					delete sType->animator;
+					sType->animator = nullptr;
+				}
+				sType->spriteList.clear();
+				sType->width = width;
+				sType->height = height;
+				sType->layers = layers;
+				sType->pattern_x = pattern_x;
+				sType->pattern_y = pattern_y;
+				sType->pattern_z = pattern_z;
+				sType->frames = frames;
+				sType->numsprites = numsprites;
+				sType->animator = animator;
+				sType->spriteList.swap(group_sprites);
+				loaded_group = true;
+				selected_frames = frames;
+				selected_is_idle = is_idle_group;
+			} else if(animator) {
+				delete animator;
 			}
 		}
+		sType->has_idle_frame_group = has_creature_groups && idle_group_seen;
 		++id;
 		
 		// Update progress every metadata_update_interval items
@@ -664,6 +733,8 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 			case DatFlagTranslucent:
 			case DatFlagLyingCorpse:
 			case DatFlagAnimateAlways:
+				sType->animate_always = true;
+				break;
 			case DatFlagFullGround:
 			case DatFlagLook:
 			case DatFlagWrappable:

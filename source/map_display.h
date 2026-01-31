@@ -32,6 +32,8 @@
 
 class Item;
 class Creature;
+class BaseMap;
+class Brush;
 class MapWindow;
 class MapPopupMenu;
 class AnimationTimer;
@@ -128,6 +130,8 @@ public:
 
 	void UpdatePositionStatus(int x = -1, int y = -1);
 	void UpdateZoomStatus();
+	void UpdateAutoborderPreview(int mouse_map_x, int mouse_map_y, const wxMouseEvent& event);
+	void ClearAutoborderPreview();
 
 	void ChangeFloor(int new_floor);
 	int GetFloor() const noexcept { return floor; }
@@ -185,12 +189,22 @@ private:
 	bool boundbox_select_creatures;
 	bool boundbox_deselect;
 	bool screendragging;
+	bool suppress_right_release;
 	bool isPasting() const;
 	bool drawing;
 	bool dragging_draw;
 	bool replace_dragging;
 	bool alt_ground_mode;
 	GroundBrush* alt_ground_reference;
+	BaseMap* autoborder_preview_map;
+	bool autoborder_preview_active;
+	int last_preview_map_x;
+	int last_preview_map_y;
+	int last_preview_map_z;
+	Brush* last_preview_brush;
+	int last_preview_brush_size;
+	int last_preview_brush_shape;
+	bool last_preview_alt;
 	std::vector<wxPoint> lasso_screen_points;
 	std::vector<wxPoint> lasso_map_points;
 

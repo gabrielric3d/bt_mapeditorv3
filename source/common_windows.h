@@ -149,6 +149,8 @@ public:
 	~KeyForwardingTextCtrl() {}
 
 	void OnKeyDown(wxKeyEvent&);
+	void OnFocus(wxFocusEvent&);
+	void OnKillFocus(wxFocusEvent&);
 
 	DECLARE_EVENT_TABLE()
 };

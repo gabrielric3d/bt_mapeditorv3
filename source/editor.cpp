@@ -34,10 +34,107 @@
 #include "doodad_brush.h"
 #include "creature_brush.h"
 #include "spawn_brush.h"
+#include "creature.h"
+#include "creatures.h"
 
 #include "live_server.h"
 #include "live_client.h"
 #include "live_action.h"
+
+#include <algorithm>
+#include <random>
+
+namespace {
+
+bool CanPlaceSpawnGroupCreature(const Tile* tile, const CreatureType* type)
+{
+	if(tile) {
+		if(tile->isBlocking()) {
+			return false;
+		}
+		if(tile->creature) {
+			return false;
+		}
+		if(tile->isPZ() && !type->isNpc) {
+			return false;
+		}
+	}
+	return true;
+}
+
+Tile* GetOrCreateSpawnGroupTile(BaseMap& map, const Position& pos, std::map<Position, Tile*>& changes)
+{
+	auto it = changes.find(pos);
+	if(it != changes.end()) {
+		return it->second;
+	}
+
+	Tile* original = map.getTile(pos);
+	Tile* copy = original ? original->deepCopy(map) : map.allocator(map.createTileL(pos));
+	changes.emplace(pos, copy);
+	return copy;
+}
+
+void ApplySpawnGroup(BaseMap& map, const Position& center, int radius,
+	const std::vector<GUI::SpawnCreatureEntry>& group,
+	std::map<Position, Tile*>& changes)
+{
+	if(group.empty() || radius < 0) {
+		return;
+	}
+
+	std::vector<Position> positions;
+	positions.reserve(static_cast<size_t>((radius * 2 + 1) * (radius * 2 + 1)));
+	for(int y = -radius; y <= radius; ++y) {
+		for(int x = -radius; x <= radius; ++x) {
+			positions.push_back(Position(center.x + x, center.y + y, center.z));
+		}
+	}
+
+	std::random_device rd;
+	std::mt19937 rng(rd());
+	std::shuffle(positions.begin(), positions.end(), rng);
+
+	size_t pos_index = 0;
+	for(const auto& entry : group) {
+		if(entry.count <= 0) {
+			continue;
+		}
+
+		CreatureType* type = g_creatures[entry.name];
+		if(!type) {
+			continue;
+		}
+
+		for(int i = 0; i < entry.count; ++i) {
+			Tile* target = nullptr;
+			while(pos_index < positions.size()) {
+				const Position& pos = positions[pos_index++];
+				Tile* candidate = nullptr;
+				auto change_it = changes.find(pos);
+				if(change_it != changes.end()) {
+					candidate = change_it->second;
+				} else {
+					candidate = map.getTile(pos);
+				}
+
+				if(CanPlaceSpawnGroupCreature(candidate, type)) {
+					target = GetOrCreateSpawnGroupTile(map, pos, changes);
+					break;
+				}
+			}
+
+			if(!target) {
+				return;
+			}
+
+			target->creature = newd Creature(type);
+			target->creature->setSpawnTime(g_gui.GetSpawnTime());
+		}
+	}
+}
+
+} // namespace
 
 Editor::Editor(CopyBuffer& copybuffer) :
 	live_server(nullptr),
@@ -1439,26 +1536,50 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 		BatchAction* batch = actionQueue->createBatch(dodraw ? ACTION_DRAW : ACTION_ERASE);
 		Action* action = actionQueue->createAction(batch);
 
-		Tile* tile = map.getTile(offset);
-		Tile* new_tile = nullptr;
-		if(tile) {
-			new_tile = tile->deepCopy(map);
-		} else {
-			new_tile = map.allocator(map.createTileL(offset));
-		}
-		int param;
-		if(!brush->isCreature()) {
-			param = g_gui.GetBrushSize();
+		if(brush->isSpawn() && dodraw) {
+			int param = g_gui.GetBrushSize();
 			if(param <= 0) {
 				param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
 			}
-		}
-		if(dodraw) {
+
+			std::map<Position, Tile*> changes;
+			Tile* original_tile = map.getTile(offset);
+			const bool created_spawn = (original_tile == nullptr || original_tile->spawn == nullptr);
+
+			Tile* new_tile = GetOrCreateSpawnGroupTile(map, offset, changes);
 			brush->draw(&map, new_tile, &param);
+
+			if(created_spawn) {
+				ApplySpawnGroup(map, offset, param, g_gui.GetSpawnCreatureGroup(), changes);
+			}
+
+			for(auto& entry : changes) {
+				action->addChange(newd Change(entry.second));
+			}
 		} else {
-			brush->undraw(&map, new_tile);
+			Tile* tile = map.getTile(offset);
+			Tile* new_tile = nullptr;
+			if(tile) {
+				new_tile = tile->deepCopy(map);
+			} else {
+				new_tile = map.allocator(map.createTileL(offset));
+			}
+
+			int param;
+			if(!brush->isCreature()) {
+				param = g_gui.GetBrushSize();
+				if(param <= 0) {
+					param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
+				}
+			}
+			if(dodraw) {
+				brush->draw(&map, new_tile, &param);
+			} else {
+				brush->undraw(&map, new_tile);
+			}
+			action->addChange(newd Change(new_tile));
 		}
-		action->addChange(newd Change(new_tile));
+
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);
 	}
@@ -1513,6 +1634,36 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 			}
 		}
 	} else {
+
+		if(brush->isSpawn() && dodraw) {
+			int param = g_gui.GetBrushSize();
+			if(param <= 0) {
+				param = g_settings.getInteger(Config::CURRENT_SPAWN_RADIUS);
+			}
+
+			std::map<Position, Tile*> changes;
+			const auto& group = g_gui.GetSpawnCreatureGroup();
+
+			for(PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
+				const Position& pos = *it;
+				Tile* original_tile = map.getTile(pos);
+				const bool created_spawn = (original_tile == nullptr || original_tile->spawn == nullptr);
+
+				Tile* new_tile = GetOrCreateSpawnGroupTile(map, pos, changes);
+				brush->draw(&map, new_tile, &param);
+
+				if(created_spawn) {
+					ApplySpawnGroup(map, pos, param, group, changes);
+				}
+			}
+
+			for(auto& entry : changes) {
+				action->addChange(newd Change(entry.second));
+			}
+
+			addAction(action, 2);
+			return;
+		}
 
 		for(PositionVector::const_iterator it = tilestodraw.begin(); it != tilestodraw.end(); ++it) {
 			TileLocation* location = map.createTileL(*it);

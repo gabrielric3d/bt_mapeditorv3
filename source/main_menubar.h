@@ -118,6 +118,7 @@ namespace MenuBar
 		SHOW_GRID,
 		SHOW_EXTRA,
 		SHOW_CREATURES,
+		SHOW_CREATURE_IDLE_ANIMATION,
 		SHOW_SPAWNS,
 		SHOW_SPAWN_CREATURESLIST,
 		SHOW_SPECIAL,
@@ -140,6 +141,7 @@ namespace MenuBar
 		WIN_RECENT_BRUSHES,
 		WIN_BROWSE_FIELD,
 		BRUSH_MANAGER,
+		STRUCTURE_MANAGER,
 		NEW_PALETTE,
 		TAKE_SCREENSHOT,
 		TAKE_REGION_SCREENSHOT,
@@ -176,6 +178,8 @@ namespace MenuBar
 		ABOUT,
 		SHOW_WARNINGS,
 		IMPORT_MONSTERSJSON,
+		BRUSH_TIPS,
+		AREA_DECORATION,
 	};
 }
 
@@ -210,6 +214,7 @@ public:
 	void LoadRecentFiles();
 	void SaveRecentFiles();
 	std::vector<wxString> GetRecentFiles();
+	void SetAcceleratorsEnabled(bool enabled);
 
 	// Interface
 	void EnableItem(MenuBar::ActionID id, bool enable);
@@ -314,6 +319,9 @@ public:
 	void OnRecentBrushesWindow(wxCommandEvent& event);
 	void OnBrowseFieldWindow(wxCommandEvent& event);
 	void OnBrushManager(wxCommandEvent& event);
+	void OnStructureManager(wxCommandEvent& event);
+	void OnBrushTipsWindow(wxCommandEvent& event);
+	void OnAreaDecoration(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
 	void OnTakeRegionScreenshot(wxCommandEvent& event);

@@ -32,6 +32,8 @@
 #include "client_version.h"
 
 #include <map>
+#include <string>
+#include <vector>
 
 class BaseMap;
 class Map;
@@ -284,6 +286,15 @@ public:
 	int GetBrushVariation() const;
 	int GetSpawnTime() const;
 
+	struct SpawnCreatureEntry {
+		std::string name;
+		int count;
+	};
+
+	const std::vector<SpawnCreatureEntry>& GetSpawnCreatureGroup() const { return spawn_creature_group; }
+	void SetSpawnCreatureGroup(const std::vector<SpawnCreatureEntry>& group) { spawn_creature_group = group; }
+	void ClearSpawnCreatureGroup() { spawn_creature_group.clear(); }
+
 	// Additional brush parameters
 	void SetSpawnTime(int time) { creature_spawntime = time; }
 	void SetBrushSize(int nz);
@@ -329,10 +340,11 @@ public:
 	void DoCut();
 	void DoCopy();
 	void DoPaste();
-	void PreparePaste();
+	void PreparePaste(bool keep = false);
 	void StartPasting();
 	void EndPasting();
 	bool IsPasting() const { return pasting; }
+	bool IsKeepPasting() const { return keep_pasting; }
 
 	bool CanUndo();
 	bool CanRedo();
@@ -474,6 +486,7 @@ protected:
 	ClientVersionID loaded_version;
 	EditorMode mode;
 	bool pasting;
+	bool keep_pasting;
 
 	Hotkey hotkeys[10];
 	bool hotkeys_enabled;
@@ -487,6 +500,7 @@ protected:
 	int brush_size;
 	int brush_variation;
 	int creature_spawntime;
+	std::vector<SpawnCreatureEntry> spawn_creature_group;
 
 	bool use_custom_thickness;
 	float custom_thickness_mod;

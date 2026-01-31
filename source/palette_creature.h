@@ -20,6 +20,8 @@
 #define RME_TILESET_CREATURE_H_
 
 #include "palette_common.h"
+#include <string>
+#include <vector>
 
 class CreaturePalettePanel : public PalettePanel {
 public:
@@ -54,21 +56,42 @@ public:
 	void OnChangeSpawnSize(wxSpinEvent& event);
 
 	void OnTilesetChange(wxCommandEvent& event);
+	void OnFilterTextChange(wxCommandEvent& event);
 	void OnListBoxChange(wxCommandEvent& event);
 	void OnClickCreatureBrushButton(wxCommandEvent& event);
 	void OnClickSpawnBrushButton(wxCommandEvent& event);
+	void OnClickGroupAdd(wxCommandEvent& event);
+	void OnClickGroupRemove(wxCommandEvent& event);
+	void OnClickGroupClear(wxCommandEvent& event);
+	void OnGroupListChange(wxCommandEvent& event);
 protected:
 	void SelectCreatureBrush();
 	void SelectSpawnBrush();
+	void SyncSpawnGroupToGUI();
+	void UpdateSpawnGroupList();
+	void ApplyCreatureFilter(bool preserve_selection);
+
+	struct SpawnGroupEntry {
+		std::string name;
+		int count;
+	};
 
 	wxChoice* tileset_choice;
+	KeyForwardingTextCtrl* creature_filter_text;
 	SortableListBox* creature_list;
 	wxToggleButton* creature_brush_button;
 	wxToggleButton* spawn_brush_button;
 	wxSpinCtrl* creature_spawntime_spin;
 	wxSpinCtrl* spawn_size_spin;
+	wxListBox* spawn_group_list;
+	wxSpinCtrl* spawn_group_count_spin;
+	wxButton* spawn_group_add_button;
+	wxButton* spawn_group_remove_button;
+	wxButton* spawn_group_clear_button;
 
 	bool handling_event;
+	std::vector<SpawnGroupEntry> spawn_group;
+	std::vector<Brush*> creature_brushes;
 
 	DECLARE_EVENT_TABLE();
 };

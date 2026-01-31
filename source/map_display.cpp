@@ -23,6 +23,7 @@
 #include <sstream>
 #include <time.h>
 #include <unordered_set>
+#include <wx/accel.h>
 #include <wx/wfstream.h>
 #include <wx/filefn.h>
 
@@ -40,6 +41,7 @@
 #include "map_drawer.h"
 #include "application.h"
 #include "live_server.h"
+#include "structure_manager_window.h"
 
 #include "browse_tile_window.h"
 #include "map_window.h"
@@ -69,6 +71,18 @@ MouseActionID ActionForButton(MouseButtonBinding button)
 	if(GetMouseBinding(MouseActionID::Properties) == button)
 		return MouseActionID::Properties;
 	return MouseActionID::Count;
+}
+
+int GetModifierMask(const wxMouseEvent& event)
+{
+	int mask = 0;
+	if(event.ControlDown())
+		mask |= wxACCEL_CTRL;
+	if(event.AltDown())
+		mask |= wxACCEL_ALT;
+	if(event.ShiftDown())
+		mask |= wxACCEL_SHIFT;
+	return mask;
 }
 
 void DispatchMousePress(MouseButtonBinding button, MapCanvas& canvas, wxMouseEvent& event)
@@ -188,10 +202,20 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	boundbox_select_creatures(false),
 	boundbox_deselect(false),
 	screendragging(false),
+	suppress_right_release(false),
 	drawing(false),
 	dragging_draw(false),
 	replace_dragging(false),
 	alt_ground_mode(false),
+	autoborder_preview_map(newd BaseMap()),
+	autoborder_preview_active(false),
+	last_preview_map_x(-1),
+	last_preview_map_y(-1),
+	last_preview_map_z(-1),
+	last_preview_brush(nullptr),
+	last_preview_brush_size(-1),
+	last_preview_brush_shape(-1),
+	last_preview_alt(false),
 
 	screenshot_buffer(nullptr),
 	gif_writer(nullptr),
@@ -273,17 +297,53 @@ void MapCanvas::ApplyLassoSelection(Selection& selection, bool creaturesOnly, bo
 		max_y = std::max(max_y, point.y);
 	}
 
+	int start_z = floor;
+	int end_z = floor;
+	switch(g_settings.getInteger(Config::SELECTION_TYPE)) {
+		case SELECT_ALL_FLOORS:
+			start_z = rme::MapMaxLayer;
+			end_z = floor;
+			break;
+		case SELECT_VISIBLE_FLOORS:
+			start_z = (floor < 8) ? rme::MapGroundLayer : std::min(rme::MapMaxLayer, floor + 2);
+			end_z = floor;
+			break;
+		case SELECT_CURRENT_FLOOR:
+		default:
+			start_z = end_z = floor;
+			break;
+	}
+
+	const bool compensated = g_settings.getInteger(Config::COMPENSATED_SELECT) &&
+		floor < rme::MapGroundLayer;
+
 	Map& map = editor.getMap();
-	for(int x = min_x; x <= max_x; ++x) {
-		for(int y = min_y; y <= max_y; ++y) {
-			double px = x + 0.5;
-			double py = y + 0.5;
-			if(IsPointInPolygon(lasso_map_points, px, py)) {
-				Tile* tile = map.getTile(x, y, floor);
-				if(removeSelection) {
-					RemoveTileOrCreaturesFromSelection(selection, tile, creaturesOnly, map);
-				} else {
-					AddTileOrCreaturesToSelection(selection, tile, creaturesOnly, map);
+	for(int z = start_z; z >= end_z; --z) {
+		int offset = 0;
+		if(compensated) {
+			if(z > rme::MapGroundLayer) {
+				offset = floor - rme::MapGroundLayer;
+			} else {
+				offset = floor - z;
+			}
+		}
+
+		const int start_x = min_x + offset;
+		const int end_x = max_x + offset;
+		const int start_y = min_y + offset;
+		const int end_y = max_y + offset;
+
+		for(int x = start_x; x <= end_x; ++x) {
+			for(int y = start_y; y <= end_y; ++y) {
+				double px = x + 0.5;
+				double py = y + 0.5;
+				if(IsPointInPolygon(lasso_map_points, px - offset, py - offset)) {
+					Tile* tile = map.getTile(x, y, z);
+					if(removeSelection) {
+						RemoveTileOrCreaturesFromSelection(selection, tile, creaturesOnly, map);
+					} else {
+						AddTileOrCreaturesToSelection(selection, tile, creaturesOnly, map);
+					}
 				}
 			}
 		}
@@ -497,6 +557,7 @@ MapCanvas::~MapCanvas()
 	delete popup_menu;
 	delete animation_timer;
 	delete drawer;
+	delete autoborder_preview_map;
 	StopGifRecording(false, false);
 	free(screenshot_buffer);
 }
@@ -546,7 +607,8 @@ void MapCanvas::OnPaint(wxPaintEvent& event)
 		DrawingOptions& options = drawer->getOptions();
 		if(screenshot_buffer) {
 			options.SetIngame();
-			options.show_lights = g_settings.getBoolean(Config::SHOW_LIGHTS);
+			options.show_lights = true;
+			options.light_hour = g_settings.getInteger(Config::LIGHT_HOUR);
 		} else {
 			// Load all settings at once (optimized - single batch load)
 			options.LoadFromSettings();
@@ -1015,6 +1077,132 @@ void MapCanvas::UpdateZoomStatus()
 	}
 }
 
+void MapCanvas::ClearAutoborderPreview()
+{
+	if(!autoborder_preview_map || !autoborder_preview_active) {
+		return;
+	}
+	autoborder_preview_map->clear();
+	autoborder_preview_active = false;
+}
+
+void MapCanvas::UpdateAutoborderPreview(int mouse_map_x, int mouse_map_y, const wxMouseEvent& event)
+{
+	if(!autoborder_preview_map) {
+		return;
+	}
+
+	if(!g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW) ||
+		!g_settings.getBoolean(Config::USE_AUTOMAGIC)) {
+		ClearAutoborderPreview();
+		return;
+	}
+
+	Brush* brush = g_gui.GetCurrentBrush();
+	if(!brush || !brush->isGround() || !brush->needBorders()) {
+		ClearAutoborderPreview();
+		return;
+	}
+
+	// Avoid misleading preview while erasing.
+	if(event.ControlDown()) {
+		ClearAutoborderPreview();
+		return;
+	}
+
+	PositionVector tilestodraw;
+	PositionVector tilestoborder;
+	getTilesToDraw(mouse_map_x, mouse_map_y, floor, &tilestodraw, &tilestoborder, false);
+
+	if(tilestodraw.empty() && tilestoborder.empty()) {
+		ClearAutoborderPreview();
+		return;
+	}
+
+	autoborder_preview_map->clear();
+
+	GroundBrush* replace_brush = nullptr;
+	if(event.AltDown()) {
+		Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
+		if(tile) {
+			replace_brush = tile->getGroundBrush();
+		}
+	}
+
+	// Copy impacted tiles (including neighbor ring for accurate borders).
+	PositionVector copy_positions = tilestodraw;
+	copy_positions.insert(copy_positions.end(), tilestoborder.begin(), tilestoborder.end());
+	for(const Position& pos : tilestoborder) {
+		for(int dy = -1; dy <= 1; ++dy) {
+			for(int dx = -1; dx <= 1; ++dx) {
+				copy_positions.push_back(Position(pos.x + dx, pos.y + dy, pos.z));
+			}
+		}
+	}
+	std::sort(copy_positions.begin(), copy_positions.end());
+	copy_positions.erase(std::unique(copy_positions.begin(), copy_positions.end()), copy_positions.end());
+
+	for(const Position& pos : copy_positions) {
+		Tile* src = editor.getMap().getTile(pos);
+		if(!src) {
+			continue;
+		}
+		Tile* copy = src->deepCopy(*autoborder_preview_map);
+		autoborder_preview_map->setTile(pos, copy, true);
+	}
+
+	// Apply the ground brush in the preview map.
+	for(const Position& pos : tilestodraw) {
+		Tile* tile = autoborder_preview_map->getTile(pos);
+		if(!tile) {
+			tile = autoborder_preview_map->allocator(autoborder_preview_map->createTileL(pos));
+			autoborder_preview_map->setTile(pos, tile, true);
+		}
+
+		tile->cleanBorders();
+
+		if(event.AltDown()) {
+			GroundBrush::DrawParams params;
+			if(replace_brush) {
+				params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::MatchBrush;
+				params.matchBrush = replace_brush;
+			} else {
+				params.replaceCondition = GroundBrush::DrawParams::ReplaceCondition::RequireEmptyTile;
+			}
+			brush->draw(autoborder_preview_map, tile, &params);
+		} else {
+			brush->draw(autoborder_preview_map, tile, nullptr);
+		}
+		tile->update();
+	}
+
+	// Apply autoborder logic on the preview map.
+	std::sort(tilestoborder.begin(), tilestoborder.end());
+	tilestoborder.erase(std::unique(tilestoborder.begin(), tilestoborder.end()), tilestoborder.end());
+	for(const Position& pos : tilestoborder) {
+		Tile* tile = autoborder_preview_map->getTile(pos);
+		if(tile) {
+			tile->borderize(autoborder_preview_map);
+			continue;
+		}
+
+		TileLocation* location = autoborder_preview_map->createTileL(pos);
+		Tile* new_tile = autoborder_preview_map->allocator(location);
+		new_tile->borderize(autoborder_preview_map);
+		if(new_tile->size() > 0) {
+			autoborder_preview_map->setTile(pos, new_tile, true);
+		} else {
+			delete new_tile;
+			autoborder_preview_map->setTile(pos, nullptr, true);
+		}
+	}
+
+	autoborder_preview_active = (autoborder_preview_map->size() > 0);
+	if(!autoborder_preview_active) {
+		autoborder_preview_map->clear();
+	}
+}
+
 void MapCanvas::OnMouseMove(wxMouseEvent& event)
 {
 	// Signal that user is active, so animation timer should refresh at full rate
@@ -1048,6 +1236,7 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 	}
 
 	if(g_gui.IsSelectionMode()) {
+		ClearAutoborderPreview();
 		if(map_update && isPasting()) {
 			Refresh();
 			refresh_requested = true;
@@ -1169,6 +1358,41 @@ void MapCanvas::OnMouseMove(wxMouseEvent& event)
 			Refresh();
 			refresh_requested = true;
 		}
+
+		const bool allow_preview = brush && brush->isGround() && !drawing && !dragging_draw &&
+			!event.ControlDown() &&
+			g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW) &&
+			g_settings.getBoolean(Config::USE_AUTOMAGIC);
+		if(allow_preview) {
+			const bool preview_state_changed =
+				!autoborder_preview_active ||
+				brush != last_preview_brush ||
+				g_gui.GetBrushSize() != last_preview_brush_size ||
+				static_cast<int>(g_gui.GetBrushShape()) != last_preview_brush_shape ||
+				floor != last_preview_map_z ||
+				event.AltDown() != last_preview_alt;
+			if(map_update || preview_state_changed) {
+				UpdateAutoborderPreview(mouse_map_x, mouse_map_y, event);
+				last_preview_map_x = mouse_map_x;
+				last_preview_map_y = mouse_map_y;
+				last_preview_map_z = floor;
+				last_preview_brush = brush;
+				last_preview_brush_size = g_gui.GetBrushSize();
+				last_preview_brush_shape = static_cast<int>(g_gui.GetBrushShape());
+				last_preview_alt = event.AltDown();
+				if(!map_update) {
+					Refresh();
+					refresh_requested = true;
+				}
+			}
+		} else {
+			const bool had_preview = autoborder_preview_active;
+			ClearAutoborderPreview();
+			if(had_preview && !map_update) {
+				Refresh();
+				refresh_requested = true;
+			}
+		}
 	}
 
 	if(map_update && !refresh_requested) {
@@ -1224,11 +1448,23 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent& event)
 
 void MapCanvas::OnMouseRightClick(wxMouseEvent& event)
 {
+	if(isPasting()) {
+		EndPasting();
+		suppress_right_release = true;
+		g_gui.SetStatusText("Paste canceled.");
+		g_gui.RefreshView();
+		return;
+	}
+	suppress_right_release = false;
 	DispatchMousePress(MouseButtonBinding::Right, *this, event);
 }
 
 void MapCanvas::OnMouseRightRelease(wxMouseEvent& event)
 {
+	if(suppress_right_release) {
+		suppress_right_release = false;
+		return;
+	}
 	DispatchMouseRelease(MouseButtonBinding::Right, *this, event);
 }
 
@@ -1428,7 +1664,8 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
 	boundbox_select_creatures = false;
 
-	if(g_gui.IsSelectionMode() && event.AltDown() && !event.ControlDown() && !event.ShiftDown()) {
+	const int raw_palette_modifier = g_settings.getInteger(Config::RAW_PALETTE_SELECT_MODIFIER);
+	if(g_gui.IsSelectionMode() && raw_palette_modifier != 0 && GetModifierMask(event) == raw_palette_modifier) {
 		Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 		if(tile && tile->size() > 0) {
 			Item* item = tile->getTopItem();
@@ -1438,17 +1675,22 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 	} else if(g_gui.IsSelectionMode()) {
 		Selection& selection = editor.getSelection();
 		if(isPasting()) {
+			const bool keepPasting = g_gui.IsKeepPasting();
 			// Set paste to false (no rendering etc.)
-			EndPasting();
+			if(!keepPasting) {
+				EndPasting();
+			}
 
 			// Paste to the map
 			editor.copybuffer.paste(editor, Position(mouse_map_x, mouse_map_y, floor));
 
-			// Start dragging
-			dragging = true;
-			drag_start_x = mouse_map_x;
-			drag_start_y = mouse_map_y;
-			drag_start_z = floor;
+			if(!keepPasting) {
+				// Start dragging
+				dragging = true;
+				drag_start_x = mouse_map_x;
+				drag_start_y = mouse_map_y;
+				drag_start_z = floor;
+			}
 		} else do {
 			boundbox_selection = false;
 			boundbox_deselect = false;
@@ -2452,6 +2694,7 @@ void MapCanvas::OnLoseMouse(wxMouseEvent& event)
 {
 	cursor_in_window = false;
 	alt_ground_mode = false;
+	ClearAutoborderPreview();
 	Refresh();
 }
 
@@ -2473,6 +2716,9 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event)
 {
 	// Signal that user is active
 	animation_timer->RequestRefresh();
+
+	if(StructureManagerDialog::HandleGlobalHotkey(event))
+		return;
 
 	if(HandleMouseKeyboardHotkey(event, true))
 		return;
@@ -3192,6 +3438,7 @@ void MapCanvas::ChangeFloor(int new_floor)
 		UpdatePositionStatus();
 		g_gui.root->UpdateFloorMenu();
 		g_gui.UpdateMinimap(true);
+		ClearAutoborderPreview();
 	}
 	Refresh();
 }
@@ -3211,6 +3458,7 @@ void MapCanvas::EnterSelectionMode()
 	dragging_draw = false;
 	replace_dragging = false;
 	editor.replace_brush = nullptr;
+	ClearAutoborderPreview();
 	Refresh();
 }
 
@@ -3244,8 +3492,10 @@ void MapCanvas::Reset()
 	screendragging = false;
 	drawing = false;
 	dragging_draw = false;
+	suppress_right_release = false;
 	boundbox_deselect = false;
 	ClearLassoSelection();
+	ClearAutoborderPreview();
 
 	replace_dragging = false;
 	editor.replace_brush = nullptr;

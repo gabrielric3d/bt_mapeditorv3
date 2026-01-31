@@ -124,6 +124,18 @@ void BrowseTileListBox::changeIndex(Item* item, bool direction)
 	if(!edit_tile || !item)
 		return;
 
+	std::vector<Item*> selected_items;
+	selected_items.reserve(GetSelectedCount());
+	for(size_t i = 0; i < GetItemCount(); ++i) {
+		if(!IsSelected(i)) {
+			continue;
+		}
+		ItemsMap::const_iterator item_iterator = items.find(int(i));
+		if(item_iterator != items.end()) {
+			selected_items.push_back(item_iterator->second);
+		}
+	}
+
 	if (direction == false) {
 		edit_tile->moveItemToIndex(item, edit_tile->getIndexOf(item) - 1);
 	} else {
@@ -131,6 +143,14 @@ void BrowseTileListBox::changeIndex(Item* item, bool direction)
 	}
 
 	UpdateItems();
+	for(Item* selected_item : selected_items) {
+		for(const auto& entry : items) {
+			if(entry.second == selected_item) {
+				Select(entry.first, true);
+				break;
+			}
+		}
+	}
 	Refresh();
 }
 

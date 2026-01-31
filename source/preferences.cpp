@@ -19,6 +19,7 @@
 #include "main.h"
 
 #include <wx/collpane.h>
+#include <wx/accel.h>
 
 #include "settings.h"
 #include "client_version.h"
@@ -28,6 +29,34 @@
 #include "hotkey_utils.h"
 
 #include "preferences.h"
+
+namespace {
+struct ModifierChoice {
+	const char* label;
+	int mask;
+};
+
+const ModifierChoice kRawPaletteSelectModifiers[] = {
+	{ "Disabled", 0 },
+	{ "Alt", wxACCEL_ALT },
+	{ "Ctrl", wxACCEL_CTRL },
+	{ "Shift", wxACCEL_SHIFT },
+	{ "Alt+Ctrl", wxACCEL_ALT | wxACCEL_CTRL },
+	{ "Alt+Shift", wxACCEL_ALT | wxACCEL_SHIFT },
+	{ "Ctrl+Shift", wxACCEL_CTRL | wxACCEL_SHIFT },
+	{ "Alt+Ctrl+Shift", wxACCEL_ALT | wxACCEL_CTRL | wxACCEL_SHIFT },
+};
+
+int FindModifierChoiceIndex(int mask)
+{
+	for(size_t i = 0; i < sizeof(kRawPaletteSelectModifiers) / sizeof(kRawPaletteSelectModifiers[0]); ++i) {
+		if(kRawPaletteSelectModifiers[i].mask == mask) {
+			return static_cast<int>(i);
+		}
+	}
+	return 0;
+}
+}
 
 BEGIN_EVENT_TABLE(PreferencesWindow, wxDialog)
 	EVT_BUTTON(wxID_OK, PreferencesWindow::OnClickOK)
@@ -211,10 +240,20 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	sizer->Add(hide_items_when_zoomed_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(hide_items_when_zoomed_chkbox, "When this option is checked, \"loose\" items will be hidden when you zoom very far out.");
 
+	full_detail_zoom_out_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Full detail when zoomed out");
+	full_detail_zoom_out_chkbox->SetValue(g_settings.getBoolean(Config::FULL_DETAIL_ZOOM_OUT));
+	sizer->Add(full_detail_zoom_out_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(full_detail_zoom_out_chkbox, "Forces full-detail rendering at all zoom levels (disables LOD simplification and item hiding). May reduce performance.");
+
 	selected_tile_indicator_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Blink placement tile");
 	selected_tile_indicator_chkbox->SetValue(g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR));
 	sizer->Add(selected_tile_indicator_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(selected_tile_indicator_chkbox, "When enabled, the tile under the cursor blinks while you have a brush/paste selection active.");
+
+	autoborder_preview_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Preview autoborder on hover");
+	autoborder_preview_chkbox->SetValue(g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW));
+	sizer->Add(autoborder_preview_chkbox, 0, wxLEFT | wxTOP, 5);
+	SetWindowToolTip(autoborder_preview_chkbox, "Shows a temporary autoborder preview before drawing ground tiles.");
 
 	spawn_overlay_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Show spawn area overlay");
 	spawn_overlay_chkbox->SetValue(g_settings.getBoolean(Config::SHOW_SPAWN_OVERLAYS));
@@ -598,6 +637,20 @@ wxNotebookPage* PreferencesWindow::CreateUIPage()
 	doubleclick_properties_chkbox->SetToolTip("Double clicking on a tile will bring up the properties menu for the top item.");
 	sizer->Add(doubleclick_properties_chkbox, 0, wxLEFT | wxTOP, 5);
 
+	wxArrayString raw_select_modifier_labels;
+	for(const auto& entry : kRawPaletteSelectModifiers) {
+		raw_select_modifier_labels.Add(entry.label);
+	}
+	wxStaticText* raw_select_modifier_label = newd wxStaticText(ui_page, wxID_ANY, "RAW palette pick modifier:");
+	raw_palette_select_modifier_choice = newd wxChoice(ui_page, wxID_ANY, wxDefaultPosition, wxDefaultSize, raw_select_modifier_labels);
+	raw_palette_select_modifier_choice->SetSelection(FindModifierChoiceIndex(g_settings.getInteger(Config::RAW_PALETTE_SELECT_MODIFIER)));
+	SetWindowToolTip(raw_select_modifier_label, raw_palette_select_modifier_choice,
+		"Modifier used with the primary mouse click in Selection mode to pick the top item into the RAW palette.");
+	wxBoxSizer* raw_select_modifier_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	raw_select_modifier_sizer->Add(raw_select_modifier_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+	raw_select_modifier_sizer->Add(raw_palette_select_modifier_choice, 0, wxEXPAND);
+	sizer->Add(raw_select_modifier_sizer, 0, wxLEFT | wxTOP, 5);
+
 	inversed_scroll_chkbox = newd wxCheckBox(ui_page, wxID_ANY, "Use inversed scroll");
 	inversed_scroll_chkbox->SetValue(g_settings.getFloat(Config::SCROLL_SPEED) < 0);
 	inversed_scroll_chkbox->SetToolTip("When this checkbox is checked, dragging the map using the center mouse button will be inversed (default RTS behaviour).");
@@ -853,7 +906,9 @@ void PreferencesWindow::Apply()
 		//g_settings.setInteger(Config::CURSOR_ALT_ALPHA, clr.Alpha());
 
 	g_settings.setInteger(Config::HIDE_ITEMS_WHEN_ZOOMED, hide_items_when_zoomed_chkbox->GetValue());
+	g_settings.setInteger(Config::FULL_DETAIL_ZOOM_OUT, full_detail_zoom_out_chkbox->GetValue());
 	g_settings.setInteger(Config::SELECTED_TILE_INDICATOR, selected_tile_indicator_chkbox->GetValue());
+	g_settings.setInteger(Config::SHOW_AUTOBORDER_PREVIEW, autoborder_preview_chkbox->GetValue());
 	g_settings.setInteger(Config::SHOW_SPAWN_OVERLAYS, spawn_overlay_chkbox->GetValue());
 	g_settings.setInteger(Config::CUSTOM_CLIENT_BOX, custom_client_box_chkbox->GetValue());
 	g_settings.setInteger(Config::CLIENT_BOX_WIDTH, client_box_width_spin->GetValue());
@@ -901,6 +956,14 @@ void PreferencesWindow::Apply()
 		SetMouseBinding(MouseActionID::Properties, MouseButtonBinding::Right);
 	}
 	g_settings.setInteger(Config::DOUBLECLICK_PROPERTIES, doubleclick_properties_chkbox->GetValue());
+	{
+		int selection = raw_palette_select_modifier_choice->GetSelection();
+		const size_t option_count = sizeof(kRawPaletteSelectModifiers) / sizeof(kRawPaletteSelectModifiers[0]);
+		if(selection < 0 || static_cast<size_t>(selection) >= option_count) {
+			selection = 0;
+		}
+		g_settings.setInteger(Config::RAW_PALETTE_SELECT_MODIFIER, kRawPaletteSelectModifiers[selection].mask);
+	}
 
 	float scroll_mul = 1.0;
 	if(inversed_scroll_chkbox->GetValue()) {

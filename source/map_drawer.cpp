@@ -67,6 +67,7 @@ void DrawingOptions::SetDefault()
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_idle_animation = false;
 	show_spawns = true;
 	show_spawn_creatureslist = true;
 	show_spawn_overlays = true;
@@ -88,6 +89,7 @@ void DrawingOptions::SetDefault()
 	show_only_grounds = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
+	full_detail_zoom_out = false;
 	custom_client_box = false;
 	client_box_width = rme::ClientMapWidth;
 	client_box_height = rme::ClientMapHeight;
@@ -110,6 +112,7 @@ void DrawingOptions::SetIngame()
 	show_grid = 0;
 	show_all_floors = true;
 	show_creatures = true;
+	show_creature_idle_animation = false;
 	show_spawns = false;
 	show_spawn_creatureslist = false;
 	show_spawn_overlays = false;
@@ -131,6 +134,7 @@ void DrawingOptions::SetIngame()
 	show_only_grounds = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
+	full_detail_zoom_out = false;
 	custom_client_box = false;
 	client_box_width = rme::ClientMapWidth;
 	client_box_height = rme::ClientMapHeight;
@@ -151,6 +155,7 @@ void DrawingOptions::LoadFromSettings()
 	ingame = !g_settings.getBoolean(Config::SHOW_EXTRA);
 	show_all_floors = g_settings.getBoolean(Config::SHOW_ALL_FLOORS);
 	show_creatures = g_settings.getBoolean(Config::SHOW_CREATURES);
+	show_creature_idle_animation = g_settings.getBoolean(Config::SHOW_CREATURE_IDLE_ANIMATION);
 	show_spawns = g_settings.getBoolean(Config::SHOW_SPAWNS);
 	show_spawn_creatureslist = g_settings.getBoolean(Config::SHOW_SPAWN_CREATURESLIST);
 	show_spawn_overlays = g_settings.getBoolean(Config::SHOW_SPAWN_OVERLAYS);
@@ -174,6 +179,7 @@ void DrawingOptions::LoadFromSettings()
 	show_only_grounds = g_settings.getBoolean(Config::SHOW_ONLY_GROUNDS);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
+	full_detail_zoom_out = g_settings.getBoolean(Config::FULL_DETAIL_ZOOM_OUT);
 	custom_client_box = g_settings.getBoolean(Config::CUSTOM_CLIENT_BOX);
 	client_box_width = g_settings.getInteger(Config::CLIENT_BOX_WIDTH);
 	client_box_height = g_settings.getInteger(Config::CLIENT_BOX_HEIGHT);
@@ -317,6 +323,9 @@ void MapDrawer::Release()
 
 int MapDrawer::GetLODLevel() const
 {
+	if(options.full_detail_zoom_out) {
+		return 0;
+	}
 	// LOD Level 0: Full detail (zoom <= 2.0)
 	// LOD Level 1: Medium detail (2.0 < zoom <= 6.0)
 	// LOD Level 2: Low detail (6.0 < zoom <= 10.0)
@@ -353,7 +362,7 @@ void MapDrawer::Draw()
 	DrawCursorTile();
 
 	// Skip grid in high LOD levels
-	if(options.show_grid && zoom <= 10.f && lod_level < 3)
+	if(options.show_grid && (zoom <= 10.f || options.full_detail_zoom_out) && lod_level < 3)
 		DrawGrid();
 
 	// Skip lights in medium/high LOD levels
@@ -524,6 +533,13 @@ void MapDrawer::DrawSecondaryMap(int map_z)
 		return;
 
 	BaseMap* secondary_map = g_gui.secondary_map;
+	bool autoborder_preview = false;
+	if(!secondary_map &&
+		g_settings.getBoolean(Config::SHOW_AUTOBORDER_PREVIEW) &&
+		canvas->autoborder_preview_active) {
+		secondary_map = canvas->autoborder_preview_map;
+		autoborder_preview = true;
+	}
 	if(!secondary_map) return;
 
 	Position normal_pos;
@@ -531,6 +547,8 @@ void MapDrawer::DrawSecondaryMap(int map_z)
 
 	if(canvas->isPasting()) {
 		normal_pos = editor.copybuffer.getPosition();
+	} else if(autoborder_preview) {
+		normal_pos = to_pos;
 	} else {
 		Brush* brush = g_gui.GetCurrentBrush();
 		if(brush && brush->isDoodad()) {
@@ -590,7 +608,7 @@ void MapDrawer::DrawSecondaryMap(int map_z)
 				BlitItem(draw_x, draw_y, tile, tile->ground, true, r, g, b, 160);
 			}
 
-			bool hidden = options.hide_items_when_zoomed && zoom > 10.f;
+			bool hidden = options.hide_items_when_zoomed && zoom > 10.f && !options.full_detail_zoom_out;
 
 			// Draw items
 			if(!hidden && !tile->items.empty()) {
@@ -796,7 +814,7 @@ void MapDrawer::DrawHigherFloors()
 				}
 			}
 
-			bool hidden = options.hide_items_when_zoomed && zoom > 10.f;
+			bool hidden = options.hide_items_when_zoomed && zoom > 10.f && !options.full_detail_zoom_out;
 			if(!hidden && !tile->items.empty()) {
 				for(const Item* item : tile->items)
 					BlitItem(draw_x, draw_y, tile, item, false, 255,255,255, 96);
@@ -1716,13 +1734,21 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 			return;
 		}
 
+		const bool animate_idle = options.show_creature_idle_animation && zoom <= 2.0f &&
+			(sprite->has_idle_frame_group || sprite->animate_always);
+
 		// mount and addon drawing thanks to otc code
 		int pattern_z = 0;
 		if(outfit.lookMount != 0) {
 			if(GameSprite* mountSpr = g_gui.gfx.getCreatureSprite(outfit.lookMount)) {
+				int mount_frame = 0;
+				if(animate_idle && mountSpr->animator &&
+					(mountSpr->has_idle_frame_group || mountSpr->animate_always)) {
+					mount_frame = mountSpr->animator->getFrame();
+				}
 				for(int cx = 0; cx != mountSpr->width; ++cx) {
 					for(int cy = 0; cy != mountSpr->height; ++cy) {
-						int texnum = mountSpr->getHardwareID(cx, cy, 0, 0, (int)dir, 0, 0, 0);
+						int texnum = mountSpr->getHardwareID(cx, cy, 0, 0, (int)dir, 0, 0, mount_frame);
 						glBlitTexture(screenx - cx * rme::TileSize, screeny - cy * rme::TileSize, texnum, red, green, blue, alpha);
 					}
 				}
@@ -1731,6 +1757,9 @@ void MapDrawer::BlitCreature(int screenx, int screeny, const Outfit& outfit, Dir
 		}
 
 		int frame = 0;
+		if(animate_idle && sprite->animator) {
+			frame = sprite->animator->getFrame();
+		}
 
 		// pattern_y => creature addon
 		for(int pattern_y = 0; pattern_y < sprite->pattern_y; pattern_y++) {
@@ -1838,6 +1867,8 @@ void MapDrawer::DrawTile(TileLocation* location)
 
 	int draw_x, draw_y;
 	getDrawPosition(position, draw_x, draw_y);
+	int base_draw_x = draw_x;
+	int base_draw_y = draw_y;
 
 	uint8_t r = 255,g = 255,b = 255;
 	if(only_colors || tile->hasGround()) {
@@ -1910,8 +1941,10 @@ void MapDrawer::DrawTile(TileLocation* location)
 		if(show_tooltips && position.z == floor)
 			WriteTooltip(tile->ground, tooltip);
 	}
+	base_draw_x = draw_x;
+	base_draw_y = draw_y;
 
-	bool hidden = only_colors || (options.hide_items_when_zoomed && zoom > 10.f);
+	bool hidden = only_colors || (options.hide_items_when_zoomed && zoom > 10.f && !options.full_detail_zoom_out);
 	
 	// LOD Level 2+ (zoom > 6): Skip items entirely
 	if(lod_level >= 2) {
@@ -1932,7 +1965,11 @@ void MapDrawer::DrawTile(TileLocation* location)
 				item->animate();
 
 			if(item->isBorder()) {
-				BlitItem(draw_x, draw_y, tile, item, false, r, g, b);
+				const int before_x = base_draw_x;
+				const int before_y = base_draw_y;
+				BlitItem(base_draw_x, base_draw_y, tile, item, false, r, g, b);
+				draw_x -= (before_x - base_draw_x);
+				draw_y -= (before_y - base_draw_y);
 			} else {
 				BlitItem(draw_x, draw_y, tile, item);
 			}
@@ -2042,7 +2079,7 @@ void MapDrawer::DrawTileIndicators(TileLocation* location)
 	int x, y;
 	getDrawPosition(location->getPosition(), x, y);
 
-	if(zoom < 10.0 && (options.show_pickupables || options.show_moveables)) {
+	if((zoom < 10.0 || options.full_detail_zoom_out) && (options.show_pickupables || options.show_moveables)) {
 		uint8_t red = 0xFF, green = 0xFF, blue = 0xFF;
 		if(tile->isHouseTile()) {
 			green = 0x00;
@@ -2848,7 +2885,7 @@ void MapDrawer::AddLight(TileLocation* location)
 		}
 	}
 
-	bool hidden = options.hide_items_when_zoomed && zoom > 10.f;
+	bool hidden = options.hide_items_when_zoomed && zoom > 10.f && !options.full_detail_zoom_out;
 	if(!hidden && !tile->items.empty()) {
 		for(auto item : tile->items) {
 			if(item->hasLight()) {

@@ -123,6 +123,7 @@ GUI::GUI() :
 	loaded_version(CLIENT_VERSION_NONE),
 	mode(SELECTION_MODE),
 	pasting(false),
+	keep_pasting(false),
 	hotkeys_enabled(true),
 
 	current_brush(nullptr),
@@ -360,11 +361,17 @@ bool GUI::LoadVersion(ClientVersionID version, wxString& error, wxArrayString& w
 void GUI::EnableHotkeys()
 {
 	hotkeys_enabled = true;
+	if(root && root->menu_bar) {
+		root->menu_bar->SetAcceleratorsEnabled(true);
+	}
 }
 
 void GUI::DisableHotkeys()
 {
 	hotkeys_enabled = false;
+	if(root && root->menu_bar) {
+		root->menu_bar->SetAcceleratorsEnabled(false);
+	}
 }
 
 bool GUI::AreHotkeysEnabled() const
@@ -2052,10 +2059,11 @@ void GUI::DoPaste()
 		copybuffer.paste(*mapTab->GetEditor(), mapTab->GetCanvas()->GetCursorPosition());
 }
 
-void GUI::PreparePaste()
+void GUI::PreparePaste(bool keep)
 {
 	Editor* editor = GetCurrentEditor();
 	if(editor) {
+		keep_pasting = keep;
 		SetSelectionMode();
 		Selection& selection = editor->getSelection();
 		selection.start();
@@ -2078,6 +2086,7 @@ void GUI::EndPasting()
 {
 	if(pasting) {
 		pasting = false;
+		keep_pasting = false;
 		secondary_map = nullptr;
 	}
 }

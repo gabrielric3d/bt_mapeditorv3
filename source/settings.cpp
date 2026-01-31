@@ -26,6 +26,7 @@
 #include <wx/fileconf.h>
 #include <wx/sstream.h>
 #include <wx/wfstream.h>
+#include <wx/accel.h>
 
 #include <iostream>
 #include <string>
@@ -215,12 +216,14 @@ void Settings::IO(IOMode mode)
 	Int(SHOW_ITEMS, 1);
 	Int(HIGHLIGHT_ITEMS, 0);
 	Int(SHOW_CREATURES, 1);
+	Int(SHOW_CREATURE_IDLE_ANIMATION, 0);
 	Int(SHOW_HOUSES, 1);
 	Int(SHOW_BLOCKING, 0);
 	Int(SHOW_TOOLTIPS, 1);
 	Int(SHOW_ONLY_TILEFLAGS, 0);
 	Int(SHOW_ONLY_MODIFIED_TILES, 0);
 	Int(SHOW_PREVIEW, 1);
+	Int(SHOW_AUTOBORDER_PREVIEW, 1);
 	Int(SHOW_WALL_HOOKS, 0);
 	Int(SHOW_PICKUPABLES, 0);
 	Int(SHOW_MOVEABLES, 0);
@@ -257,6 +260,7 @@ void Settings::IO(IOMode mode)
 	Int(MOUSE_ACTION_PROPERTIES_BUTTON, 2);
 	Int(MOUSE_BINDINGS_VERSION, 0);
 	Int(DOUBLECLICK_PROPERTIES, 1);
+	Int(RAW_PALETTE_SELECT_MODIFIER, wxACCEL_ALT);
 	Int(LISTBOX_EATS_ALL_EVENTS, 1);
 	Int(BORDER_IS_GROUND, 1);
 	Int(USE_GROUND_CARPET_BORDER, 0);
@@ -294,6 +298,7 @@ void Settings::IO(IOMode mode)
 	Int(ICON_BACKGROUND, 0);
 	Int(HARD_REFRESH_RATE, 200);
 	Int(HIDE_ITEMS_WHEN_ZOOMED, 1);
+	Int(FULL_DETAIL_ZOOM_OUT, 0);
 	Int(SELECTED_TILE_INDICATOR, 1);
 	String(SCREENSHOT_DIRECTORY, "");
 	String(SCREENSHOT_FORMAT, "png");

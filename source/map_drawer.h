@@ -74,6 +74,7 @@ public:
 	int show_grid;
 	bool show_all_floors;
 	bool show_creatures;
+	bool show_creature_idle_animation;
 	bool show_spawns;
 	bool show_spawn_creatureslist;
 	bool show_spawn_overlays;
@@ -97,6 +98,7 @@ public:
 	bool show_stair_direction;
 	bool show_only_grounds;
 	bool hide_items_when_zoomed;
+	bool full_detail_zoom_out;
 	bool show_selected_tile_indicator;
 	bool custom_client_box;
 	int client_box_width;
