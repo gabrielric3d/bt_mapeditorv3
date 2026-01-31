@@ -2,6 +2,8 @@ set(rme_H
 ${CMAKE_CURRENT_LIST_DIR}/about_window.h
 ${CMAKE_CURRENT_LIST_DIR}/action.h
 ${CMAKE_CURRENT_LIST_DIR}/actions_history_window.h
+${CMAKE_CURRENT_LIST_DIR}/area_decoration.h
+${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/application.h
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
 ${CMAKE_CURRENT_LIST_DIR}/basemap.h
@@ -100,6 +102,7 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.h
 ${CMAKE_CURRENT_LIST_DIR}/settings.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.h
+${CMAKE_CURRENT_LIST_DIR}/structure_manager_window.h
 ${CMAKE_CURRENT_LIST_DIR}/sprites.h
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/templates.h
@@ -119,6 +122,8 @@ set(rme_SRC
 ${CMAKE_CURRENT_LIST_DIR}/about_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/action.cpp
 ${CMAKE_CURRENT_LIST_DIR}/actions_history_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/area_decoration.cpp
+${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/application.cpp
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.cpp
 ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp
@@ -209,6 +214,7 @@ ${CMAKE_CURRENT_LIST_DIR}/selection.cpp
 ${CMAKE_CURRENT_LIST_DIR}/settings.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/spawn.cpp
+${CMAKE_CURRENT_LIST_DIR}/structure_manager_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/table_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap76-74.cpp
 ${CMAKE_CURRENT_LIST_DIR}/templatemap81.cpp

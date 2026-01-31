@@ -1,0 +1,1753 @@
+//////////////////////////////////////////////////////////////////////
+// This file is part of Remere's Map Editor
+//////////////////////////////////////////////////////////////////////
+// Remere's Map Editor is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Remere's Map Editor is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+//////////////////////////////////////////////////////////////////////
+
+#include "main.h"
+#include "area_decoration.h"
+#include "editor.h"
+#include "map.h"
+#include "tile.h"
+#include "item.h"
+#include "items.h"
+#include "action.h"
+#include "selection.h"
+#include "gui.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <iterator>
+#include <numeric>
+#include <sstream>
+#include <wx/dir.h>
+#include <wx/filename.h>
+
+namespace AreaDecoration {
+
+//=============================================================================
+// ItemGroup Implementation
+//=============================================================================
+
+void ItemGroup::recalculateWeights() {
+	totalWeight = 0;
+	for (const auto& item : items) {
+		totalWeight += item.weight;
+	}
+}
+
+const ItemEntry* ItemGroup::selectRandom(std::mt19937& rng) const {
+	if (items.empty() || totalWeight <= 0) return nullptr;
+
+	std::uniform_int_distribution<int> dist(0, totalWeight - 1);
+	int roll = dist(rng);
+
+	int cumulative = 0;
+	for (const auto& item : items) {
+		cumulative += item.weight;
+		if (roll < cumulative) {
+			return &item;
+		}
+	}
+
+	return &items.back();
+}
+
+//=============================================================================
+// FloorRule Implementation
+//=============================================================================
+
+bool FloorRule::matchesFloor(uint16_t groundId) const {
+	if (fromFloorId > 0 && toFloorId > 0) {
+		return groundId >= fromFloorId && groundId <= toFloorId;
+	}
+	return groundId == floorId;
+}
+
+//=============================================================================
+// DecorationPreset Implementation
+//=============================================================================
+
+void DecorationPreset::sortRulesByPriority() {
+	std::sort(floorRules.begin(), floorRules.end(),
+		[](const FloorRule& a, const FloorRule& b) {
+			return a.priority > b.priority;
+		});
+}
+
+const FloorRule* DecorationPreset::findRule(uint16_t groundId) const {
+	for (const auto& rule : floorRules) {
+		if (rule.enabled && rule.matchesFloor(groundId)) {
+			return &rule;
+		}
+	}
+	return nullptr;
+}
+
+bool DecorationPreset::validate(std::string& errorOut) const {
+	if (floorRules.empty()) {
+		errorOut = "No floor rules defined";
+		return false;
+	}
+
+	for (const auto& rule : floorRules) {
+		if (rule.isRangeRule()) {
+			if (rule.fromFloorId > rule.toFloorId) {
+				errorOut = "Invalid floor range: fromFloorId > toFloorId";
+				return false;
+			}
+		} else if (rule.floorId == 0) {
+			errorOut = "Floor rule has no floor ID specified";
+			return false;
+		}
+
+		if (rule.items.empty()) {
+			errorOut = "Floor rule '" + rule.name + "' has no items";
+			return false;
+		}
+
+		for (const auto& item : rule.items) {
+			if (item.weight <= 0) {
+				errorOut = "Item weight must be positive";
+				return false;
+			}
+
+			if (item.isCompositeEntry()) {
+				bool hasItems = false;
+				if (item.compositeTiles.empty()) {
+					errorOut = "Composite entry has no tiles";
+					return false;
+				}
+				for (const auto& tile : item.compositeTiles) {
+					if (!tile.itemIds.empty()) {
+						hasItems = true;
+						break;
+					}
+				}
+				if (!hasItems) {
+					errorOut = "Composite entry has no items";
+					return false;
+				}
+				if (item.isClusterEntry()) {
+					if (item.clusterCount <= 0) {
+						errorOut = "Cluster entry has invalid count";
+						return false;
+					}
+					if (item.clusterRadius < 0) {
+						errorOut = "Cluster entry has invalid radius";
+						return false;
+					}
+					if (item.clusterMinDistance < 0) {
+						errorOut = "Cluster entry has invalid spacing";
+						return false;
+					}
+				}
+			} else if (item.itemId == 0) {
+				errorOut = "Item entry has invalid item ID";
+				return false;
+			}
+		}
+	}
+
+	if (spacing.minDistance < 0) {
+		errorOut = "minDistance cannot be negative";
+		return false;
+	}
+
+	return true;
+}
+
+//=============================================================================
+// PreviewState Implementation
+//=============================================================================
+
+void PreviewState::clear() {
+	items.clear();
+	totalItemsPlaced = 0;
+	itemCountById.clear();
+	placementsByRule.clear();
+	seed = 0;
+	isValid = false;
+	errorMessage.clear();
+	spatialIndex.clear();
+	minPos = Position();
+	maxPos = Position();
+}
+
+uint64_t PreviewState::positionHash(const Position& pos) {
+	return (static_cast<uint64_t>(pos.x & 0xFFFF) << 32) |
+	       (static_cast<uint64_t>(pos.y & 0xFFFF) << 16) |
+	       static_cast<uint64_t>(pos.z & 0xFFFF);
+}
+
+bool PreviewState::hasItemAt(const Position& pos) const {
+	uint64_t hash = positionHash(pos);
+	auto it = spatialIndex.find(hash);
+	return it != spatialIndex.end() && !it->second.empty();
+}
+
+std::vector<const PreviewItem*> PreviewState::getItemsAt(const Position& pos) const {
+	std::vector<const PreviewItem*> result;
+	uint64_t hash = positionHash(pos);
+	auto it = spatialIndex.find(hash);
+	if (it != spatialIndex.end()) {
+		for (size_t idx : it->second) {
+			if (idx < items.size()) {
+				result.push_back(&items[idx]);
+			}
+		}
+	}
+	return result;
+}
+
+void PreviewState::rebuildSpatialIndex() {
+	spatialIndex.clear();
+	for (size_t i = 0; i < items.size(); ++i) {
+		uint64_t hash = positionHash(items[i].position);
+		spatialIndex[hash].push_back(i);
+	}
+
+	if (!items.empty()) {
+		minPos = items[0].position;
+		maxPos = items[0].position;
+		for (const auto& item : items) {
+			minPos.x = std::min(minPos.x, item.position.x);
+			minPos.y = std::min(minPos.y, item.position.y);
+			minPos.z = std::min(minPos.z, item.position.z);
+			maxPos.x = std::max(maxPos.x, item.position.x);
+			maxPos.y = std::max(maxPos.y, item.position.y);
+			maxPos.z = std::max(maxPos.z, item.position.z);
+		}
+	}
+}
+
+//=============================================================================
+// AreaDefinition Implementation
+//=============================================================================
+
+std::vector<Position> AreaDefinition::getAllPositions(Map& map) const {
+	switch (type) {
+		case Type::Rectangle:
+			return getPositionsRectangle();
+		case Type::FloodFill:
+			return getPositionsFloodFill(map);
+		case Type::Selection:
+			return getPositionsFromSelection(map);
+	}
+	return {};
+}
+
+bool AreaDefinition::contains(const Position& pos) const {
+	switch (type) {
+		case Type::Rectangle:
+			return pos.x >= rectMin.x && pos.x <= rectMax.x &&
+			       pos.y >= rectMin.y && pos.y <= rectMax.y &&
+			       pos.z >= rectMin.z && pos.z <= rectMax.z;
+		default:
+			return false;
+	}
+}
+
+void AreaDefinition::getBounds(Position& outMin, Position& outMax) const {
+	switch (type) {
+		case Type::Rectangle:
+			outMin = rectMin;
+			outMax = rectMax;
+			break;
+		case Type::FloodFill:
+			outMin = Position(floodOrigin.x - floodMaxRadius,
+			                  floodOrigin.y - floodMaxRadius,
+			                  floodOrigin.z);
+			outMax = Position(floodOrigin.x + floodMaxRadius,
+			                  floodOrigin.y + floodMaxRadius,
+			                  floodOrigin.z);
+			break;
+		default:
+			outMin = Position(0, 0, 0);
+			outMax = Position(0, 0, 0);
+			break;
+	}
+}
+
+std::vector<Position> AreaDefinition::getPositionsRectangle() const {
+	std::vector<Position> result;
+
+	int minX = std::min(rectMin.x, rectMax.x);
+	int maxX = std::max(rectMin.x, rectMax.x);
+	int minY = std::min(rectMin.y, rectMax.y);
+	int maxY = std::max(rectMin.y, rectMax.y);
+	int minZ = std::min(rectMin.z, rectMax.z);
+	int maxZ = std::max(rectMin.z, rectMax.z);
+
+	result.reserve((maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1));
+
+	for (int z = minZ; z <= maxZ; ++z) {
+		for (int y = minY; y <= maxY; ++y) {
+			for (int x = minX; x <= maxX; ++x) {
+				result.push_back(Position(x, y, z));
+			}
+		}
+	}
+
+	return result;
+}
+
+std::vector<Position> AreaDefinition::getPositionsFloodFill(Map& map) const {
+	std::vector<Position> result;
+	std::unordered_set<uint64_t> visited;
+	std::queue<Position> queue;
+
+	uint16_t targetGround = floodTargetGround;
+	if (targetGround == 0) {
+		Tile* originTile = map.getTile(floodOrigin);
+		if (!originTile || !originTile->ground) return result;
+		targetGround = originTile->ground->getID();
+	}
+
+	queue.push(floodOrigin);
+
+	while (!queue.empty()) {
+		Position pos = queue.front();
+		queue.pop();
+
+		int dist = std::abs(pos.x - floodOrigin.x) + std::abs(pos.y - floodOrigin.y);
+		if (dist > floodMaxRadius) continue;
+
+		uint64_t hash = (static_cast<uint64_t>(pos.x & 0xFFFF) << 32) |
+		                (static_cast<uint64_t>(pos.y & 0xFFFF) << 16) |
+		                static_cast<uint64_t>(pos.z & 0xFFFF);
+		if (visited.count(hash)) continue;
+		visited.insert(hash);
+
+		Tile* tile = map.getTile(pos);
+		if (!tile || !tile->ground) continue;
+		if (tile->ground->getID() != targetGround) continue;
+
+		result.push_back(pos);
+
+		queue.push(Position(pos.x - 1, pos.y, pos.z));
+		queue.push(Position(pos.x + 1, pos.y, pos.z));
+		queue.push(Position(pos.x, pos.y - 1, pos.z));
+		queue.push(Position(pos.x, pos.y + 1, pos.z));
+	}
+
+	return result;
+}
+
+std::vector<Position> AreaDefinition::getPositionsFromSelection(Map& map) const {
+	std::vector<Position> result;
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) return result;
+
+	const Selection& selection = editor->getSelection();
+	const TileSet& tiles = selection.getTiles();
+	for (Tile* tile : tiles) {
+		result.push_back(tile->getPosition());
+	}
+
+	return result;
+}
+
+//=============================================================================
+// SpatialHashGrid Implementation
+//=============================================================================
+
+SpatialHashGrid::SpatialHashGrid(int cellSize) : m_cellSize(cellSize) {}
+
+void SpatialHashGrid::insert(const Position& pos, size_t itemIndex) {
+	int cx = pos.x / m_cellSize;
+	int cy = pos.y / m_cellSize;
+	uint64_t cellHash = (static_cast<uint64_t>(cx) << 32) | static_cast<uint64_t>(cy);
+	m_cells[cellHash].push_back({pos, itemIndex});
+}
+
+std::vector<size_t> SpatialHashGrid::queryRadius(const Position& center, int radius) const {
+	std::vector<size_t> result;
+
+	int cellRadius = (radius / m_cellSize) + 1;
+	int cx = center.x / m_cellSize;
+	int cy = center.y / m_cellSize;
+
+	for (int dy = -cellRadius; dy <= cellRadius; ++dy) {
+		for (int dx = -cellRadius; dx <= cellRadius; ++dx) {
+			uint64_t cellHash = (static_cast<uint64_t>(cx + dx) << 32) |
+			                    static_cast<uint64_t>(cy + dy);
+			auto it = m_cells.find(cellHash);
+			if (it != m_cells.end()) {
+				for (const auto& entry : it->second) {
+					int dist = std::max(std::abs(entry.first.x - center.x),
+					                    std::abs(entry.first.y - center.y));
+					if (dist <= radius) {
+						result.push_back(entry.second);
+					}
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+void SpatialHashGrid::clear() {
+	m_cells.clear();
+}
+
+//=============================================================================
+// PreviewManager Implementation
+//=============================================================================
+
+PreviewManager& PreviewManager::getInstance() {
+	static PreviewManager instance;
+	return instance;
+}
+
+void PreviewManager::setActivePreview(PreviewState* preview) {
+	m_activePreview = preview;
+}
+
+void PreviewManager::clearActivePreview() {
+	m_activePreview = nullptr;
+}
+
+bool PreviewManager::hasActivePreview() const {
+	return m_activePreview != nullptr && m_activePreview->isValid;
+}
+
+std::vector<const PreviewItem*> PreviewManager::getPreviewItemsAt(const Position& pos) const {
+	if (!hasActivePreview()) {
+		return {};
+	}
+	return m_activePreview->getItemsAt(pos);
+}
+
+//=============================================================================
+// DecorationEngine Implementation
+//=============================================================================
+
+DecorationEngine::DecorationEngine(Editor* editor)
+	: m_editor(editor), m_spatialHash(8) {
+}
+
+DecorationEngine::~DecorationEngine() {
+	clearPreview();
+}
+
+void DecorationEngine::setArea(const AreaDefinition& area) {
+	m_area = area;
+	clearPreview();
+}
+
+void DecorationEngine::setPreset(const DecorationPreset& preset) {
+	m_preset = preset;
+	m_preset.sortRulesByPriority();
+	clearPreview();
+}
+
+bool DecorationEngine::generatePreview(uint64_t seed) {
+	clearPreview();
+	m_virtualPreview = false;
+	m_previewWasCapped = false;
+
+	if (seed == 0) {
+		if (m_preset.defaultSeed != 0) {
+			seed = m_preset.defaultSeed;
+		} else {
+			std::random_device rd;
+			seed = rd();
+		}
+	}
+
+	m_currentSeed = seed;
+	m_rng.seed(static_cast<unsigned int>(seed));
+	m_previewState.seed = seed;
+
+	std::string validationError;
+	if (!m_preset.validate(validationError)) {
+		m_lastError = "Invalid preset: " + validationError;
+		m_previewState.errorMessage = m_lastError;
+		return false;
+	}
+
+	std::vector<std::pair<Position, uint16_t>> tiles;
+	if (!collectTileData(tiles)) {
+		m_lastError = "Failed to collect tile data from area";
+		m_previewState.errorMessage = m_lastError;
+		return false;
+	}
+
+	if (tiles.empty()) {
+		m_lastError = "No valid tiles found in selected area";
+		m_previewState.errorMessage = m_lastError;
+		return false;
+	}
+
+	m_spatialHash.clear();
+
+	switch (m_preset.distribution.mode) {
+		case DistributionMode::PureRandom:
+			generatePureRandom(tiles);
+			break;
+		case DistributionMode::Clustered:
+			generateClustered(tiles);
+			break;
+		case DistributionMode::GridBased:
+			generateGridBased(tiles);
+			break;
+	}
+
+	m_previewState.rebuildSpatialIndex();
+	m_previewState.isValid = true;
+
+	PreviewManager::getInstance().setActivePreview(&m_previewState);
+
+	return true;
+}
+
+bool DecorationEngine::generatePreviewVirtual(int width, int height, uint16_t groundId, uint64_t seed) {
+	clearPreview();
+	m_virtualPreview = true;
+	m_previewWasCapped = false;
+
+	if (seed == 0) {
+		if (m_preset.defaultSeed != 0) {
+			seed = m_preset.defaultSeed;
+		} else {
+			std::random_device rd;
+			seed = rd();
+		}
+	}
+
+	m_currentSeed = seed;
+	m_rng.seed(static_cast<unsigned int>(seed));
+	m_previewState.seed = seed;
+
+	std::string validationError;
+	if (!m_preset.validate(validationError)) {
+		m_lastError = "Invalid preset: " + validationError;
+		m_previewState.errorMessage = m_lastError;
+		return false;
+	}
+
+	if (width <= 0 || height <= 0 || groundId == 0) {
+		m_lastError = "Invalid virtual preview configuration";
+		m_previewState.errorMessage = m_lastError;
+		return false;
+	}
+
+	std::vector<std::pair<Position, uint16_t>> tiles;
+	tiles.reserve(static_cast<size_t>(width) * static_cast<size_t>(height));
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			tiles.push_back({Position(x, y, 0), groundId});
+		}
+	}
+
+	m_spatialHash.clear();
+
+	switch (m_preset.distribution.mode) {
+		case DistributionMode::PureRandom:
+			generatePureRandom(tiles);
+			break;
+		case DistributionMode::Clustered:
+			generateClustered(tiles);
+			break;
+		case DistributionMode::GridBased:
+			generateGridBased(tiles);
+			break;
+	}
+
+	m_previewState.rebuildSpatialIndex();
+	m_previewState.isValid = true;
+	return true;
+}
+
+bool DecorationEngine::rerollPreview() {
+	std::random_device rd;
+	uint64_t newSeed = rd();
+	return generatePreview(newSeed);
+}
+
+void DecorationEngine::clearPreview() {
+	PreviewManager::getInstance().clearActivePreview();
+	m_previewState.clear();
+	m_spatialHash.clear();
+	m_clusterCenters.clear();
+	m_virtualPreview = false;
+	m_previewWasCapped = false;
+}
+
+bool DecorationEngine::checkClusterCenterSpacing(const Position& pos, int minDistance) const {
+	if (minDistance <= 0) {
+		return true;
+	}
+	for (const auto& center : m_clusterCenters) {
+		if (center.z != pos.z) {
+			continue;
+		}
+		int dx = std::abs(center.x - pos.x);
+		int dy = std::abs(center.y - pos.y);
+		int dist = std::max(dx, dy);
+		if (dist < minDistance) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>>& outTiles) {
+	if (!m_editor) return false;
+
+	Map& map = m_editor->getMap();
+	std::vector<Position> positions = m_area.getAllPositions(map);
+
+	outTiles.reserve(positions.size());
+
+	for (const Position& pos : positions) {
+		Tile* tile = map.getTile(pos);
+		if (!tile) continue;
+
+		Item* ground = tile->ground;
+		if (!ground) continue;
+
+		uint16_t groundId = ground->getID();
+
+		if (m_preset.skipBlockedTiles && tile->isBlocking()) {
+			continue;
+		}
+
+		outTiles.push_back({pos, groundId});
+	}
+
+	return true;
+}
+
+bool DecorationEngine::checkSpacing(const Position& pos, uint16_t itemId) const {
+	const SpacingConfig& spacing = m_preset.spacing;
+
+	int maxRadius = std::max(spacing.minDistance, spacing.minSameItemDistance);
+	auto nearby = m_spatialHash.queryRadius(pos, maxRadius);
+
+	for (size_t idx : nearby) {
+		if (idx >= m_previewState.items.size()) continue;
+
+		const PreviewItem& existing = m_previewState.items[idx];
+
+		if (existing.position.z != pos.z) continue;
+
+		int dx = std::abs(pos.x - existing.position.x);
+		int dy = std::abs(pos.y - existing.position.y);
+
+		int distance;
+		if (spacing.checkDiagonals) {
+			distance = std::max(dx, dy);
+		} else {
+			distance = dx + dy;
+		}
+
+		if (distance < spacing.minDistance) {
+			return false;
+		}
+
+		if (itemId == existing.itemId && distance < spacing.minSameItemDistance) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool DecorationEngine::validateTilePlacement(const Position& pos, uint16_t itemId) const {
+	if (m_virtualPreview) return true;
+	if (!m_editor) return false;
+
+	Map& map = m_editor->getMap();
+	Tile* tile = map.getTile(pos);
+
+	if (!tile) return false;
+
+	if (m_preset.skipBlockedTiles && tile->isBlocking()) {
+		return false;
+	}
+
+	return true;
+}
+
+bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEntry& entry,
+                                           const FloorRule* rule, std::vector<PreviewItem>& outItems) {
+	outItems.clear();
+
+	if (!entry.isCompositeEntry()) {
+		if (entry.itemId == 0) return false;
+		if (!validateTilePlacement(basePos, entry.itemId)) return false;
+
+		PreviewItem previewItem;
+		previewItem.position = basePos;
+		previewItem.itemId = entry.itemId;
+		previewItem.sourceRule = rule;
+		outItems.push_back(previewItem);
+		return true;
+	}
+
+	if (entry.compositeTiles.empty()) return false;
+
+	auto appendCompositeAt = [&](const Position& origin) -> bool {
+		for (const auto& tile : entry.compositeTiles) {
+			if (tile.itemIds.empty()) continue;
+			Position pos = origin + tile.offset;
+
+			uint16_t validateId = 0;
+			for (uint16_t id : tile.itemIds) {
+				if (id > 0) {
+					validateId = id;
+					break;
+				}
+			}
+			if (validateId == 0) continue;
+
+			if (!validateTilePlacement(pos, validateId)) {
+				return false;
+			}
+
+			for (uint16_t id : tile.itemIds) {
+				if (id == 0) continue;
+				PreviewItem previewItem;
+				previewItem.position = pos;
+				previewItem.itemId = id;
+				previewItem.sourceRule = rule;
+				outItems.push_back(previewItem);
+			}
+		}
+		return true;
+	};
+
+	if (!entry.isClusterEntry()) {
+		if (!appendCompositeAt(basePos)) return false;
+		return !outItems.empty();
+	}
+
+	int count = std::max(1, entry.clusterCount);
+	int radius = std::max(0, entry.clusterRadius);
+	int minDist = std::max(0, entry.clusterMinDistance);
+
+	std::vector<Position> centers;
+	centers.reserve(static_cast<size_t>(count));
+	centers.push_back(Position(0, 0, 0));
+
+	std::uniform_int_distribution<int> offsetDist(-radius, radius);
+	for (int i = 1; i < count; ++i) {
+		bool placed = false;
+		for (int attempt = 0; attempt < 20; ++attempt) {
+			int dx = offsetDist(m_rng);
+			int dy = offsetDist(m_rng);
+			if (dx == 0 && dy == 0) continue;
+
+			bool tooClose = false;
+			for (const auto& center : centers) {
+				int dist = std::max(std::abs(center.x - dx), std::abs(center.y - dy));
+				if (dist < minDist) {
+					tooClose = true;
+					break;
+				}
+			}
+			if (tooClose) continue;
+
+			centers.push_back(Position(dx, dy, 0));
+			placed = true;
+			break;
+		}
+		if (!placed) {
+			// If we can't place more centers, stop early
+			break;
+		}
+	}
+
+	for (const auto& center : centers) {
+		if (!appendCompositeAt(basePos + center)) {
+			return false;
+		}
+	}
+
+	return !outItems.empty();
+}
+
+bool DecorationEngine::checkSpacingForPlacement(const std::vector<PreviewItem>& placementItems) const {
+	for (const auto& item : placementItems) {
+		if (!checkSpacing(item.position, item.itemId)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void DecorationEngine::commitPlacement(const std::vector<PreviewItem>& placementItems) {
+	for (const auto& item : placementItems) {
+		m_previewState.items.push_back(item);
+		m_spatialHash.insert(item.position, m_previewState.items.size() - 1);
+		m_previewState.totalItemsPlaced++;
+		m_previewState.itemCountById[item.itemId]++;
+	}
+	if (!placementItems.empty()) {
+		m_previewState.placementsByRule[placementItems.front().sourceRule]++;
+	}
+}
+
+const ItemEntry* DecorationEngine::selectItemFromRule(const FloorRule* rule) {
+	if (!rule || rule->items.empty()) return nullptr;
+
+	int totalWeight = 0;
+	for (const auto& item : rule->items) {
+		totalWeight += item.weight;
+	}
+
+	if (totalWeight <= 0) return nullptr;
+
+	std::uniform_int_distribution<int> dist(0, totalWeight - 1);
+	int roll = dist(m_rng);
+
+	int cumulative = 0;
+	for (const auto& item : rule->items) {
+		cumulative += item.weight;
+		if (roll < cumulative) {
+			return &item;
+		}
+	}
+
+	return &rule->items.back();
+}
+
+void DecorationEngine::generatePureRandom(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	std::unordered_map<const FloorRule*, int> rulePlacements;
+
+	std::vector<size_t> indices(tiles.size());
+	std::iota(indices.begin(), indices.end(), 0);
+	std::shuffle(indices.begin(), indices.end(), m_rng);
+
+	for (size_t idx : indices) {
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+			m_previewWasCapped = true;
+			break;
+		}
+
+		const Position& pos = tiles[idx].first;
+		uint16_t groundId = tiles[idx].second;
+
+		const FloorRule* rule = m_preset.findRule(groundId);
+		if (!rule) continue;
+
+		if (rule->maxPlacements >= 0 &&
+		    rulePlacements[rule] >= rule->maxPlacements) {
+			continue;
+		}
+
+		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+		if (densityDist(m_rng) > rule->density) {
+			continue;
+		}
+
+		const ItemEntry* selected = selectItemFromRule(rule);
+		if (!selected) continue;
+
+		bool isClusterEntry = selected->isClusterEntry();
+		if (isClusterEntry) {
+			int radius = std::max(0, selected->clusterRadius);
+			int minDist = std::max(0, selected->clusterMinDistance);
+			int centerMinDist = radius + minDist;
+			if (!checkClusterCenterSpacing(pos, centerMinDist)) {
+				continue;
+			}
+		}
+
+		std::vector<PreviewItem> placementItems;
+		if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
+			continue;
+		}
+
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+			continue;
+		}
+
+		if (!checkSpacingForPlacement(placementItems)) {
+			continue;
+		}
+
+		commitPlacement(placementItems);
+		if (isClusterEntry) {
+			m_clusterCenters.push_back(pos);
+		}
+		rulePlacements[rule]++;
+	}
+}
+
+void DecorationEngine::generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	if (tiles.empty()) return;
+
+	const DistributionConfig& distConfig = m_preset.distribution;
+
+	std::vector<Position> clusterCenters;
+	int numClusters = std::min(distConfig.clusterCount, static_cast<int>(tiles.size()));
+
+	std::uniform_int_distribution<size_t> centerDist(0, tiles.size() - 1);
+	for (int i = 0; i < numClusters; ++i) {
+		clusterCenters.push_back(tiles[centerDist(m_rng)].first);
+	}
+
+	std::vector<std::pair<float, size_t>> tileScores;
+	for (size_t i = 0; i < tiles.size(); ++i) {
+		float minDist = std::numeric_limits<float>::max();
+		for (const auto& center : clusterCenters) {
+			float dx = static_cast<float>(tiles[i].first.x - center.x);
+			float dy = static_cast<float>(tiles[i].first.y - center.y);
+			float dist = std::sqrt(dx * dx + dy * dy);
+			minDist = std::min(minDist, dist);
+		}
+		tileScores.push_back({minDist, i});
+	}
+
+	std::sort(tileScores.begin(), tileScores.end());
+
+	std::unordered_map<const FloorRule*, int> rulePlacements;
+
+	for (const auto& scorePair : tileScores) {
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+			m_previewWasCapped = true;
+			break;
+		}
+
+		size_t idx = scorePair.second;
+		float distanceScore = scorePair.first;
+
+		const Position& pos = tiles[idx].first;
+		uint16_t groundId = tiles[idx].second;
+
+		const FloorRule* rule = m_preset.findRule(groundId);
+		if (!rule) continue;
+
+		if (rule->maxPlacements >= 0 &&
+		    rulePlacements[rule] >= rule->maxPlacements) {
+			continue;
+		}
+
+		float adjustedDensity = rule->density;
+		if (distanceScore > 0) {
+			float falloff = std::exp(-distanceScore * distConfig.clusterStrength * 0.1f);
+			adjustedDensity *= falloff;
+		}
+
+		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+		if (densityDist(m_rng) > adjustedDensity) {
+			continue;
+		}
+
+		const ItemEntry* selected = selectItemFromRule(rule);
+		if (!selected) continue;
+
+		bool isClusterEntry = selected->isClusterEntry();
+		if (isClusterEntry) {
+			int radius = std::max(0, selected->clusterRadius);
+			int minDist = std::max(0, selected->clusterMinDistance);
+			int centerMinDist = radius + minDist;
+			if (!checkClusterCenterSpacing(pos, centerMinDist)) {
+				continue;
+			}
+		}
+
+		std::vector<PreviewItem> placementItems;
+		if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
+			continue;
+		}
+
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+			continue;
+		}
+
+		if (!checkSpacingForPlacement(placementItems)) {
+			continue;
+		}
+
+		commitPlacement(placementItems);
+		if (isClusterEntry) {
+			m_clusterCenters.push_back(pos);
+		}
+		rulePlacements[rule]++;
+	}
+}
+
+void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	if (tiles.empty()) return;
+
+	const SpacingConfig& spacing = m_preset.spacing;
+	const DistributionConfig& distConfig = m_preset.distribution;
+
+	std::unordered_map<uint64_t, std::pair<Position, uint16_t>> tileMap;
+	Position minPos = tiles[0].first;
+	Position maxPos = tiles[0].first;
+
+	for (const auto& tile : tiles) {
+		uint64_t hash = (static_cast<uint64_t>(tile.first.x & 0xFFFF) << 32) |
+		                (static_cast<uint64_t>(tile.first.y & 0xFFFF) << 16) |
+		                static_cast<uint64_t>(tile.first.z & 0xFFFF);
+		tileMap[hash] = tile;
+
+		minPos.x = std::min(minPos.x, tile.first.x);
+		minPos.y = std::min(minPos.y, tile.first.y);
+		maxPos.x = std::max(maxPos.x, tile.first.x);
+		maxPos.y = std::max(maxPos.y, tile.first.y);
+	}
+
+	std::unordered_map<const FloorRule*, int> rulePlacements;
+
+	std::uniform_int_distribution<int> jitterDistX(-distConfig.gridJitter, distConfig.gridJitter);
+	std::uniform_int_distribution<int> jitterDistY(-distConfig.gridJitter, distConfig.gridJitter);
+
+	for (int gx = minPos.x; gx <= maxPos.x; gx += distConfig.gridSpacingX) {
+		for (int gy = minPos.y; gy <= maxPos.y; gy += distConfig.gridSpacingY) {
+			if (m_preset.maxItemsTotal >= 0 &&
+			    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+				m_previewWasCapped = true;
+				return;
+			}
+
+			int px = gx + jitterDistX(m_rng);
+			int py = gy + jitterDistY(m_rng);
+			int pz = minPos.z;
+
+			uint64_t hash = (static_cast<uint64_t>(px & 0xFFFF) << 32) |
+			                (static_cast<uint64_t>(py & 0xFFFF) << 16) |
+			                static_cast<uint64_t>(pz & 0xFFFF);
+
+			auto it = tileMap.find(hash);
+			if (it == tileMap.end()) continue;
+
+			const Position& pos = it->second.first;
+			uint16_t groundId = it->second.second;
+
+			const FloorRule* rule = m_preset.findRule(groundId);
+			if (!rule) continue;
+
+			if (rule->maxPlacements >= 0 &&
+			    rulePlacements[rule] >= rule->maxPlacements) {
+				continue;
+			}
+
+			std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+			if (densityDist(m_rng) > rule->density) {
+				continue;
+			}
+
+			const ItemEntry* selected = selectItemFromRule(rule);
+			if (!selected) continue;
+
+			bool isClusterEntry = selected->isClusterEntry();
+			if (isClusterEntry) {
+				int radius = std::max(0, selected->clusterRadius);
+				int minDist = std::max(0, selected->clusterMinDistance);
+				int centerMinDist = radius + minDist;
+				if (!checkClusterCenterSpacing(pos, centerMinDist)) {
+					continue;
+				}
+			}
+
+			std::vector<PreviewItem> placementItems;
+			if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
+				continue;
+			}
+
+			if (m_preset.maxItemsTotal >= 0 &&
+			    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+				continue;
+			}
+
+			if (!checkSpacingForPlacement(placementItems)) {
+				continue;
+			}
+
+			commitPlacement(placementItems);
+			if (isClusterEntry) {
+				m_clusterCenters.push_back(pos);
+			}
+			rulePlacements[rule]++;
+		}
+	}
+}
+
+bool DecorationEngine::applyPreview() {
+	if (!m_previewState.isValid || m_previewState.items.empty()) {
+		m_lastError = "No valid preview to apply";
+		return false;
+	}
+
+	if (!m_editor) {
+		m_lastError = "No editor available";
+		return false;
+	}
+
+	BatchAction* batch = m_editor->createBatch(ACTION_DRAW);
+	Action* action = m_editor->createAction(batch);
+
+	Map& map = m_editor->getMap();
+
+	std::unordered_map<uint64_t, std::vector<const PreviewItem*>> itemsByPos;
+	for (const auto& item : m_previewState.items) {
+		uint64_t hash = (static_cast<uint64_t>(item.position.x & 0xFFFF) << 32) |
+		                (static_cast<uint64_t>(item.position.y & 0xFFFF) << 16) |
+		                static_cast<uint64_t>(item.position.z & 0xFFFF);
+		itemsByPos[hash].push_back(&item);
+	}
+
+	for (const auto& pair : itemsByPos) {
+		const Position& pos = pair.second[0]->position;
+
+		Tile* tile = map.getTile(pos);
+		if (!tile) continue;
+
+		Tile* newTile = tile->deepCopy(map);
+		bool addedAny = false;
+
+		for (const PreviewItem* previewItem : pair.second) {
+			Item* newItem = Item::Create(previewItem->itemId);
+			if (!newItem) continue;
+
+			newTile->addItem(newItem);
+			addedAny = true;
+		}
+
+		if (addedAny) {
+			action->addChange(newd Change(newTile));
+		} else {
+			map.allocator.freeTile(newTile);
+		}
+	}
+
+	if (action->empty()) {
+		delete action;
+		delete batch;
+		m_lastError = "No changes were applied";
+		return false;
+	}
+
+	batch->addAndCommitAction(action);
+	m_editor->addBatch(batch);
+	m_editor->updateActions();
+
+	m_lastAppliedItems.clear();
+	m_lastAppliedItems.reserve(m_previewState.items.size());
+	for (const auto& item : m_previewState.items) {
+		m_lastAppliedItems.push_back({item.position, item.itemId});
+	}
+
+	clearPreview();
+
+	return true;
+}
+
+bool DecorationEngine::removeLastApplied() {
+	if (!m_editor) {
+		m_lastError = "No editor available";
+		return false;
+	}
+
+	if (m_lastAppliedItems.empty()) {
+		m_lastError = "No applied items to remove";
+		return false;
+	}
+
+	Map& map = m_editor->getMap();
+
+	struct RemovalBucket {
+		Position pos;
+		std::unordered_map<uint16_t, int> counts;
+	};
+
+	std::unordered_map<uint64_t, RemovalBucket> buckets;
+	buckets.reserve(m_lastAppliedItems.size());
+
+	auto positionHash = [](const Position& pos) {
+		return (static_cast<uint64_t>(pos.x & 0xFFFF) << 32) |
+		       (static_cast<uint64_t>(pos.y & 0xFFFF) << 16) |
+		       static_cast<uint64_t>(pos.z & 0xFFFF);
+	};
+
+	for (const auto& item : m_lastAppliedItems) {
+		uint64_t hash = positionHash(item.position);
+		auto& bucket = buckets[hash];
+		bucket.pos = item.position;
+		bucket.counts[item.itemId]++;
+	}
+
+	BatchAction* batch = m_editor->createBatch(ACTION_DELETE_TILES);
+	Action* action = m_editor->createAction(batch);
+	bool anyChange = false;
+
+	for (auto& entry : buckets) {
+		RemovalBucket& bucket = entry.second;
+		Tile* tile = map.getTile(bucket.pos);
+		if (!tile) continue;
+
+		Tile* newTile = tile->deepCopy(map);
+		bool changed = false;
+
+		for (auto& pair : bucket.counts) {
+			uint16_t id = pair.first;
+			int count = pair.second;
+			if (count <= 0) continue;
+
+			if (newTile->ground && newTile->ground->getID() == id && count > 0) {
+				delete newTile->ground;
+				newTile->ground = nullptr;
+				count--;
+				changed = true;
+			}
+
+			for (auto it = newTile->items.rbegin(); it != newTile->items.rend() && count > 0; ) {
+				Item* item = *it;
+				if (item && item->getID() == id) {
+					auto baseIt = std::next(it).base();
+					delete item;
+					it = ItemVector::reverse_iterator(newTile->items.erase(baseIt));
+					count--;
+					changed = true;
+				} else {
+					++it;
+				}
+			}
+		}
+
+		if (changed) {
+			action->addChange(newd Change(newTile));
+			anyChange = true;
+		} else {
+			map.allocator.freeTile(newTile);
+		}
+	}
+
+	if (!anyChange) {
+		delete action;
+		delete batch;
+		m_lastError = "No items from last apply were found to remove";
+		return false;
+	}
+
+	batch->addAndCommitAction(action);
+	m_editor->addBatch(batch);
+	m_editor->updateActions();
+
+	m_lastAppliedItems.clear();
+	return true;
+}
+
+//=============================================================================
+// DecorationPreset Serialization
+//=============================================================================
+
+bool DecorationPreset::saveToFile(const std::string& filepath) const {
+	pugi::xml_document doc;
+
+	pugi::xml_node root = doc.append_child("decoration_preset");
+	root.append_attribute("name") = name.c_str();
+	root.append_attribute("version") = "1.0";
+
+	// Spacing config
+	pugi::xml_node spacingNode = root.append_child("spacing");
+	spacingNode.append_attribute("min_distance") = spacing.minDistance;
+	spacingNode.append_attribute("same_item_distance") = spacing.minSameItemDistance;
+	spacingNode.append_attribute("check_diagonals") = spacing.checkDiagonals;
+
+	// Distribution config
+	pugi::xml_node distNode = root.append_child("distribution");
+	distNode.append_attribute("mode") = static_cast<int>(distribution.mode);
+	distNode.append_attribute("cluster_strength") = distribution.clusterStrength;
+	distNode.append_attribute("cluster_count") = distribution.clusterCount;
+	distNode.append_attribute("grid_spacing_x") = distribution.gridSpacingX;
+	distNode.append_attribute("grid_spacing_y") = distribution.gridSpacingY;
+	distNode.append_attribute("grid_jitter") = distribution.gridJitter;
+
+	// General settings
+	pugi::xml_node settingsNode = root.append_child("settings");
+	settingsNode.append_attribute("max_items_total") = maxItemsTotal;
+	settingsNode.append_attribute("skip_blocked") = skipBlockedTiles;
+	settingsNode.append_attribute("default_seed") = std::to_string(defaultSeed).c_str();
+
+	// Floor rules
+	pugi::xml_node rulesNode = root.append_child("floor_rules");
+	for (const auto& rule : floorRules) {
+		pugi::xml_node ruleNode = rulesNode.append_child("rule");
+		ruleNode.append_attribute("name") = rule.name.c_str();
+		ruleNode.append_attribute("floor_id") = rule.floorId;
+		ruleNode.append_attribute("from_floor_id") = rule.fromFloorId;
+		ruleNode.append_attribute("to_floor_id") = rule.toFloorId;
+		ruleNode.append_attribute("density") = rule.density;
+		ruleNode.append_attribute("max_placements") = rule.maxPlacements;
+		ruleNode.append_attribute("priority") = rule.priority;
+		ruleNode.append_attribute("enabled") = rule.enabled;
+
+		pugi::xml_node itemsNode = ruleNode.append_child("items");
+		for (const auto& item : rule.items) {
+			if (item.isCompositeEntry()) {
+				pugi::xml_node compNode = itemsNode.append_child(item.isClusterEntry() ? "cluster" : "composite");
+				compNode.append_attribute("weight") = item.weight;
+				if (item.isClusterEntry()) {
+					compNode.append_attribute("count") = item.clusterCount;
+					compNode.append_attribute("radius") = item.clusterRadius;
+					compNode.append_attribute("min_distance") = item.clusterMinDistance;
+				}
+				for (const auto& tile : item.compositeTiles) {
+					if (tile.itemIds.empty()) continue;
+					pugi::xml_node tileNode = compNode.append_child("tile");
+					tileNode.append_attribute("x") = tile.offset.x;
+					tileNode.append_attribute("y") = tile.offset.y;
+					tileNode.append_attribute("z") = tile.offset.z;
+					for (uint16_t id : tile.itemIds) {
+						if (id == 0) continue;
+						pugi::xml_node itemNode = tileNode.append_child("item");
+						itemNode.append_attribute("id") = id;
+					}
+				}
+			} else {
+				pugi::xml_node itemNode = itemsNode.append_child("item");
+				itemNode.append_attribute("id") = item.itemId;
+				itemNode.append_attribute("weight") = item.weight;
+			}
+		}
+	}
+
+	return doc.save_file(filepath.c_str());
+}
+
+bool DecorationPreset::loadFromFile(const std::string& filepath) {
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(filepath.c_str());
+
+	if (!result) {
+		return false;
+	}
+
+	pugi::xml_node root = doc.child("decoration_preset");
+	if (!root) return false;
+
+	name = root.attribute("name").as_string("Unnamed Preset");
+
+	// Spacing config
+	pugi::xml_node spacingNode = root.child("spacing");
+	if (spacingNode) {
+		spacing.minDistance = spacingNode.attribute("min_distance").as_int(1);
+		spacing.minSameItemDistance = spacingNode.attribute("same_item_distance").as_int(2);
+		spacing.checkDiagonals = spacingNode.attribute("check_diagonals").as_bool(true);
+	}
+
+	// Distribution config
+	pugi::xml_node distNode = root.child("distribution");
+	if (distNode) {
+		distribution.mode = static_cast<DistributionMode>(distNode.attribute("mode").as_int(0));
+		distribution.clusterStrength = distNode.attribute("cluster_strength").as_float(0.5f);
+		distribution.clusterCount = distNode.attribute("cluster_count").as_int(3);
+		distribution.gridSpacingX = distNode.attribute("grid_spacing_x").as_int(3);
+		distribution.gridSpacingY = distNode.attribute("grid_spacing_y").as_int(3);
+		distribution.gridJitter = distNode.attribute("grid_jitter").as_int(1);
+	}
+
+	// General settings
+	pugi::xml_node settingsNode = root.child("settings");
+	if (settingsNode) {
+		maxItemsTotal = settingsNode.attribute("max_items_total").as_int(-1);
+		skipBlockedTiles = settingsNode.attribute("skip_blocked").as_bool(true);
+		const char* seedStr = settingsNode.attribute("default_seed").as_string("0");
+		defaultSeed = std::strtoull(seedStr, nullptr, 10);
+	}
+
+	// Floor rules
+	floorRules.clear();
+	pugi::xml_node rulesNode = root.child("floor_rules");
+	for (pugi::xml_node ruleNode = rulesNode.child("rule"); ruleNode; ruleNode = ruleNode.next_sibling("rule")) {
+		FloorRule rule;
+		rule.name = ruleNode.attribute("name").as_string("Rule");
+		rule.floorId = ruleNode.attribute("floor_id").as_uint(0);
+		rule.fromFloorId = ruleNode.attribute("from_floor_id").as_uint(0);
+		rule.toFloorId = ruleNode.attribute("to_floor_id").as_uint(0);
+		rule.density = ruleNode.attribute("density").as_float(0.3f);
+		rule.maxPlacements = ruleNode.attribute("max_placements").as_int(-1);
+		rule.priority = ruleNode.attribute("priority").as_int(0);
+		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
+
+		pugi::xml_node itemsNode = ruleNode.child("items");
+		for (pugi::xml_node itemNode = itemsNode.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
+			std::string nodeName = itemNode.name();
+			if (nodeName == "item") {
+				ItemEntry entry;
+				entry.itemId = itemNode.attribute("id").as_uint(0);
+				entry.weight = itemNode.attribute("weight").as_int(100);
+				if (entry.itemId > 0) {
+					rule.items.push_back(entry);
+				}
+			} else if (nodeName == "composite" || nodeName == "cluster") {
+				int weight = itemNode.attribute("weight").as_int(0);
+				if (weight <= 0) {
+					weight = itemNode.attribute("chance").as_int(100);
+				}
+
+				std::vector<CompositeTile> tiles;
+				for (pugi::xml_node tileNode = itemNode.child("tile"); tileNode; tileNode = tileNode.next_sibling("tile")) {
+					CompositeTile tile;
+					tile.offset = Position(tileNode.attribute("x").as_int(0),
+					                       tileNode.attribute("y").as_int(0),
+					                       tileNode.attribute("z").as_int(0));
+					for (pugi::xml_node idNode = tileNode.child("item"); idNode; idNode = idNode.next_sibling("item")) {
+						uint16_t id = idNode.attribute("id").as_uint(0);
+						if (id > 0) {
+							tile.itemIds.push_back(id);
+						}
+					}
+					if (!tile.itemIds.empty()) {
+						tiles.push_back(tile);
+					}
+				}
+
+				if (!tiles.empty()) {
+					if (nodeName == "cluster") {
+						int count = itemNode.attribute("count").as_int(3);
+						int radius = itemNode.attribute("radius").as_int(3);
+						int minDistance = itemNode.attribute("min_distance").as_int(2);
+						rule.items.push_back(ItemEntry::MakeCluster(tiles, weight, count, radius, minDistance));
+					} else {
+						rule.items.push_back(ItemEntry::MakeComposite(tiles, weight));
+					}
+				}
+			}
+		}
+
+		floorRules.push_back(rule);
+	}
+
+	return true;
+}
+
+std::string DecorationPreset::toXmlString() const {
+	pugi::xml_document doc;
+
+	pugi::xml_node root = doc.append_child("decoration_preset");
+	root.append_attribute("name") = name.c_str();
+
+	// Same serialization as saveToFile, but to string
+	pugi::xml_node spacingNode = root.append_child("spacing");
+	spacingNode.append_attribute("min_distance") = spacing.minDistance;
+	spacingNode.append_attribute("same_item_distance") = spacing.minSameItemDistance;
+	spacingNode.append_attribute("check_diagonals") = spacing.checkDiagonals;
+
+	pugi::xml_node distNode = root.append_child("distribution");
+	distNode.append_attribute("mode") = static_cast<int>(distribution.mode);
+	distNode.append_attribute("cluster_strength") = distribution.clusterStrength;
+	distNode.append_attribute("cluster_count") = distribution.clusterCount;
+	distNode.append_attribute("grid_spacing_x") = distribution.gridSpacingX;
+	distNode.append_attribute("grid_spacing_y") = distribution.gridSpacingY;
+	distNode.append_attribute("grid_jitter") = distribution.gridJitter;
+
+	pugi::xml_node settingsNode = root.append_child("settings");
+	settingsNode.append_attribute("max_items_total") = maxItemsTotal;
+	settingsNode.append_attribute("skip_blocked") = skipBlockedTiles;
+
+	pugi::xml_node rulesNode = root.append_child("floor_rules");
+	for (const auto& rule : floorRules) {
+		pugi::xml_node ruleNode = rulesNode.append_child("rule");
+		ruleNode.append_attribute("name") = rule.name.c_str();
+		ruleNode.append_attribute("floor_id") = rule.floorId;
+		ruleNode.append_attribute("from_floor_id") = rule.fromFloorId;
+		ruleNode.append_attribute("to_floor_id") = rule.toFloorId;
+		ruleNode.append_attribute("density") = rule.density;
+		ruleNode.append_attribute("max_placements") = rule.maxPlacements;
+		ruleNode.append_attribute("priority") = rule.priority;
+
+		pugi::xml_node itemsNode = ruleNode.append_child("items");
+		for (const auto& item : rule.items) {
+			if (item.isCompositeEntry()) {
+				pugi::xml_node compNode = itemsNode.append_child(item.isClusterEntry() ? "cluster" : "composite");
+				compNode.append_attribute("weight") = item.weight;
+				if (item.isClusterEntry()) {
+					compNode.append_attribute("count") = item.clusterCount;
+					compNode.append_attribute("radius") = item.clusterRadius;
+					compNode.append_attribute("min_distance") = item.clusterMinDistance;
+				}
+				for (const auto& tile : item.compositeTiles) {
+					if (tile.itemIds.empty()) continue;
+					pugi::xml_node tileNode = compNode.append_child("tile");
+					tileNode.append_attribute("x") = tile.offset.x;
+					tileNode.append_attribute("y") = tile.offset.y;
+					tileNode.append_attribute("z") = tile.offset.z;
+					for (uint16_t id : tile.itemIds) {
+						if (id == 0) continue;
+						pugi::xml_node itemNode = tileNode.append_child("item");
+						itemNode.append_attribute("id") = id;
+					}
+				}
+			} else {
+				pugi::xml_node itemNode = itemsNode.append_child("item");
+				itemNode.append_attribute("id") = item.itemId;
+				itemNode.append_attribute("weight") = item.weight;
+			}
+		}
+	}
+
+	std::ostringstream stream;
+	doc.save(stream);
+	return stream.str();
+}
+
+bool DecorationPreset::fromXmlString(const std::string& xml) {
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_buffer(xml.c_str(), xml.size());
+
+	if (!result) return false;
+
+	// Re-use the same parsing logic
+	pugi::xml_node root = doc.child("decoration_preset");
+	if (!root) return false;
+
+	name = root.attribute("name").as_string("Unnamed Preset");
+
+	pugi::xml_node spacingNode = root.child("spacing");
+	if (spacingNode) {
+		spacing.minDistance = spacingNode.attribute("min_distance").as_int(1);
+		spacing.minSameItemDistance = spacingNode.attribute("same_item_distance").as_int(2);
+		spacing.checkDiagonals = spacingNode.attribute("check_diagonals").as_bool(true);
+	}
+
+	pugi::xml_node distNode = root.child("distribution");
+	if (distNode) {
+		distribution.mode = static_cast<DistributionMode>(distNode.attribute("mode").as_int(0));
+		distribution.clusterStrength = distNode.attribute("cluster_strength").as_float(0.5f);
+		distribution.clusterCount = distNode.attribute("cluster_count").as_int(3);
+		distribution.gridSpacingX = distNode.attribute("grid_spacing_x").as_int(3);
+		distribution.gridSpacingY = distNode.attribute("grid_spacing_y").as_int(3);
+		distribution.gridJitter = distNode.attribute("grid_jitter").as_int(1);
+	}
+
+	pugi::xml_node settingsNode = root.child("settings");
+	if (settingsNode) {
+		maxItemsTotal = settingsNode.attribute("max_items_total").as_int(-1);
+		skipBlockedTiles = settingsNode.attribute("skip_blocked").as_bool(true);
+	}
+
+	floorRules.clear();
+	pugi::xml_node rulesNode = root.child("floor_rules");
+	for (pugi::xml_node ruleNode = rulesNode.child("rule"); ruleNode; ruleNode = ruleNode.next_sibling("rule")) {
+		FloorRule rule;
+		rule.name = ruleNode.attribute("name").as_string("Rule");
+		rule.floorId = ruleNode.attribute("floor_id").as_uint(0);
+		rule.fromFloorId = ruleNode.attribute("from_floor_id").as_uint(0);
+		rule.toFloorId = ruleNode.attribute("to_floor_id").as_uint(0);
+		rule.density = ruleNode.attribute("density").as_float(0.3f);
+		rule.maxPlacements = ruleNode.attribute("max_placements").as_int(-1);
+		rule.priority = ruleNode.attribute("priority").as_int(0);
+
+		pugi::xml_node itemsNode = ruleNode.child("items");
+		for (pugi::xml_node itemNode = itemsNode.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
+			std::string nodeName = itemNode.name();
+			if (nodeName == "item") {
+				ItemEntry entry;
+				entry.itemId = itemNode.attribute("id").as_uint(0);
+				entry.weight = itemNode.attribute("weight").as_int(100);
+				if (entry.itemId > 0) {
+					rule.items.push_back(entry);
+				}
+			} else if (nodeName == "composite" || nodeName == "cluster") {
+				int weight = itemNode.attribute("weight").as_int(0);
+				if (weight <= 0) {
+					weight = itemNode.attribute("chance").as_int(100);
+				}
+
+				std::vector<CompositeTile> tiles;
+				for (pugi::xml_node tileNode = itemNode.child("tile"); tileNode; tileNode = tileNode.next_sibling("tile")) {
+					CompositeTile tile;
+					tile.offset = Position(tileNode.attribute("x").as_int(0),
+					                       tileNode.attribute("y").as_int(0),
+					                       tileNode.attribute("z").as_int(0));
+					for (pugi::xml_node idNode = tileNode.child("item"); idNode; idNode = idNode.next_sibling("item")) {
+						uint16_t id = idNode.attribute("id").as_uint(0);
+						if (id > 0) {
+							tile.itemIds.push_back(id);
+						}
+					}
+					if (!tile.itemIds.empty()) {
+						tiles.push_back(tile);
+					}
+				}
+
+				if (!tiles.empty()) {
+					if (nodeName == "cluster") {
+						int count = itemNode.attribute("count").as_int(3);
+						int radius = itemNode.attribute("radius").as_int(3);
+						int minDistance = itemNode.attribute("min_distance").as_int(2);
+						rule.items.push_back(ItemEntry::MakeCluster(tiles, weight, count, radius, minDistance));
+					} else {
+						rule.items.push_back(ItemEntry::MakeComposite(tiles, weight));
+					}
+				}
+			}
+		}
+
+		floorRules.push_back(rule);
+	}
+
+	return true;
+}
+
+//=============================================================================
+// PresetManager Implementation
+//=============================================================================
+
+PresetManager& PresetManager::getInstance() {
+	static PresetManager instance;
+	return instance;
+}
+
+std::string PresetManager::getPresetsDirectory() const {
+	wxString dataDir = g_gui.GetDataDirectory();
+	wxString presetsBaseDir = dataDir + "/presets";
+	wxString presetsDir = presetsBaseDir + "/decoration";
+
+	// Create parent directory first if it doesn't exist
+	if (!wxDirExists(presetsBaseDir)) {
+		wxMkdir(presetsBaseDir);
+	}
+
+	// Create decoration subdirectory if it doesn't exist
+	if (!wxDirExists(presetsDir)) {
+		wxMkdir(presetsDir);
+	}
+
+	return presetsDir.ToStdString();
+}
+
+bool PresetManager::loadPresets() {
+	m_presets.clear();
+
+	std::string dir = getPresetsDirectory();
+	wxDir wxdir(dir);
+
+	if (!wxdir.IsOpened()) {
+		return false;
+	}
+
+	wxString filename;
+	bool cont = wxdir.GetFirst(&filename, "*.xml", wxDIR_FILES);
+
+	while (cont) {
+		std::string filepath = dir + "/" + filename.ToStdString();
+		DecorationPreset preset;
+		if (preset.loadFromFile(filepath)) {
+			m_presets[preset.name] = preset;
+		}
+		cont = wxdir.GetNext(&filename);
+	}
+
+	m_loaded = true;
+	return true;
+}
+
+bool PresetManager::savePresets() {
+	std::string dir = getPresetsDirectory();
+
+	for (const auto& pair : m_presets) {
+		std::string filename = pair.first;
+		// Sanitize filename
+		for (char& c : filename) {
+			if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+				c = '_';
+			}
+		}
+		std::string filepath = dir + "/" + filename + ".xml";
+		pair.second.saveToFile(filepath);
+	}
+
+	return true;
+}
+
+std::vector<std::string> PresetManager::getPresetNames() const {
+	std::vector<std::string> names;
+	for (const auto& pair : m_presets) {
+		names.push_back(pair.first);
+	}
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+const DecorationPreset* PresetManager::getPreset(const std::string& name) const {
+	auto it = m_presets.find(name);
+	if (it != m_presets.end()) {
+		return &it->second;
+	}
+	return nullptr;
+}
+
+bool PresetManager::addPreset(const DecorationPreset& preset) {
+	if (preset.name.empty()) return false;
+
+	m_presets[preset.name] = preset;
+
+	// Save immediately
+	std::string dir = getPresetsDirectory();
+	std::string filename = preset.name;
+	for (char& c : filename) {
+		if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+			c = '_';
+		}
+	}
+	std::string filepath = dir + "/" + filename + ".xml";
+	return preset.saveToFile(filepath);
+}
+
+bool PresetManager::removePreset(const std::string& name) {
+	auto it = m_presets.find(name);
+	if (it == m_presets.end()) return false;
+
+	// Delete file
+	std::string dir = getPresetsDirectory();
+	std::string filename = name;
+	for (char& c : filename) {
+		if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+			c = '_';
+		}
+	}
+	std::string filepath = dir + "/" + filename + ".xml";
+	wxRemoveFile(filepath);
+
+	m_presets.erase(it);
+	return true;
+}
+
+bool PresetManager::renamePreset(const std::string& oldName, const std::string& newName) {
+	if (oldName == newName) return true;
+	if (newName.empty()) return false;
+
+	auto it = m_presets.find(oldName);
+	if (it == m_presets.end()) return false;
+
+	// Check if new name already exists
+	if (m_presets.find(newName) != m_presets.end()) return false;
+
+	DecorationPreset preset = it->second;
+	preset.name = newName;
+
+	// Remove old
+	removePreset(oldName);
+
+	// Add new
+	return addPreset(preset);
+}
+
+} // namespace AreaDecoration

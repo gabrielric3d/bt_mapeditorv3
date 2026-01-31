@@ -222,6 +222,9 @@
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\brush_manager_window.cpp" />
     <ClCompile Include="..\..\source\brush_tips_window.cpp" />
+    <ClCompile Include="..\..\source\structure_manager_window.cpp" />
+    <ClCompile Include="..\..\source\area_decoration.cpp" />
+    <ClCompile Include="..\..\source\area_decoration_dialog.cpp" />
     <ClCompile Include="..\..\source\container_properties_window.cpp" />
     <ClCompile Include="..\..\source\duplicated_items_window.cpp" />
     <ClCompile Include="..\..\source\find_item_window.cpp" />
@@ -238,6 +241,9 @@
     <ClInclude Include="..\..\source\light_drawer.h" />
     <ClInclude Include="..\..\source\brush_manager_window.h" />
     <ClInclude Include="..\..\source\brush_tips_window.h" />
+    <ClInclude Include="..\..\source\structure_manager_window.h" />
+    <ClInclude Include="..\..\source\area_decoration.h" />
+    <ClInclude Include="..\..\source\area_decoration_dialog.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />
     <ClInclude Include="..\..\source\otml.h" />
     <ClInclude Include="..\..\source\browse_tile_window.h" />
