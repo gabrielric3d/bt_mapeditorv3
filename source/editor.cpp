@@ -187,6 +187,22 @@ Editor::Editor(CopyBuffer& copybuffer) :
 	map.doChange();
 }
 
+Editor::Editor(CopyBuffer& copybuffer, const MapVersion& version, bool preview) :
+	live_server(nullptr),
+	live_client(nullptr),
+	actionQueue(newd ActionQueue(*this)),
+	selection(*this),
+	copybuffer(copybuffer),
+	replace_brush(nullptr)
+{
+	(void)preview;
+
+	map.convert(version, false);
+	map.setWidth(1);
+	map.setHeight(1);
+	map.clearChanges();
+}
+
 Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 	live_server(nullptr),
 	live_client(nullptr),

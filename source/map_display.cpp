@@ -194,6 +194,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	editor(editor),
 	floor(rme::MapGroundLayer),
 	zoom(1.0),
+	preview_mode(false),
 	cursor_x(-1),
 	cursor_y(-1),
 	cursor_in_window(false),
@@ -590,6 +591,53 @@ void MapCanvas::SetZoom(double value)
 		UpdateZoomStatus();
 		Refresh();
 	}
+}
+
+void MapCanvas::ZoomBy(double delta, const wxPoint& anchor)
+{
+	if(delta == 0.0) {
+		return;
+	}
+
+	double oldzoom = zoom;
+	zoom += delta;
+
+	if(zoom < 0.125) {
+		zoom = 0.125;
+	}
+	if(zoom > 25.00) {
+		zoom = 25.0;
+	}
+
+	if(std::abs(zoom - oldzoom) < 0.0001) {
+		return;
+	}
+
+	if(!preview_mode) {
+		UpdateZoomStatus();
+	}
+
+	int screensize_x = 0;
+	int screensize_y = 0;
+	MapWindow* window = GetMapWindow();
+	if(window) {
+		window->GetViewSize(&screensize_x, &screensize_y);
+	}
+	if(screensize_x > 0 && screensize_y > 0) {
+		const double anchor_x = std::max(anchor.x, 1) / double(screensize_x);
+		const double anchor_y = std::max(anchor.y, 1) / double(screensize_y);
+		const double diff = zoom - oldzoom;
+		int scroll_x = int(screensize_x * diff * anchor_x) * GetContentScaleFactor();
+		int scroll_y = int(screensize_y * diff * anchor_y) * GetContentScaleFactor();
+		window->ScrollRelative(-scroll_x, -scroll_y);
+	}
+
+	Refresh();
+}
+
+void MapCanvas::SetPreviewMode(bool preview)
+{
+	preview_mode = preview;
 }
 
 void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const
@@ -1019,6 +1067,10 @@ Position MapCanvas::GetCursorPosition() const
 
 void MapCanvas::UpdatePositionStatus(int x, int y)
 {
+	if(preview_mode) {
+		return;
+	}
+
 	if(x == -1) x = cursor_x;
 	if(y == -1) y = cursor_y;
 
@@ -1064,6 +1116,10 @@ void MapCanvas::UpdatePositionStatus(int x, int y)
 
 void MapCanvas::UpdateZoomStatus()
 {
+	if(preview_mode) {
+		return;
+	}
+
 	int percentage = (int)((1.0 / zoom) * 100);
 	wxString ss;
 	ss << "zoom: " << percentage << "%";
@@ -3438,9 +3494,11 @@ void MapCanvas::ChangeFloor(int new_floor)
 	int old_floor = floor;
 	floor = new_floor;
 	if(old_floor != new_floor) {
-		UpdatePositionStatus();
-		g_gui.root->UpdateFloorMenu();
-		g_gui.UpdateMinimap(true);
+		if(!preview_mode) {
+			UpdatePositionStatus();
+			g_gui.root->UpdateFloorMenu();
+			g_gui.UpdateMinimap(true);
+		}
 		ClearAutoborderPreview();
 	}
 	Refresh();
@@ -3467,16 +3525,25 @@ void MapCanvas::EnterSelectionMode()
 
 bool MapCanvas::isPasting() const
 {
+	if(preview_mode) {
+		return false;
+	}
 	return g_gui.IsPasting();
 }
 
 void MapCanvas::StartPasting()
 {
+	if(preview_mode) {
+		return;
+	}
 	g_gui.StartPasting();
 }
 
 void MapCanvas::EndPasting()
 {
+	if(preview_mode) {
+		return;
+	}
 	g_gui.EndPasting();
 }
 

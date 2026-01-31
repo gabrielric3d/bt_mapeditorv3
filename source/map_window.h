@@ -69,6 +69,9 @@ public:
 	Position GetScreenCenterPosition();
 	void SetScreenCenterPosition(const Position& position, bool showIndicator = false);
 	void GoToPreviousCenterPosition();
+	void SetPreviewMode(bool preview);
+	bool IsPreviewMode() const noexcept { return preview_mode; }
+	void SetPreviewBounds(int widthTiles, int heightTiles);
 
 	// Return the containing canvas
 	MapCanvas* GetCanvas() const noexcept { return canvas; }
@@ -91,6 +94,12 @@ protected:
 	MapCanvas* canvas;
 	wxScrollBar* hScroll;
 	wxScrollBar* vScroll;
+	bool preview_mode;
+	int preview_scroll_x;
+	int preview_scroll_y;
+	int preview_width_tiles;
+	int preview_height_tiles;
+	bool preview_bounds_valid;
 
 private:
 	ReplaceItemsDialog* replaceItemsDialog;

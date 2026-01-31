@@ -137,6 +137,9 @@ public:
 	int GetFloor() const noexcept { return floor; }
 	double GetZoom() const noexcept { return zoom; }
 	void SetZoom(double value);
+	void ZoomBy(double delta, const wxPoint& anchor);
+	void SetPreviewMode(bool preview);
+	bool IsPreviewMode() const noexcept { return preview_mode; }
 	void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
 	MapWindow* GetMapWindow() const;
@@ -177,9 +180,10 @@ private:
 	MapDrawer *drawer;
 	int keyCode;
 
-// View related
+	// View related
 	int floor;
 	double zoom;
+	bool preview_mode;
 	int cursor_x;
 	int cursor_y;
 	bool cursor_in_window;

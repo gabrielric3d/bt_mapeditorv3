@@ -529,6 +529,10 @@ void MapDrawer::DrawMap()
 
 void MapDrawer::DrawSecondaryMap(int map_z)
 {
+	if(canvas && canvas->IsPreviewMode()) {
+		return;
+	}
+
 	if(options.ingame)
 		return;
 
@@ -3077,6 +3081,10 @@ void MapDrawer::getDrawPosition(const Position& position, int& x, int& y)
 
 void MapDrawer::DrawStatsOverlay()
 {
+	if(canvas && canvas->IsPreviewMode()) {
+		return;
+	}
+
 	// Calculate FPS
 	frame_count++;
 	long elapsed = fps_timer.Time();

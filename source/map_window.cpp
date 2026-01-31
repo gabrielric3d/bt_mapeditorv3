@@ -26,7 +26,13 @@
 MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr)
+	replaceItemsDialog(nullptr),
+	preview_mode(false),
+	preview_scroll_x(0),
+	preview_scroll_y(0),
+	preview_width_tiles(0),
+	preview_height_tiles(0),
+	preview_bounds_valid(false)
 {
 	int GL_settings[3];
 	GL_settings[0] = WX_GL_RGBA;
@@ -55,6 +61,33 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 MapWindow::~MapWindow()
 {
 	////
+}
+
+void MapWindow::SetPreviewMode(bool preview)
+{
+	preview_mode = preview;
+	preview_scroll_x = 0;
+	preview_scroll_y = 0;
+
+	if(wxSizer* sizer = GetSizer()) {
+		if(hScroll) {
+			sizer->Show(hScroll, !preview_mode);
+		}
+		if(vScroll) {
+			sizer->Show(vScroll, !preview_mode);
+		}
+		if(gem) {
+			sizer->Show(gem, !preview_mode);
+		}
+		sizer->Layout();
+	}
+}
+
+void MapWindow::SetPreviewBounds(int widthTiles, int heightTiles)
+{
+	preview_width_tiles = std::max(1, widthTiles);
+	preview_height_tiles = std::max(1, heightTiles);
+	preview_bounds_valid = true;
 }
 
 void MapWindow::ShowReplaceItemsDialog(bool selectionOnly)
@@ -123,8 +156,11 @@ void MapWindow::UpdateDialogs(bool show)
 
 void MapWindow::GetViewStart(int* x, int* y)
 {
-	*x = hScroll->GetThumbPosition();
-	*y = vScroll->GetThumbPosition();
+	int sx = preview_mode ? preview_scroll_x : hScroll->GetThumbPosition();
+	int sy = preview_mode ? preview_scroll_y : vScroll->GetThumbPosition();
+
+	*x = sx;
+	*y = sy;
 }
 
 void MapWindow::GetViewSize(int* x, int* y)
@@ -188,24 +224,42 @@ void MapWindow::Scroll(int x, int y, bool center)
 		int windowSizeX, windowSizeY;
 
 		canvas->GetSize(&windowSizeX, &windowSizeY);
-		x -= int((windowSizeX * g_gui.GetCurrentZoom()) / 2.0);
-		y -= int((windowSizeY * g_gui.GetCurrentZoom()) / 2.0);
+		const double current_zoom = preview_mode ? canvas->GetZoom() : g_gui.GetCurrentZoom();
+		x -= int((windowSizeX * current_zoom) / 2.0);
+		y -= int((windowSizeY * current_zoom) / 2.0);
 	}
 
-	hScroll->SetThumbPosition(x);
-	vScroll->SetThumbPosition(y);
-	g_gui.UpdateMinimap();
+	if(preview_mode) {
+		preview_scroll_x = x;
+		preview_scroll_y = y;
+	} else {
+		hScroll->SetThumbPosition(x);
+		vScroll->SetThumbPosition(y);
+	}
+	if(!preview_mode) {
+		g_gui.UpdateMinimap();
+	}
 }
 
 void MapWindow::ScrollRelative(int x, int y)
 {
-	hScroll->SetThumbPosition(hScroll->GetThumbPosition()+x);
-	vScroll->SetThumbPosition(vScroll->GetThumbPosition()+y);
-	g_gui.UpdateMinimap();
+	if(preview_mode) {
+		preview_scroll_x += x;
+		preview_scroll_y += y;
+	} else {
+		hScroll->SetThumbPosition(hScroll->GetThumbPosition()+x);
+		vScroll->SetThumbPosition(vScroll->GetThumbPosition()+y);
+	}
+	if(!preview_mode) {
+		g_gui.UpdateMinimap();
+	}
 }
 
 void MapWindow::OnGem(wxCommandEvent& WXUNUSED(event))
 {
+	if(preview_mode) {
+		return;
+	}
 	g_gui.SwitchMode();
 }
 

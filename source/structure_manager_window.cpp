@@ -20,23 +20,34 @@
 #include "structure_manager_window.h"
 
 #include <wx/dir.h>
+#include <wx/dcclient.h>
+#include <wx/dcgraph.h>
 #include <wx/filefn.h>
 #include <wx/filename.h>
+#include <wx/dcbuffer.h>
 #include <wx/msgdlg.h>
+#include <wx/popupwin.h>
 #include <wx/sizer.h>
+#include <wx/tokenzr.h>
 #include <wx/textdlg.h>
 #include <wx/treectrl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 
 #include "copybuffer.h"
+#include "client_version.h"
 #include "editor.h"
 #include "filehandle.h"
 #include "gui.h"
 #include "iomap_otbm.h"
 #include "map.h"
+#include "map_display.h"
+#include "map_window.h"
+#include "settings.h"
 
 namespace
 {
@@ -48,9 +59,18 @@ namespace
 		ID_RENAME_CATEGORY,
 		ID_ADD_CATEGORY,
 		ID_ADD_SUBCATEGORY,
+		ID_REMOVE_CATEGORY,
+		ID_REMOVE_SUBCATEGORY,
 		ID_SEARCH_FILTER,
-		ID_CATEGORY_TREE
+		ID_CATEGORY_TREE,
+		ID_TUTORIAL_HELP
 	};
+
+	const int kTutorialWrapWidth = 360;
+	const wxSize kTutorialMinSize(440, 150);
+	const int kTutorialFontDelta = -1;
+	const int kTutorialOverlayAlpha = 120;
+	const int kTutorialHighlightAlpha = 40;
 
 	class StructureIOMapOTBM : public IOMapOTBM
 	{
@@ -72,6 +92,7 @@ namespace
 		explicit CategoryItemData(const wxString& path) : categoryPath(path) {}
 		wxString categoryPath;
 	};
+
 
 	wxString GetStructuresDirectory()
 	{
@@ -216,6 +237,7 @@ namespace
 
 		bool hasPos = false;
 		Position minPos;
+		Position maxPos;
 
 		for(MapIterator it = tempMap.begin(); it != tempMap.end(); ++it) {
 			Tile* tile = (*it)->get();
@@ -226,17 +248,26 @@ namespace
 			const Position& pos = tile->getPosition();
 			if(!hasPos) {
 				minPos = pos;
+				maxPos = pos;
 				hasPos = true;
 			} else {
 				minPos.x = std::min(minPos.x, pos.x);
 				minPos.y = std::min(minPos.y, pos.y);
 				minPos.z = std::min(minPos.z, pos.z);
+				maxPos.x = std::max(maxPos.x, pos.x);
+				maxPos.y = std::max(maxPos.y, pos.y);
+				maxPos.z = std::max(maxPos.z, pos.z);
 			}
 		}
 
 		if(!hasPos) {
 			errorOut = "Structure is empty.";
 			return false;
+		}
+
+		Map* outRealMap = dynamic_cast<Map*>(&outMap);
+		if(outRealMap) {
+			outRealMap->convert(tempMap.getVersion(), false);
 		}
 
 		for(MapIterator it = tempMap.begin(); it != tempMap.end(); ++it) {
@@ -252,12 +283,401 @@ namespace
 			outMap.setTile(relPos, copiedTile);
 		}
 
-		outCopyPos = Position(0, 0, 0);
+		if(outRealMap) {
+			const int width = std::max(1, maxPos.x - minPos.x + 1);
+			const int height = std::max(1, maxPos.y - minPos.y + 1);
+			outRealMap->setWidth(width);
+			outRealMap->setHeight(height);
+		}
+
+		outCopyPos = Position(0, 0, maxPos.z - minPos.z);
 		return true;
+	}
+
+	wxString BuildCategoryDirectory(const wxString& baseDir, const wxString& categoryPath)
+	{
+		wxFileName dirName(baseDir, "");
+		if(!categoryPath.empty()) {
+			wxStringTokenizer tokenizer(categoryPath, "/");
+			while(tokenizer.HasMoreTokens()) {
+				wxString token = tokenizer.GetNextToken();
+				if(!token.empty()) {
+					dirName.AppendDir(token);
+				}
+			}
+		}
+		return dirName.GetFullPath();
+	}
+
+	bool CategoryNameExists(const std::vector<wxString>& paths, const wxString& name, const wxString& excludePath = wxString())
+	{
+		for(const auto& path : paths) {
+			if(path.empty()) {
+				continue;
+			}
+			if(!excludePath.empty() && path.CmpNoCase(excludePath) == 0) {
+				continue;
+			}
+
+			wxString leaf = path;
+			int sep = leaf.Find('/', true);
+			if(sep != wxNOT_FOUND) {
+				leaf = leaf.Mid(sep + 1);
+			}
+			if(leaf.CmpNoCase(name) == 0) {
+				return true;
+			}
+		}
+		return false;
 	}
 }
 
 StructureManagerDialog* StructureManagerDialog::s_active = nullptr;
+
+class StructureManagerDialog::StructurePreviewPanel : public wxPanel
+{
+public:
+	explicit StructurePreviewPanel(wxWindow* parent) :
+		wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE),
+		m_mapWindow(nullptr),
+		m_canvas(nullptr),
+		m_emptyLabel(nullptr),
+		m_hasMap(false),
+		m_dragging(false)
+	{
+		SetMinSize(wxSize(300, 240));
+
+		wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+
+		m_emptyLabel = newd wxStaticText(this, wxID_ANY, "");
+		m_emptyLabel->SetForegroundColour(wxColour(140, 140, 150));
+		m_emptyLabel->Hide();
+
+		EnsureEditor();
+
+		m_mapWindow = newd MapWindow(this, *m_editor);
+		m_mapWindow->SetPreviewMode(true);
+		m_canvas = m_mapWindow->GetCanvas();
+		if(m_canvas) {
+			m_canvas->SetPreviewMode(true);
+			BindPreviewEvents();
+		}
+
+		sizer->Add(m_mapWindow, 1, wxEXPAND);
+		sizer->Add(m_emptyLabel, 0, wxALIGN_CENTER | wxALL, 8);
+		SetSizer(sizer);
+
+		ShowMessage("Select a structure to preview.");
+	}
+
+	void Clear(const wxString& message)
+	{
+		ShowMessage(message);
+	}
+
+	bool LoadStructure(const wxString& path, wxString& error)
+	{
+		EnsureEditor();
+		if(!m_editor) {
+			error = "Preview editor unavailable.";
+			ShowMessage("Preview failed to load.");
+			return false;
+		}
+
+		Position copyPos;
+		if(!LoadStructureFile(path, m_editor->getMap(), copyPos, error)) {
+			ShowMessage("Preview failed to load.");
+			return false;
+		}
+
+		m_hasMap = true;
+		ShowMap();
+		ResetViewToMap();
+		return true;
+	}
+
+private:
+	void EnsureEditor()
+	{
+		if(m_editor) {
+			return;
+		}
+
+		MapVersion version;
+		ClientVersionID currentId = g_gui.GetCurrentVersionID();
+		if(currentId == CLIENT_VERSION_NONE) {
+			ClientVersion* latest = ClientVersion::getLatestVersion();
+			if(latest) {
+				version.client = latest->getID();
+				version.otbm = latest->getPrefferedMapVersionID();
+			}
+		} else {
+			version.client = currentId;
+			version.otbm = g_gui.GetCurrentVersion().getPrefferedMapVersionID();
+		}
+
+		m_editor.reset(newd Editor(m_copyBuffer, version, true));
+	}
+
+	void ShowMessage(const wxString& message)
+	{
+		m_hasMap = false;
+		if(m_emptyLabel) {
+			m_emptyLabel->SetLabel(message);
+			m_emptyLabel->Show();
+		}
+		if(m_mapWindow) {
+			m_mapWindow->Hide();
+		}
+		Layout();
+	}
+
+	void ShowMap()
+	{
+		if(m_emptyLabel) {
+			m_emptyLabel->Hide();
+		}
+		if(m_mapWindow) {
+			m_mapWindow->Show();
+		}
+		Layout();
+	}
+
+	void ResetViewToMap()
+	{
+		if(!m_editor || !m_mapWindow || !m_canvas) {
+			return;
+		}
+
+		Map& map = m_editor->getMap();
+		int floor = FindLowestFloor(map);
+		m_canvas->ChangeFloor(floor);
+		UpdateBounds(map);
+		m_mapWindow->SetPreviewBounds(m_boundsWidth, m_boundsHeight);
+		m_mapWindow->FitToMap();
+		FitZoomToView();
+		CenterMap(floor);
+		m_canvas->Refresh();
+	}
+
+	void FitZoomToView()
+	{
+		if(!m_canvas || !m_mapWindow) {
+			return;
+		}
+
+		int viewWidth = 0;
+		int viewHeight = 0;
+		m_mapWindow->GetViewSize(&viewWidth, &viewHeight);
+		if(viewWidth <= 0 || viewHeight <= 0) {
+			return;
+		}
+
+		const int mapWidth = std::max(1, m_boundsWidth);
+		const int mapHeight = std::max(1, m_boundsHeight);
+		const int padding = 16;
+		const double usableWidth = std::max(1, viewWidth - padding);
+		const double usableHeight = std::max(1, viewHeight - padding);
+
+		double zoomX = (mapWidth * rme::TileSize) / usableWidth;
+		double zoomY = (mapHeight * rme::TileSize) / usableHeight;
+		double zoom = std::max(zoomX, zoomY);
+		if(zoom < 1.0) {
+			zoom = 1.0;
+		}
+		if(zoom < 0.125) {
+			zoom = 0.125;
+		}
+		if(zoom > 25.0) {
+			zoom = 25.0;
+		}
+
+		m_canvas->SetZoom(zoom);
+	}
+
+	void CenterMap(int floor)
+	{
+		if(!m_mapWindow) {
+			return;
+		}
+
+		const int mapWidth = std::max(1, m_boundsWidth);
+		const int mapHeight = std::max(1, m_boundsHeight);
+		Position center(m_boundsMinX + mapWidth / 2, m_boundsMinY + mapHeight / 2, floor);
+		m_mapWindow->SetScreenCenterPosition(center);
+	}
+
+	void UpdateBounds(BaseMap& map)
+	{
+		bool hasPos = false;
+		int minX = 0;
+		int minY = 0;
+		int maxX = 0;
+		int maxY = 0;
+
+		for(MapIterator it = map.begin(); it != map.end(); ++it) {
+			Tile* tile = (*it)->get();
+			if(!tile || tile->size() == 0) {
+				continue;
+			}
+
+			const Position& pos = tile->getPosition();
+			if(!hasPos) {
+				minX = maxX = pos.x;
+				minY = maxY = pos.y;
+				hasPos = true;
+			} else {
+				minX = std::min(minX, pos.x);
+				maxX = std::max(maxX, pos.x);
+				minY = std::min(minY, pos.y);
+				maxY = std::max(maxY, pos.y);
+			}
+		}
+
+		if(hasPos) {
+			m_boundsMinX = minX;
+			m_boundsMinY = minY;
+			m_boundsWidth = std::max(1, maxX - minX + 1);
+			m_boundsHeight = std::max(1, maxY - minY + 1);
+		} else {
+			m_boundsMinX = 0;
+			m_boundsMinY = 0;
+			m_boundsWidth = 1;
+			m_boundsHeight = 1;
+		}
+	}
+
+	int FindLowestFloor(BaseMap& map) const
+	{
+		bool hasPos = false;
+		int minZ = rme::MapMaxLayer;
+		for(MapIterator it = map.begin(); it != map.end(); ++it) {
+			Tile* tile = (*it)->get();
+			if(!tile || tile->size() == 0) {
+				continue;
+			}
+
+			const int z = tile->getPosition().z;
+			if(!hasPos) {
+				minZ = z;
+				hasPos = true;
+			} else {
+				minZ = std::min(minZ, z);
+			}
+		}
+		return hasPos ? minZ : rme::MapGroundLayer;
+	}
+
+	void BindPreviewEvents()
+	{
+		if(!m_canvas) {
+			return;
+		}
+
+		m_canvas->Bind(wxEVT_LEFT_DOWN, &StructurePreviewPanel::OnPanStart, this);
+		m_canvas->Bind(wxEVT_RIGHT_DOWN, &StructurePreviewPanel::OnPanStart, this);
+		m_canvas->Bind(wxEVT_LEFT_UP, &StructurePreviewPanel::OnPanEnd, this);
+		m_canvas->Bind(wxEVT_RIGHT_UP, &StructurePreviewPanel::OnPanEnd, this);
+		m_canvas->Bind(wxEVT_MOTION, &StructurePreviewPanel::OnPanMove, this);
+		m_canvas->Bind(wxEVT_MOUSEWHEEL, &StructurePreviewPanel::OnMouseWheel, this);
+		m_canvas->Bind(wxEVT_LEFT_DCLICK, &StructurePreviewPanel::OnIgnoreMouse, this);
+		m_canvas->Bind(wxEVT_RIGHT_DCLICK, &StructurePreviewPanel::OnIgnoreMouse, this);
+		m_canvas->Bind(wxEVT_MIDDLE_DCLICK, &StructurePreviewPanel::OnIgnoreMouse, this);
+		m_canvas->Bind(wxEVT_MIDDLE_DOWN, &StructurePreviewPanel::OnIgnoreMouse, this);
+		m_canvas->Bind(wxEVT_MIDDLE_UP, &StructurePreviewPanel::OnIgnoreMouse, this);
+#ifdef wxEVT_AUX1_DOWN
+		m_canvas->Bind(wxEVT_AUX1_DOWN, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+#ifdef wxEVT_AUX1_UP
+		m_canvas->Bind(wxEVT_AUX1_UP, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+#ifdef wxEVT_AUX2_DOWN
+		m_canvas->Bind(wxEVT_AUX2_DOWN, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+#ifdef wxEVT_AUX2_UP
+		m_canvas->Bind(wxEVT_AUX2_UP, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+#ifdef wxEVT_AUX1_DCLICK
+		m_canvas->Bind(wxEVT_AUX1_DCLICK, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+#ifdef wxEVT_AUX2_DCLICK
+		m_canvas->Bind(wxEVT_AUX2_DCLICK, &StructurePreviewPanel::OnIgnoreMouse, this);
+#endif
+		m_canvas->Bind(wxEVT_KEY_DOWN, &StructurePreviewPanel::OnIgnoreKey, this);
+		m_canvas->Bind(wxEVT_KEY_UP, &StructurePreviewPanel::OnIgnoreKey, this);
+	}
+
+	void OnPanStart(wxMouseEvent& event)
+	{
+		if(!m_hasMap || !m_canvas) {
+			return;
+		}
+		m_dragging = true;
+		m_lastDragPos = event.GetPosition();
+		if(!m_canvas->HasCapture()) {
+			m_canvas->CaptureMouse();
+		}
+		m_canvas->SetFocus();
+	}
+
+	void OnPanEnd(wxMouseEvent& WXUNUSED(event))
+	{
+		if(!m_dragging) {
+			return;
+		}
+		m_dragging = false;
+		if(m_canvas && m_canvas->HasCapture()) {
+			m_canvas->ReleaseMouse();
+		}
+	}
+
+	void OnPanMove(wxMouseEvent& event)
+	{
+		if(!m_dragging || !m_mapWindow || !m_canvas) {
+			return;
+		}
+
+		wxPoint delta = event.GetPosition() - m_lastDragPos;
+		m_lastDragPos = event.GetPosition();
+		const double speed = g_settings.getFloat(Config::SCROLL_SPEED);
+		const double zoom = m_canvas->GetZoom();
+		m_mapWindow->ScrollRelative(int(speed * zoom * delta.x), int(speed * zoom * delta.y));
+		m_canvas->Refresh();
+	}
+
+	void OnMouseWheel(wxMouseEvent& event)
+	{
+		if(!m_hasMap || !m_canvas) {
+			return;
+		}
+
+		double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
+		m_canvas->ZoomBy(diff, event.GetPosition());
+	}
+
+	void OnIgnoreMouse(wxMouseEvent& WXUNUSED(event))
+	{
+		// Swallow events to keep preview read-only.
+	}
+
+	void OnIgnoreKey(wxKeyEvent& WXUNUSED(event))
+	{
+		// Swallow events to keep preview read-only.
+	}
+
+	CopyBuffer m_copyBuffer;
+	std::unique_ptr<Editor> m_editor;
+	MapWindow* m_mapWindow;
+	MapCanvas* m_canvas;
+	wxStaticText* m_emptyLabel;
+	bool m_hasMap;
+	bool m_dragging;
+	wxPoint m_lastDragPos;
+	int m_boundsMinX = 0;
+	int m_boundsMinY = 0;
+	int m_boundsWidth = 1;
+	int m_boundsHeight = 1;
+};
 
 BEGIN_EVENT_TABLE(StructureManagerDialog, wxDialog)
 	EVT_BUTTON(ID_SAVE_STRUCTURE, StructureManagerDialog::OnSaveSelection)
@@ -267,13 +687,16 @@ BEGIN_EVENT_TABLE(StructureManagerDialog, wxDialog)
 END_EVENT_TABLE()
 
 StructureManagerDialog::StructureManagerDialog(wxWindow* parent) :
-	wxDialog(parent, wxID_ANY, "Structure Manager", wxDefaultPosition, wxSize(720, 420),
+	wxDialog(parent, wxID_ANY, "Structure Manager", wxDefaultPosition, wxSize(1080, 630),
 		wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
 {
 	s_active = this;
 	CreateControls();
 	LoadStructures();
 	Bind(wxEVT_CHAR_HOOK, &StructureManagerDialog::OnCharHook, this);
+	Bind(wxEVT_PAINT, &StructureManagerDialog::OnPaint, this);
+	Bind(wxEVT_SIZE, &StructureManagerDialog::OnSize, this);
+	Bind(wxEVT_MOVE, &StructureManagerDialog::OnMove, this);
 	CenterOnParent();
 }
 
@@ -311,7 +734,7 @@ void StructureManagerDialog::CreateControls()
 	leftSizer->Add(m_searchCtrl, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
 	m_categoryTree = newd wxTreeCtrl(leftPanel, ID_CATEGORY_TREE, wxDefaultPosition, wxSize(200, -1),
-		wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT | wxTR_SINGLE);
+		wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT | wxTR_HIDE_ROOT | wxTR_SINGLE);
 	m_categoryTree->Bind(wxEVT_TREE_SEL_CHANGED, &StructureManagerDialog::OnCategoryChanged, this);
 	leftSizer->Add(m_categoryTree, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
@@ -322,6 +745,14 @@ void StructureManagerDialog::CreateControls()
 	m_addSubcategoryButton = newd wxButton(leftPanel, ID_ADD_SUBCATEGORY, "Add Subcategory");
 	m_addSubcategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnAddSubcategory, this);
 	leftSizer->Add(m_addSubcategoryButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
+
+	m_removeCategoryButton = newd wxButton(leftPanel, ID_REMOVE_CATEGORY, "Remove Category");
+	m_removeCategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRemoveCategory, this);
+	leftSizer->Add(m_removeCategoryButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+	m_removeSubcategoryButton = newd wxButton(leftPanel, ID_REMOVE_SUBCATEGORY, "Remove Subcategory");
+	m_removeSubcategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRemoveSubcategory, this);
+	leftSizer->Add(m_removeSubcategoryButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
 	leftPanel->SetSizer(leftSizer);
 	contentSizer->Add(leftPanel, 0, wxEXPAND | wxALL, 8);
@@ -335,31 +766,46 @@ void StructureManagerDialog::CreateControls()
 	wxStaticText* navHint = newd wxStaticText(centerPanel, wxID_ANY, "PgUp/PgDn: previous/next item (works with map focus)");
 	centerSizer->Add(navHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 4);
 	centerPanel->SetSizer(centerSizer);
-	contentSizer->Add(centerPanel, 1, wxEXPAND | wxALL, 8);
+	centerPanel->SetMinSize(wxSize(260, -1));
+	contentSizer->Add(centerPanel, 0, wxEXPAND | wxALL, 8);
 
+	wxPanel* rightPanel = newd wxPanel(this);
 	wxBoxSizer* rightSizer = new wxBoxSizer(wxVERTICAL);
-	m_detailsText = newd wxStaticText(this, wxID_ANY, "Details: Select item...");
+
+	m_detailsText = newd wxStaticText(rightPanel, wxID_ANY, "Details: Select item...");
 	rightSizer->Add(m_detailsText, 0, wxBOTTOM, 8);
 
-	m_pasteButton = newd wxButton(this, ID_PASTE_STRUCTURE, "Paste");
+	m_pasteButton = newd wxButton(rightPanel, ID_PASTE_STRUCTURE, "Paste");
 	rightSizer->Add(m_pasteButton, 0, wxBOTTOM, 6);
 
-	m_deleteButton = newd wxButton(this, ID_DELETE_STRUCTURE, "Delete");
+	m_deleteButton = newd wxButton(rightPanel, ID_DELETE_STRUCTURE, "Delete");
 	rightSizer->Add(m_deleteButton, 0, wxBOTTOM, 6);
 
-	m_keepPasteCheck = newd wxCheckBox(this, wxID_ANY, "Keep paste active");
+	m_keepPasteCheck = newd wxCheckBox(rightPanel, wxID_ANY, "Keep paste active");
 	rightSizer->Add(m_keepPasteCheck, 0);
 
-	m_renameCategoryButton = newd wxButton(this, ID_RENAME_CATEGORY, "Rename Category...");
+	m_renameCategoryButton = newd wxButton(rightPanel, ID_RENAME_CATEGORY, "Rename Category...");
 	rightSizer->Add(m_renameCategoryButton, 0, wxTOP, 6);
 	m_renameCategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRenameCategory, this);
 
-	contentSizer->Add(rightSizer, 0, wxALL | wxALIGN_TOP, 8);
+	m_helpButton = newd wxButton(rightPanel, ID_TUTORIAL_HELP, "How to Use");
+	rightSizer->Add(m_helpButton, 0, wxTOP, 6);
+	m_helpButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnHowToUse, this);
+
+	wxStaticBoxSizer* previewSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Preview");
+	m_previewPanel = newd StructurePreviewPanel(rightPanel);
+	m_previewPanel->Clear("Select a structure to preview.");
+	previewSizer->Add(m_previewPanel, 1, wxEXPAND | wxALL, 4);
+	rightSizer->Add(previewSizer, 1, wxEXPAND | wxTOP, 12);
+
+	rightPanel->SetSizer(rightSizer);
+	rightPanel->SetMinSize(wxSize(360, -1));
+	contentSizer->Add(rightPanel, 1, wxALL | wxEXPAND, 8);
 
 	mainSizer->Add(contentSizer, 1, wxEXPAND);
 
 	SetSizerAndFit(mainSizer);
-	SetMinSize(wxSize(640, 360));
+	SetMinSize(wxSize(960, 540));
 }
 
 void StructureManagerDialog::LoadStructures()
@@ -432,6 +878,9 @@ void StructureManagerDialog::BuildCategoryTree()
 	nodeByPath[""] = root;
 
 	std::function<wxTreeItemId(const wxString&)> ensureNode = [&](const wxString& path) {
+		if(path.empty()) {
+			return root;
+		}
 		std::string key = nstr(path);
 		auto it = nodeByPath.find(key);
 		if(it != nodeByPath.end()) {
@@ -444,7 +893,7 @@ void StructureManagerDialog::BuildCategoryTree()
 			parentPath = path.Left(sep);
 			name = path.Mid(sep + 1);
 		}
-		wxTreeItemId parentId = ensureNode(parentPath);
+		wxTreeItemId parentId = parentPath.empty() ? root : ensureNode(parentPath);
 		wxTreeItemId id = m_categoryTree->AppendItem(parentId, name, -1, -1, new CategoryItemData(path));
 		nodeByPath[key] = id;
 		return id;
@@ -458,7 +907,18 @@ void StructureManagerDialog::BuildCategoryTree()
 	}
 
 	m_categoryTree->Expand(root);
-	m_categoryTree->SelectItem(root);
+	wxTreeItemIdValue cookie;
+	wxTreeItemId firstChild = m_categoryTree->GetFirstChild(root, cookie);
+	wxTreeItemId child = firstChild;
+	while(child.IsOk()) {
+		m_categoryTree->Expand(child);
+		child = m_categoryTree->GetNextChild(root, cookie);
+	}
+	if(firstChild.IsOk()) {
+		m_categoryTree->SelectItem(firstChild);
+	} else {
+		m_currentCategoryPath.clear();
+	}
 	m_categoryTree->Thaw();
 }
 
@@ -493,14 +953,26 @@ void StructureManagerDialog::RefreshItemList()
 
 void StructureManagerDialog::UpdateSelectionUi()
 {
+	bool hasAnyCategory = false;
+	if(m_categoryTree) {
+		wxTreeItemId root = m_categoryTree->GetRootItem();
+		if(root.IsOk()) {
+			wxTreeItemIdValue cookie;
+			hasAnyCategory = m_categoryTree->GetFirstChild(root, cookie).IsOk();
+		}
+	}
+
 	const int selection = m_list ? m_list->GetSelection() : wxNOT_FOUND;
 	const bool hasSelection = selection != wxNOT_FOUND &&
 		selection >= 0 && selection < static_cast<int>(m_listEntries.size());
+	if(m_saveButton) {
+		m_saveButton->Enable(!m_tutorialActive && hasAnyCategory);
+	}
 	if(m_pasteButton) {
-		m_pasteButton->Enable(hasSelection);
+		m_pasteButton->Enable(!m_tutorialActive && hasSelection);
 	}
 	if(m_deleteButton) {
-		m_deleteButton->Enable(hasSelection);
+		m_deleteButton->Enable(!m_tutorialActive && hasSelection);
 	}
 	if(m_detailsText) {
 		if(hasSelection) {
@@ -514,8 +986,22 @@ void StructureManagerDialog::UpdateSelectionUi()
 
 	if(m_renameCategoryButton) {
 		bool canRename = !m_currentCategoryPath.empty();
-		m_renameCategoryButton->Enable(canRename);
+		m_renameCategoryButton->Enable(!m_tutorialActive && canRename);
 	}
+
+	const bool hasCategory = !m_currentCategoryPath.empty();
+	const bool isSubcategory = hasCategory && m_currentCategoryPath.Find('/') != wxNOT_FOUND;
+	if(m_addSubcategoryButton) {
+		m_addSubcategoryButton->Enable(!m_tutorialActive && hasCategory);
+	}
+	if(m_removeCategoryButton) {
+		m_removeCategoryButton->Enable(!m_tutorialActive && hasCategory && !isSubcategory);
+	}
+	if(m_removeSubcategoryButton) {
+		m_removeSubcategoryButton->Enable(!m_tutorialActive && isSubcategory);
+	}
+
+	UpdatePreview(GetSelectedEntry(nullptr));
 }
 
 void StructureManagerDialog::SetStatusText(const wxString& text)
@@ -541,6 +1027,40 @@ const StructureManagerDialog::StructureEntry* StructureManagerDialog::GetSelecte
 		*outIndex = selection;
 	}
 	return m_listEntries[selection];
+}
+
+wxString StructureManagerDialog::GetSelectedCategoryPath() const
+{
+	if(!m_categoryTree) {
+		return m_currentCategoryPath;
+	}
+
+	wxTreeItemId item = m_categoryTree->GetSelection();
+	if(!item.IsOk()) {
+		return m_currentCategoryPath;
+	}
+
+	wxTreeItemId root = m_categoryTree->GetRootItem();
+	if(!root.IsOk()) {
+		return m_currentCategoryPath;
+	}
+
+	wxArrayString parts;
+	wxTreeItemId current = item;
+	while(current.IsOk() && current != root) {
+		parts.Add(m_categoryTree->GetItemText(current));
+		current = m_categoryTree->GetItemParent(current);
+	}
+
+	wxString path;
+	for(int i = static_cast<int>(parts.size()) - 1; i >= 0; --i) {
+		if(!path.empty()) {
+			path += "/";
+		}
+		path += parts[static_cast<size_t>(i)];
+	}
+
+	return path;
 }
 
 void StructureManagerDialog::SelectCategoryByPath(const wxString& path)
@@ -590,6 +1110,32 @@ void StructureManagerDialog::SelectEntryByName(const wxString& name)
 			return;
 		}
 	}
+}
+
+void StructureManagerDialog::UpdatePreview(const StructureEntry* entry)
+{
+	if(!m_previewPanel) {
+		return;
+	}
+
+	if(!entry) {
+		m_previewPanel->Clear("Select a structure to preview.");
+		m_previewPath.clear();
+		return;
+	}
+
+	if(entry->path == m_previewPath) {
+		return;
+	}
+
+	wxString error;
+	if(!m_previewPanel->LoadStructure(entry->path, error)) {
+		m_previewPanel->Clear("Preview failed to load.");
+		m_previewPath.clear();
+		return;
+	}
+
+	m_previewPath = entry->path;
 }
 
 void StructureManagerDialog::StartPasteFromEntry(const StructureEntry& entry)
@@ -648,6 +1194,10 @@ void StructureManagerDialog::RenameSelectedCategory()
 	std::string sanitized = SanitizeFilename(nstr(name));
 	wxString safeName = wxstr(sanitized);
 	wxString baseDir = GetStructuresDirectory();
+	if(CategoryNameExists(m_categoryPaths, safeName, m_currentCategoryPath)) {
+		wxMessageBox("A category with this name already exists.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
 
 	wxString newRelativePath;
 	int parentSep = m_currentCategoryPath.Find('/', true);
@@ -728,10 +1278,14 @@ void StructureManagerDialog::OnSaveSelection(wxCommandEvent& WXUNUSED(event))
 
 	std::string sanitized = SanitizeFilename(nstr(name));
 	wxString safeName = wxstr(sanitized);
-	const wxString categoryPath = m_currentCategoryPath;
-	wxString dir = m_baseDir;
-	if(!categoryPath.empty()) {
-		dir = wxFileName(m_baseDir, categoryPath).GetFullPath();
+	const wxString categoryPath = GetSelectedCategoryPath();
+	wxString dir = BuildCategoryDirectory(m_baseDir, categoryPath);
+	wxFileName dirName(dir, "");
+	if(!dirName.DirExists()) {
+		if(!dirName.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL)) {
+			wxMessageBox("Failed to create category directory.", "Structure Manager", wxOK | wxICON_ERROR, this);
+			return;
+		}
 	}
 	wxString path = wxFileName(dir, safeName + ".otbm").GetFullPath();
 
@@ -891,12 +1445,12 @@ void StructureManagerDialog::AddCategory(bool asChild)
 {
 	wxString parentPath;
 	if(asChild) {
-		if(m_currentCategoryPath.empty()) {
+		parentPath = m_currentCategoryPath;
+		if(parentPath.empty()) {
 			wxMessageBox("Select a category to add a subcategory.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
 			return;
 		}
-		parentPath = m_currentCategoryPath;
-		int sep = parentPath.Find('/');
+		int sep = parentPath.Find('/', true);
 		if(sep != wxNOT_FOUND) {
 			parentPath = parentPath.Left(sep);
 		}
@@ -918,9 +1472,14 @@ void StructureManagerDialog::AddCategory(bool asChild)
 
 	std::string sanitized = SanitizeFilename(nstr(name));
 	wxString safeName = wxstr(sanitized);
+	if(CategoryNameExists(m_categoryPaths, safeName)) {
+		wxMessageBox("A category with this name already exists.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
 
 	wxString newRelativePath = parentPath.empty() ? safeName : (parentPath + "/" + safeName);
-	wxString newDir = wxFileName(m_baseDir, newRelativePath).GetFullPath();
+	wxString parentDir = parentPath.empty() ? m_baseDir : wxFileName(m_baseDir, parentPath).GetFullPath();
+	wxString newDir = wxFileName(parentDir, safeName).GetFullPath();
 
 	if(wxDirExists(newDir)) {
 		wxMessageBox("Category already exists.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
@@ -946,6 +1505,78 @@ void StructureManagerDialog::OnAddSubcategory(wxCommandEvent& WXUNUSED(event))
 	AddCategory(true);
 }
 
+void StructureManagerDialog::OnRemoveCategory(wxCommandEvent& WXUNUSED(event))
+{
+	if(m_currentCategoryPath.empty()) {
+		wxMessageBox("Select a category to remove.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+	if(m_currentCategoryPath.Find('/') != wxNOT_FOUND) {
+		wxMessageBox("Select a top-level category to remove.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	const wxString fullPath = wxFileName(m_baseDir, m_currentCategoryPath).GetFullPath();
+	if(!wxDirExists(fullPath)) {
+		wxMessageBox("Category folder not found.", "Structure Manager", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	int ret = wxMessageBox("Remove category '" + m_currentCategoryPath + "' and all its structures?",
+		"Structure Manager", wxYES_NO | wxICON_WARNING, this);
+	if(ret != wxYES) {
+		return;
+	}
+
+	if(!wxFileName::Rmdir(fullPath, wxPATH_RMDIR_RECURSIVE)) {
+		wxMessageBox("Failed to remove category.", "Structure Manager", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	LoadStructures();
+	SelectCategoryByPath("");
+	SetStatusText("Category removed.");
+	g_gui.SetStatusText("Category removed.");
+}
+
+void StructureManagerDialog::OnRemoveSubcategory(wxCommandEvent& WXUNUSED(event))
+{
+	if(m_currentCategoryPath.empty() || m_currentCategoryPath.Find('/') == wxNOT_FOUND) {
+		wxMessageBox("Select a subcategory to remove.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	const wxString fullPath = wxFileName(m_baseDir, m_currentCategoryPath).GetFullPath();
+	if(!wxDirExists(fullPath)) {
+		wxMessageBox("Subcategory folder not found.", "Structure Manager", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	int ret = wxMessageBox("Remove subcategory '" + m_currentCategoryPath + "' and all its structures?",
+		"Structure Manager", wxYES_NO | wxICON_WARNING, this);
+	if(ret != wxYES) {
+		return;
+	}
+
+	if(!wxFileName::Rmdir(fullPath, wxPATH_RMDIR_RECURSIVE)) {
+		wxMessageBox("Failed to remove subcategory.", "Structure Manager", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	wxString parentPath = m_currentCategoryPath;
+	int sep = parentPath.Find('/', true);
+	if(sep != wxNOT_FOUND) {
+		parentPath = parentPath.Left(sep);
+	} else {
+		parentPath.clear();
+	}
+
+	LoadStructures();
+	SelectCategoryByPath(parentPath);
+	SetStatusText("Subcategory removed.");
+	g_gui.SetStatusText("Subcategory removed.");
+}
+
 void StructureManagerDialog::OnCategoryChanged(wxTreeEvent& event)
 {
 	wxTreeItemId item = event.GetItem();
@@ -961,6 +1592,397 @@ void StructureManagerDialog::OnCategoryChanged(wxTreeEvent& event)
 void StructureManagerDialog::OnSearchChanged(wxCommandEvent& WXUNUSED(event))
 {
 	RefreshItemList();
+}
+
+void StructureManagerDialog::OnHowToUse(wxCommandEvent& WXUNUSED(event))
+{
+	StartTutorial();
+}
+
+void StructureManagerDialog::StartTutorial()
+{
+	m_tutorialActive = true;
+	m_tutorialStep = 0;
+	m_tutorialLockMove = true;
+	m_tutorialLockPos = GetPosition();
+	SetTutorialUiEnabled(false);
+	SetTutorialUiEnabled(false);
+
+	if(!m_tutorialPopup) {
+		m_tutorialPopup = newd wxPopupWindow(this, wxBORDER_SIMPLE);
+		wxPanel* panel = newd wxPanel(m_tutorialPopup, wxID_ANY);
+		panel->SetBackgroundColour(wxColour(30, 30, 30));
+		panel->SetForegroundColour(*wxWHITE);
+
+		m_tutorialStepLabel = newd wxStaticText(panel, wxID_ANY, "");
+		m_tutorialStepLabel->SetForegroundColour(*wxWHITE);
+		wxFont bold = m_tutorialStepLabel->GetFont();
+		bold.SetWeight(wxFONTWEIGHT_BOLD);
+		bold.SetPointSize(std::max(6, bold.GetPointSize() + kTutorialFontDelta));
+		m_tutorialStepLabel->SetFont(bold);
+
+		m_tutorialBodyText = newd wxStaticText(panel, wxID_ANY, "");
+		m_tutorialBodyText->SetForegroundColour(*wxWHITE);
+		wxFont bodyFont = m_tutorialBodyText->GetFont();
+		bodyFont.SetPointSize(std::max(6, bodyFont.GetPointSize() + kTutorialFontDelta));
+		m_tutorialBodyText->SetFont(bodyFont);
+		m_tutorialBodyText->Wrap(kTutorialWrapWidth);
+
+		m_tutorialPrevButton = newd wxButton(panel, wxID_ANY, "Back");
+		m_tutorialNextButton = newd wxButton(panel, wxID_ANY, "Next");
+		m_tutorialCloseButton = newd wxButton(panel, wxID_ANY, "Close");
+
+		wxFont buttonFont = m_tutorialPrevButton->GetFont();
+		buttonFont.SetPointSize(std::max(6, buttonFont.GetPointSize() + kTutorialFontDelta));
+		m_tutorialPrevButton->SetFont(buttonFont);
+		m_tutorialNextButton->SetFont(buttonFont);
+		m_tutorialCloseButton->SetFont(buttonFont);
+
+		m_tutorialPrevButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnTutorialPrev, this);
+		m_tutorialNextButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnTutorialNext, this);
+		m_tutorialCloseButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnTutorialClose, this);
+
+		wxBoxSizer* navSizer = new wxBoxSizer(wxHORIZONTAL);
+		navSizer->Add(m_tutorialPrevButton, 0, wxRIGHT, 4);
+		navSizer->Add(m_tutorialNextButton, 0, wxRIGHT, 4);
+		navSizer->Add(m_tutorialCloseButton, 0);
+
+		wxBoxSizer* panelSizer = new wxBoxSizer(wxVERTICAL);
+		panelSizer->Add(m_tutorialStepLabel, 0, wxBOTTOM, 4);
+		panelSizer->Add(m_tutorialBodyText, 0, wxBOTTOM, 8);
+		panelSizer->AddStretchSpacer(1);
+		panelSizer->Add(navSizer, 0, wxALIGN_RIGHT | wxBOTTOM, 4);
+
+		wxBoxSizer* outerSizer = new wxBoxSizer(wxVERTICAL);
+		outerSizer->Add(panelSizer, 1, wxEXPAND | wxALL, 8);
+		panel->SetSizerAndFit(outerSizer);
+		panel->SetMinSize(kTutorialMinSize);
+
+		wxBoxSizer* popupSizer = new wxBoxSizer(wxVERTICAL);
+		popupSizer->Add(panel, 1, wxEXPAND);
+		m_tutorialPopup->SetSizerAndFit(popupSizer);
+		m_tutorialPopup->SetMinSize(kTutorialMinSize);
+	}
+
+	m_tutorialPopup->Show();
+	m_tutorialPopup->Raise();
+	UpdateTutorialStep();
+}
+
+void StructureManagerDialog::StopTutorial()
+{
+	m_tutorialActive = false;
+	m_tutorialLockMove = false;
+	ClearTutorialOverlay();
+	if(m_tutorialPopup) {
+		m_tutorialPopup->Hide();
+	}
+	SetTutorialUiEnabled(true);
+	UpdateSelectionUi();
+}
+
+void StructureManagerDialog::UpdateTutorialStep()
+{
+	if(!m_tutorialActive) {
+		return;
+	}
+
+	const int count = GetTutorialStepCount();
+	if(m_tutorialStep < 0) {
+		m_tutorialStep = 0;
+	} else if(m_tutorialStep >= count) {
+		m_tutorialStep = count - 1;
+	}
+
+	const TutorialStepInfo info = GetTutorialStepInfo(m_tutorialStep);
+	if(m_tutorialStepLabel) {
+		m_tutorialStepLabel->SetLabel(wxString::Format("Step %d/%d - %s", m_tutorialStep + 1, count, info.title));
+	}
+	if(m_tutorialBodyText) {
+		m_tutorialBodyText->SetLabel(info.body);
+		m_tutorialBodyText->Wrap(kTutorialWrapWidth);
+	}
+
+	if(m_tutorialPrevButton) {
+		m_tutorialPrevButton->Enable(m_tutorialStep > 0);
+	}
+	if(m_tutorialNextButton) {
+		m_tutorialNextButton->SetLabel(m_tutorialStep + 1 < count ? "Next" : "Finish");
+	}
+
+	if(m_tutorialPopup) {
+		m_tutorialPopup->Fit();
+		wxSize desired = m_tutorialPopup->GetSize();
+		desired.SetWidth(std::max(desired.x, kTutorialMinSize.x));
+		desired.SetHeight(std::max(desired.y, kTutorialMinSize.y));
+		m_tutorialPopup->SetSize(desired);
+	}
+	PositionTutorialPopup();
+	RenderTutorialOverlay();
+}
+
+void StructureManagerDialog::RenderTutorialOverlay()
+{
+	if(!m_tutorialActive) {
+		return;
+	}
+
+	wxClientDC dc(this);
+	wxDCOverlay overlaydc(m_tutorialOverlay, &dc);
+	overlaydc.Clear();
+
+	wxRect highlight = GetTutorialHighlightRect();
+	wxSize clientSize = GetClientSize();
+	wxGCDC gcdc(dc);
+	const wxColour overlayColor(0, 0, 0, kTutorialOverlayAlpha);
+	const wxColour highlightShade(0, 0, 0, kTutorialHighlightAlpha);
+	gcdc.SetPen(*wxTRANSPARENT_PEN);
+
+	if(highlight.IsEmpty()) {
+		gcdc.SetBrush(wxBrush(overlayColor));
+		gcdc.DrawRectangle(0, 0, clientSize.x, clientSize.y);
+		return;
+	}
+
+	wxRect glowRect = highlight;
+	glowRect.Inflate(4);
+	glowRect.Intersect(wxRect(0, 0, clientSize.x, clientSize.y));
+
+	auto drawRect = [&](int x, int y, int w, int h) {
+		if(w > 0 && h > 0) {
+			gcdc.DrawRectangle(x, y, w, h);
+		}
+	};
+
+	const int left = glowRect.x;
+	const int top = glowRect.y;
+	const int right = glowRect.x + glowRect.width;
+	const int bottom = glowRect.y + glowRect.height;
+
+	gcdc.SetBrush(wxBrush(overlayColor));
+	drawRect(0, 0, clientSize.x, top);
+	drawRect(0, top, left, clientSize.y - top);
+	drawRect(right, top, clientSize.x - right, clientSize.y - top);
+	drawRect(left, bottom, right - left, clientSize.y - bottom);
+
+	gcdc.SetBrush(wxBrush(highlightShade));
+	drawRect(left, top, right - left, bottom - top);
+
+	gcdc.SetBrush(*wxTRANSPARENT_BRUSH);
+	gcdc.SetPen(wxPen(wxColour(255, 205, 80), 3));
+	gcdc.DrawRectangle(glowRect);
+}
+
+void StructureManagerDialog::ClearTutorialOverlay()
+{
+	wxClientDC dc(this);
+	wxDCOverlay overlaydc(m_tutorialOverlay, &dc);
+	overlaydc.Clear();
+	m_tutorialOverlay.Reset();
+}
+
+void StructureManagerDialog::PositionTutorialPopup()
+{
+	if(!m_tutorialPopup) {
+		return;
+	}
+
+	wxSize clientSize = GetClientSize();
+	wxPoint clientOrigin = ClientToScreen(wxPoint(0, 0));
+	wxRect clientScreen(clientOrigin, clientSize);
+
+	wxRect highlight = GetTutorialHighlightRect();
+	wxRect highlightScreen = highlight;
+	highlightScreen.Offset(clientOrigin);
+
+	wxSize popupSize = m_tutorialPopup->GetSize();
+	const int margin = 12;
+	wxPoint pos(0, 0);
+
+	if(highlight.IsEmpty()) {
+		pos.x = clientScreen.x + (clientScreen.width - popupSize.x) / 2;
+		pos.y = clientScreen.y + (clientScreen.height - popupSize.y) / 2;
+	} else if(highlightScreen.GetRight() + margin + popupSize.x < clientScreen.x + clientScreen.width) {
+		pos.x = highlightScreen.GetRight() + margin;
+		pos.y = highlightScreen.GetTop();
+	} else if(highlightScreen.GetLeft() - margin - popupSize.x > clientScreen.x) {
+		pos.x = highlightScreen.GetLeft() - margin - popupSize.x;
+		pos.y = highlightScreen.GetTop();
+	} else if(highlightScreen.GetBottom() + margin + popupSize.y < clientScreen.y + clientScreen.height) {
+		pos.x = highlightScreen.GetLeft();
+		pos.y = highlightScreen.GetBottom() + margin;
+	} else {
+		pos.x = highlightScreen.GetLeft();
+		pos.y = std::max(clientScreen.y + margin, highlightScreen.GetTop() - margin - popupSize.y);
+	}
+
+	if(pos.x + popupSize.x > clientScreen.x + clientScreen.width) {
+		pos.x = std::max(clientScreen.x + margin, clientScreen.x + clientScreen.width - popupSize.x - margin);
+	}
+	if(pos.y + popupSize.y > clientScreen.y + clientScreen.height) {
+		pos.y = std::max(clientScreen.y + margin, clientScreen.y + clientScreen.height - popupSize.y - margin);
+	}
+	if(pos.x < clientScreen.x + margin) {
+		pos.x = clientScreen.x + margin;
+	}
+	if(pos.y < clientScreen.y + margin) {
+		pos.y = clientScreen.y + margin;
+	}
+
+	m_tutorialPopup->Move(pos);
+}
+
+wxRect StructureManagerDialog::GetTutorialHighlightRect() const
+{
+	wxWindow* target = nullptr;
+	switch(m_tutorialStep) {
+		case 0:
+			target = m_addCategoryButton;
+			break;
+		case 1:
+			target = m_saveButton;
+			break;
+		case 2:
+			target = m_list;
+			break;
+		case 3:
+			target = m_pasteButton;
+			break;
+		default:
+			break;
+	}
+
+	if(!target || !target->IsShownOnScreen()) {
+		return wxRect();
+	}
+
+	wxPoint screenTopLeft = target->ClientToScreen(wxPoint(0, 0));
+	wxPoint clientTopLeft = ScreenToClient(screenTopLeft);
+	return wxRect(clientTopLeft, target->GetSize());
+}
+
+StructureManagerDialog::TutorialStepInfo StructureManagerDialog::GetTutorialStepInfo(int step) const
+{
+	switch(step) {
+		case 0:
+			return {"Create a category", "Click \"Add Category\" to create your first category."};
+		case 1:
+			return {"Save a structure", "On the map, select the tiles you want and click \"Save Current Selection...\"."};
+		case 2:
+			return {"Choose a structure", "Select a structure in the list to view its details."};
+		case 3:
+			return {"Paste on the map", "Click \"Paste\" to place the structure on the map."};
+		default:
+			return {"Tutorial", "Use the buttons to navigate."};
+	}
+}
+
+int StructureManagerDialog::GetTutorialStepCount() const
+{
+	return 4;
+}
+
+void StructureManagerDialog::SetTutorialUiEnabled(bool enabled)
+{
+	if(m_searchCtrl) {
+		m_searchCtrl->Enable(enabled);
+	}
+	if(m_categoryTree) {
+		m_categoryTree->Enable(enabled);
+	}
+	if(m_list) {
+		m_list->Enable(enabled);
+	}
+	if(m_keepPasteCheck) {
+		m_keepPasteCheck->Enable(enabled);
+	}
+	if(m_addCategoryButton) {
+		m_addCategoryButton->Enable(enabled);
+	}
+	if(m_addSubcategoryButton) {
+		m_addSubcategoryButton->Enable(enabled);
+	}
+	if(m_removeCategoryButton) {
+		m_removeCategoryButton->Enable(enabled);
+	}
+	if(m_removeSubcategoryButton) {
+		m_removeSubcategoryButton->Enable(enabled);
+	}
+	if(m_renameCategoryButton) {
+		m_renameCategoryButton->Enable(enabled);
+	}
+	if(m_saveButton) {
+		m_saveButton->Enable(enabled);
+	}
+	if(m_pasteButton) {
+		m_pasteButton->Enable(enabled);
+	}
+	if(m_deleteButton) {
+		m_deleteButton->Enable(enabled);
+	}
+	if(m_helpButton) {
+		m_helpButton->Enable(enabled);
+	}
+}
+
+void StructureManagerDialog::OnTutorialPrev(wxCommandEvent& WXUNUSED(event))
+{
+	if(m_tutorialStep > 0) {
+		--m_tutorialStep;
+		UpdateTutorialStep();
+	}
+}
+
+void StructureManagerDialog::OnTutorialNext(wxCommandEvent& WXUNUSED(event))
+{
+	if(m_tutorialStep + 1 < GetTutorialStepCount()) {
+		++m_tutorialStep;
+		UpdateTutorialStep();
+	} else {
+		StopTutorial();
+	}
+}
+
+void StructureManagerDialog::OnTutorialClose(wxCommandEvent& WXUNUSED(event))
+{
+	StopTutorial();
+}
+
+void StructureManagerDialog::OnPaint(wxPaintEvent& event)
+{
+	event.Skip();
+	if(m_tutorialActive) {
+		RenderTutorialOverlay();
+	}
+}
+
+void StructureManagerDialog::OnSize(wxSizeEvent& event)
+{
+	event.Skip();
+	if(m_tutorialActive) {
+		ClearTutorialOverlay();
+		PositionTutorialPopup();
+		RenderTutorialOverlay();
+	}
+}
+
+void StructureManagerDialog::OnMove(wxMoveEvent& event)
+{
+	if(m_tutorialActive && m_tutorialLockMove) {
+		if(!m_tutorialMoveGuard) {
+			m_tutorialMoveGuard = true;
+			Move(m_tutorialLockPos);
+			m_tutorialMoveGuard = false;
+		}
+		return;
+	}
+
+	event.Skip();
+	if(m_tutorialActive) {
+		ClearTutorialOverlay();
+		PositionTutorialPopup();
+		RenderTutorialOverlay();
+	}
 }
 
 void StructureManagerDialog::OnCharHook(wxKeyEvent& event)
@@ -979,6 +2001,7 @@ void StructureManagerDialog::OnCharHook(wxKeyEvent& event)
 
 void StructureManagerDialog::OnClose(wxCloseEvent& WXUNUSED(event))
 {
+	StopTutorial();
 	Destroy();
 }
 
@@ -992,6 +2015,9 @@ bool StructureManagerDialog::HandleGlobalHotkey(wxKeyEvent& event)
 
 bool StructureManagerDialog::HandleGlobalHotkeyInternal(wxKeyEvent& event)
 {
+	if(m_tutorialActive) {
+		return false;
+	}
 	const int key = event.GetKeyCode();
 	if(key == WXK_PAGEUP || key == WXK_PAGEDOWN) {
 		SelectAdjacentEntry(key == WXK_PAGEUP ? -1 : 1);

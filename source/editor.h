@@ -38,6 +38,7 @@ public:
 	Editor(CopyBuffer& copybuffer, LiveClient* client);
 	Editor(CopyBuffer& copybuffer, const FileName& fn);
 	Editor(CopyBuffer& copybuffer);
+	Editor(CopyBuffer& copybuffer, const MapVersion& version, bool preview);
 	~Editor();
 
 protected:

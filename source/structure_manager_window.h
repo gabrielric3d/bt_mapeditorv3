@@ -22,12 +22,15 @@
 #include <wx/button.h>
 #include <wx/checkbox.h>
 #include <wx/listbox.h>
+#include <wx/overlay.h>
 #include <wx/panel.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 #include <wx/treectrl.h>
 
 #include <vector>
+
+class wxPopupWindow;
 
 class StructureManagerDialog : public wxDialog
 {
@@ -37,6 +40,12 @@ public:
 	static bool HandleGlobalHotkey(wxKeyEvent& event);
 
 private:
+	class StructurePreviewPanel;
+	struct TutorialStepInfo {
+		wxString title;
+		wxString body;
+	};
+
 	struct StructureEntry {
 		wxString name;
 		wxString path;
@@ -55,8 +64,20 @@ private:
 	void StartPasteFromEntry(const StructureEntry& entry);
 	void RenameSelectedCategory();
 	void SelectAdjacentEntry(int delta);
+	wxString GetSelectedCategoryPath() const;
 	bool HandleGlobalHotkeyInternal(wxKeyEvent& event);
 	void AddCategory(bool asChild);
+	void UpdatePreview(const StructureEntry* entry);
+	void StartTutorial();
+	void StopTutorial();
+	void UpdateTutorialStep();
+	void RenderTutorialOverlay();
+	void ClearTutorialOverlay();
+	void PositionTutorialPopup();
+	wxRect GetTutorialHighlightRect() const;
+	TutorialStepInfo GetTutorialStepInfo(int step) const;
+	int GetTutorialStepCount() const;
+	void SetTutorialUiEnabled(bool enabled);
 
 	void OnSaveSelection(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
@@ -66,8 +87,17 @@ private:
 	void OnRenameCategory(wxCommandEvent& event);
 	void OnAddCategory(wxCommandEvent& event);
 	void OnAddSubcategory(wxCommandEvent& event);
+	void OnRemoveCategory(wxCommandEvent& event);
+	void OnRemoveSubcategory(wxCommandEvent& event);
 	void OnCategoryChanged(wxTreeEvent& event);
 	void OnSearchChanged(wxCommandEvent& event);
+	void OnHowToUse(wxCommandEvent& event);
+	void OnTutorialPrev(wxCommandEvent& event);
+	void OnTutorialNext(wxCommandEvent& event);
+	void OnTutorialClose(wxCommandEvent& event);
+	void OnPaint(wxPaintEvent& event);
+	void OnSize(wxSizeEvent& event);
+	void OnMove(wxMoveEvent& event);
 	void OnCharHook(wxKeyEvent& event);
 	void OnClose(wxCloseEvent& event);
 
@@ -83,12 +113,29 @@ private:
 	wxButton* m_renameCategoryButton = nullptr;
 	wxButton* m_addCategoryButton = nullptr;
 	wxButton* m_addSubcategoryButton = nullptr;
+	wxButton* m_removeCategoryButton = nullptr;
+	wxButton* m_removeSubcategoryButton = nullptr;
+	wxButton* m_helpButton = nullptr;
 	wxButton* m_saveButton = nullptr;
 	wxButton* m_pasteButton = nullptr;
 	wxButton* m_deleteButton = nullptr;
 	wxStaticText* m_detailsText = nullptr;
 	wxStaticText* m_statusText = nullptr;
+	StructurePreviewPanel* m_previewPanel = nullptr;
+	wxString m_previewPath;
 	bool m_suppressAutoPaste = false;
+	bool m_tutorialActive = false;
+	int m_tutorialStep = 0;
+	bool m_tutorialLockMove = false;
+	bool m_tutorialMoveGuard = false;
+	wxPoint m_tutorialLockPos;
+	wxOverlay m_tutorialOverlay;
+	wxPopupWindow* m_tutorialPopup = nullptr;
+	wxStaticText* m_tutorialStepLabel = nullptr;
+	wxStaticText* m_tutorialBodyText = nullptr;
+	wxButton* m_tutorialPrevButton = nullptr;
+	wxButton* m_tutorialNextButton = nullptr;
+	wxButton* m_tutorialCloseButton = nullptr;
 	static StructureManagerDialog* s_active;
 
 	DECLARE_EVENT_TABLE()
