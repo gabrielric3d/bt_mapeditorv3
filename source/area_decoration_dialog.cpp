@@ -33,6 +33,7 @@
 #include <wx/dcbuffer.h>
 #include <algorithm>
 #include <climits>
+#include <unordered_set>
 
 namespace {
 	enum {
@@ -69,6 +70,9 @@ namespace {
 		ID_DOODAD_PREV_PAGE,
 		ID_DOODAD_NEXT_PAGE,
 		ID_FLOOR_PREVIEW,
+		ID_BORDER_PREVIEW,
+		ID_BORDER_ITEM_SPIN,
+		ID_BROWSE_BORDER_ITEM,
 		ID_SINGLE_FLOOR_SPIN,
 		ID_FROM_FLOOR_SPIN,
 		ID_TO_FLOOR_SPIN,
@@ -161,6 +165,8 @@ wxBEGIN_EVENT_TABLE(FloorRuleEditDialog, wxDialog)
 	EVT_SPINCTRL(ID_SINGLE_FLOOR_SPIN, FloorRuleEditDialog::OnFloorIdChanged)
 	EVT_SPINCTRL(ID_FROM_FLOOR_SPIN, FloorRuleEditDialog::OnFloorIdChanged)
 	EVT_SPINCTRL(ID_TO_FLOOR_SPIN, FloorRuleEditDialog::OnFloorIdChanged)
+	EVT_SPINCTRL(ID_BORDER_ITEM_SPIN, FloorRuleEditDialog::OnBorderItemChanged)
+	EVT_BUTTON(ID_BROWSE_BORDER_ITEM, FloorRuleEditDialog::OnBrowseBorderItem)
 	EVT_BUTTON(ID_RULE_OK, FloorRuleEditDialog::OnOK)
 	EVT_BUTTON(ID_RULE_CANCEL, FloorRuleEditDialog::OnCancel)
 	EVT_CLOSE(FloorRuleEditDialog::OnClose)
@@ -168,12 +174,17 @@ wxEND_EVENT_TABLE()
 
 FloorRuleEditDialog::FloorRuleEditDialog(wxWindow* parent, AreaDecoration::FloorRule& rule,
                                          std::function<void(bool)> onCloseCallback)
-	: wxDialog(parent, wxID_ANY, "Edit Floor Rule", wxDefaultPosition, wxSize(900, 550),
+	: wxDialog(parent, wxID_ANY, "Edit Floor Rule", wxDefaultPosition, wxSize(1200, 800),
 	           wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)  // Non-modal friendly style
 	, m_rule(rule)
 	, m_onCloseCallback(onCloseCallback)
 	, m_floorPreviewPanel(nullptr)
 	, m_itemsImageList(nullptr)
+	, m_borderItemSpin(nullptr)
+	, m_borderPreviewPanel(nullptr)
+	, m_friendFloorSpin(nullptr)
+	, m_friendChanceSpin(nullptr)
+	, m_friendStrengthSpin(nullptr)
 	, m_doodadSearchCtrl(nullptr)
 	, m_doodadListCtrl(nullptr)
 	, m_doodadImageList(nullptr)
@@ -267,8 +278,61 @@ void FloorRuleEditDialog::CreateControls() {
 	settingsBox->Add(newd wxStaticText(this, wxID_ANY, "(-1 = unlimited placements)"), 0, wxLEFT | wxBOTTOM, 5);
 	leftColumn->Add(settingsBox, 0, wxALL | wxEXPAND, 5);
 
+	// Border Item (placed on top of decorations)
+	wxStaticBoxSizer* borderBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Border Item (placed on top)");
+
+	wxBoxSizer* borderRowSizer = newd wxBoxSizer(wxHORIZONTAL);
+
+	// Border preview panel
+	m_borderPreviewPanel = newd wxPanel(this, ID_BORDER_PREVIEW, wxDefaultPosition, wxSize(48, 48));
+	m_borderPreviewPanel->SetBackgroundStyle(wxBG_STYLE_PAINT);
+	m_borderPreviewPanel->Bind(wxEVT_PAINT, &FloorRuleEditDialog::OnPaintBorderPreview, this);
+	borderRowSizer->Add(m_borderPreviewPanel, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+
+	// Border item ID input
+	borderRowSizer->Add(newd wxStaticText(this, wxID_ANY, "Item ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	m_borderItemSpin = newd wxSpinCtrl(this, ID_BORDER_ITEM_SPIN, "0", wxDefaultPosition, wxSize(80, -1), wxSP_ARROW_KEYS, 0, 65535, 0);
+	m_borderItemSpin->SetToolTip("Border item ID to place on top of decorations (0 = none)");
+	borderRowSizer->Add(m_borderItemSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+
+	// Browse button for border item
+	wxButton* browseBorderBtn = newd wxButton(this, ID_BROWSE_BORDER_ITEM, "...", wxDefaultPosition, wxSize(25, -1));
+	browseBorderBtn->SetToolTip("Browse for border item");
+	borderRowSizer->Add(browseBorderBtn, 0, wxALIGN_CENTER_VERTICAL);
+
+	borderBox->Add(borderRowSizer, 0, wxALL, 5);
+	borderBox->Add(newd wxStaticText(this, wxID_ANY, "(0 = no border item)"), 0, wxLEFT | wxBOTTOM, 5);
+	leftColumn->Add(borderBox, 0, wxALL | wxEXPAND, 5);
+
+	// Friend floor bias
+	wxStaticBoxSizer* friendBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Friend Floor (bias placement)");
+	wxFlexGridSizer* friendGrid = newd wxFlexGridSizer(2, 5, 10);
+
+	friendGrid->Add(newd wxStaticText(this, wxID_ANY, "Friend Floor ID:"), 0, wxALIGN_CENTER_VERTICAL);
+	m_friendFloorSpin = newd wxSpinCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(80, -1), wxSP_ARROW_KEYS, 0, 65535, 0);
+	m_friendFloorSpin->SetToolTip("Ground tile ID to bias placement toward (0 = none)");
+	friendGrid->Add(m_friendFloorSpin, 0);
+
+	friendGrid->Add(newd wxStaticText(this, wxID_ANY, "Friend Chance (%):"), 0, wxALIGN_CENTER_VERTICAL);
+	m_friendChanceSpin = newd wxSpinCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 100, 0);
+	m_friendChanceSpin->SetToolTip("Chance to favor tiles closer to the friend floor (0 = off)");
+	friendGrid->Add(m_friendChanceSpin, 0);
+
+	friendGrid->Add(newd wxStaticText(this, wxID_ANY, "Friend Strength (%):"), 0, wxALIGN_CENTER_VERTICAL);
+	m_friendStrengthSpin = newd wxSpinCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 100, 0);
+	m_friendStrengthSpin->SetToolTip("Higher values make the bias tighter to the friend floor");
+	friendGrid->Add(m_friendStrengthSpin, 0);
+
+	friendBox->Add(friendGrid, 0, wxALL, 5);
+	friendBox->Add(newd wxStaticText(this, wxID_ANY, "(0 = disabled)"), 0, wxLEFT | wxBOTTOM, 5);
+	leftColumn->Add(friendBox, 0, wxALL | wxEXPAND, 5);
+
 	// Add doodad browser to left column
 	wxStaticBoxSizer* doodadBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Doodad Browser (double-click to add)");
+	if (wxStaticBox* doodadStatic = doodadBox->GetStaticBox()) {
+		doodadStatic->SetMinSize(wxSize(300, -1));
+		doodadStatic->SetMaxSize(wxSize(300, -1));
+	}
 
 	// Search row
 	wxBoxSizer* searchSizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -299,8 +363,6 @@ void FloorRuleEditDialog::CreateControls() {
 	pageSizer->Add(m_pageInfoText, 1, wxALIGN_CENTER_VERTICAL);
 	pageSizer->Add(m_nextPageBtn, 0);
 	doodadBox->Add(pageSizer, 0, wxALL | wxEXPAND, 5);
-
-	leftColumn->Add(doodadBox, 1, wxALL | wxEXPAND, 5);
 
 	columnsSizer->Add(leftColumn, 0, wxEXPAND);
 
@@ -347,24 +409,28 @@ void FloorRuleEditDialog::CreateControls() {
 	m_editItemBtn->SetToolTip("Apply the fields above to the selected item/cluster");
 
 	itemsBox->Add(itemControlsSizer, 0, wxALL, 5);
-	rightColumn->Add(itemsBox, 1, wxALL | wxEXPAND, 5);
+
+	wxBoxSizer* itemsDoodadSizer = newd wxBoxSizer(wxHORIZONTAL);
+	itemsDoodadSizer->Add(itemsBox, 1, wxALL | wxEXPAND, 5);
+	itemsDoodadSizer->Add(doodadBox, 0, wxALL | wxEXPAND, 5);
+	rightColumn->Add(itemsDoodadSizer, 1, wxEXPAND);
 
 	wxStaticBoxSizer* clusterBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Cluster From Selection");
-	wxFlexGridSizer* clusterGrid = newd wxFlexGridSizer(3, 5, 10);
+	wxBoxSizer* clusterRow = newd wxBoxSizer(wxHORIZONTAL);
 
-	clusterGrid->Add(newd wxStaticText(this, wxID_ANY, "Count:"), 0, wxALIGN_CENTER_VERTICAL);
+	clusterRow->Add(newd wxStaticText(this, wxID_ANY, "Count:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
 	m_clusterCountSpin = newd wxSpinCtrl(this, wxID_ANY, "3", wxDefaultPosition, wxSize(60, -1), wxSP_ARROW_KEYS, 1, 100, 3);
-	clusterGrid->Add(m_clusterCountSpin, 0);
+	clusterRow->Add(m_clusterCountSpin, 0, wxRIGHT, 15);
 
-	clusterGrid->Add(newd wxStaticText(this, wxID_ANY, "Radius:"), 0, wxALIGN_CENTER_VERTICAL);
+	clusterRow->Add(newd wxStaticText(this, wxID_ANY, "Radius:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
 	m_clusterRadiusSpin = newd wxSpinCtrl(this, wxID_ANY, "3", wxDefaultPosition, wxSize(60, -1), wxSP_ARROW_KEYS, 0, 50, 3);
-	clusterGrid->Add(m_clusterRadiusSpin, 0);
+	clusterRow->Add(m_clusterRadiusSpin, 0, wxRIGHT, 15);
 
-	clusterGrid->Add(newd wxStaticText(this, wxID_ANY, "Min Dist:"), 0, wxALIGN_CENTER_VERTICAL);
+	clusterRow->Add(newd wxStaticText(this, wxID_ANY, "Min Dist:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
 	m_clusterMinDistanceSpin = newd wxSpinCtrl(this, wxID_ANY, "2", wxDefaultPosition, wxSize(60, -1), wxSP_ARROW_KEYS, 0, 50, 2);
-	clusterGrid->Add(m_clusterMinDistanceSpin, 0);
+	clusterRow->Add(m_clusterMinDistanceSpin, 0);
 
-	clusterBox->Add(clusterGrid, 0, wxALL, 5);
+	clusterBox->Add(clusterRow, 0, wxALL, 5);
 	wxBoxSizer* clusterBtnSizer = newd wxBoxSizer(wxHORIZONTAL);
 	wxButton* addClusterBtn = newd wxButton(this, ID_ADD_CLUSTER, "Add Cluster From Selection");
 	m_replaceClusterBtn = newd wxButton(this, ID_REPLACE_CLUSTER, "Replace Selected Cluster");
@@ -409,8 +475,15 @@ void FloorRuleEditDialog::LoadRuleData() {
 	m_maxPlacementsSpin->SetValue(m_rule.maxPlacements);
 	m_prioritySpin->SetValue(m_rule.priority);
 
+	// Load border item
+	m_borderItemSpin->SetValue(m_rule.borderItemId);
+	m_friendFloorSpin->SetValue(m_rule.friendFloorId);
+	m_friendChanceSpin->SetValue(m_rule.friendChance);
+	m_friendStrengthSpin->SetValue(m_rule.friendStrength);
+
 	UpdateItemsList();
 	UpdateFloorPreview();
+	UpdateBorderPreview();
 }
 
 void FloorRuleEditDialog::UpdateItemsList() {
@@ -504,6 +577,12 @@ void FloorRuleEditDialog::UpdateFloorPreview() {
 	}
 }
 
+void FloorRuleEditDialog::UpdateBorderPreview() {
+	if (m_borderPreviewPanel) {
+		m_borderPreviewPanel->Refresh();
+	}
+}
+
 void FloorRuleEditDialog::OnPaintFloorPreview(wxPaintEvent& event) {
 	wxBufferedPaintDC dc(m_floorPreviewPanel);
 
@@ -542,6 +621,55 @@ void FloorRuleEditDialog::OnPaintFloorPreview(wxPaintEvent& event) {
 	dc.SetPen(wxPen(wxColour(80, 80, 120), 1));
 	dc.SetBrush(*wxTRANSPARENT_BRUSH);
 	dc.DrawRectangle(0, 0, size.GetWidth(), size.GetHeight());
+}
+
+void FloorRuleEditDialog::OnPaintBorderPreview(wxPaintEvent& event) {
+	wxBufferedPaintDC dc(m_borderPreviewPanel);
+
+	// Get panel size
+	wxSize size = m_borderPreviewPanel->GetSize();
+
+	// Fill with dark background
+	dc.SetBackground(wxBrush(wxColour(0x0C, 0x14, 0x2A)));
+	dc.Clear();
+
+	uint16_t borderItemId = static_cast<uint16_t>(m_borderItemSpin->GetValue());
+
+	if (borderItemId > 0) {
+		// Get the ItemType to find the client sprite ID
+		const ItemType& itemType = g_items.getItemType(borderItemId);
+		Sprite* spr = nullptr;
+		if (itemType.id != 0) {
+			spr = g_gui.gfx.getSprite(itemType.clientID);
+		}
+		if (spr) {
+			// Draw centered
+			int drawSize = std::min(size.GetWidth(), size.GetHeight()) - 4;
+			int x = (size.GetWidth() - drawSize) / 2;
+			int y = (size.GetHeight() - drawSize) / 2;
+			spr->DrawTo(&dc, SPRITE_SIZE_32x32, x, y, drawSize, drawSize);
+		}
+	}
+
+	// Draw border
+	dc.SetPen(wxPen(wxColour(80, 80, 120), 1));
+	dc.SetBrush(*wxTRANSPARENT_BRUSH);
+	dc.DrawRectangle(0, 0, size.GetWidth(), size.GetHeight());
+}
+
+void FloorRuleEditDialog::OnBorderItemChanged(wxSpinEvent& event) {
+	UpdateBorderPreview();
+}
+
+void FloorRuleEditDialog::OnBrowseBorderItem(wxCommandEvent& event) {
+	FindItemDialog dialog(this, "Select Border Item");
+	if (dialog.ShowModal() == wxID_OK) {
+		uint16_t itemId = dialog.getResultID();
+		if (itemId > 0) {
+			m_borderItemSpin->SetValue(itemId);
+			UpdateBorderPreview();
+		}
+	}
 }
 
 void FloorRuleEditDialog::LoadDoodadList() {
@@ -797,6 +925,10 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 	m_rule.density = m_densitySpin->GetValue() / 100.0f;
 	m_rule.maxPlacements = m_maxPlacementsSpin->GetValue();
 	m_rule.priority = m_prioritySpin->GetValue();
+	m_rule.borderItemId = static_cast<uint16_t>(m_borderItemSpin->GetValue());
+	m_rule.friendFloorId = static_cast<uint16_t>(m_friendFloorSpin->GetValue());
+	m_rule.friendChance = m_friendChanceSpin->GetValue();
+	m_rule.friendStrength = m_friendStrengthSpin->GetValue();
 
 	return true;
 }
@@ -1342,6 +1474,30 @@ void AreaDecorationDialog::SetSeedInputValue(uint64_t seed) {
 	}
 }
 
+void AreaDecorationDialog::UpdateZCountText(int count, int minZ, int maxZ) {
+	if (!m_zCountText) {
+		return;
+	}
+	const bool hasRange = (minZ >= 0 && maxZ >= 0);
+	if (count <= 1) {
+		if (hasRange) {
+			if (minZ == maxZ) {
+				m_zCountText->SetLabel(wxString::Format("Z Floors: 1 (Z %d)", minZ));
+			} else {
+				m_zCountText->SetLabel(wxString::Format("Z Floors: 1 (Z %d-%d)", minZ, maxZ));
+			}
+		} else {
+			m_zCountText->SetLabel("Z Floors: 1");
+		}
+		return;
+	}
+	if (hasRange) {
+		m_zCountText->SetLabel(wxString::Format("Z Floors: %d (Z %d-%d)", count, minZ, maxZ));
+	} else {
+		m_zCountText->SetLabel(wxString::Format("Z Floors: %d", count));
+	}
+}
+
 void AreaDecorationDialog::CreateControls() {
 	wxBoxSizer* mainSizer = newd wxBoxSizer(wxVERTICAL);
 
@@ -1460,6 +1616,10 @@ void AreaDecorationDialog::CreateAreaTab(wxNotebook* notebook) {
 
 	rectBox->Add(coordGrid, 0, wxALL, 5);
 
+	m_zCountText = newd wxStaticText(panel, wxID_ANY, "Z Floors: 1");
+	rectBox->Add(m_zCountText, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
+	UpdateZCountText(1, m_rectZSpin->GetValue(), m_rectZSpin->GetValue());
+
 	wxBoxSizer* selectBtnSizer = newd wxBoxSizer(wxHORIZONTAL);
 	m_selectAreaButton = newd wxButton(panel, ID_SELECT_FROM_MAP, "Select from Map...");
 	wxButton* useSelectionBtn = newd wxButton(panel, ID_USE_SELECTION, "Use Current Selection");
@@ -1485,10 +1645,11 @@ void AreaDecorationDialog::CreateRulesTab(wxNotebook* notebook) {
 	m_rulesListCtrl = newd wxListCtrl(panel, ID_RULES_LIST, wxDefaultPosition, wxSize(-1, 250),
 	                                   wxLC_REPORT | wxLC_SINGLE_SEL);
 	m_rulesListCtrl->InsertColumn(0, "Name", wxLIST_FORMAT_LEFT, 120);
-	m_rulesListCtrl->InsertColumn(1, "Floor(s)", wxLIST_FORMAT_LEFT, 100);
-	m_rulesListCtrl->InsertColumn(2, "Items", wxLIST_FORMAT_LEFT, 60);
-	m_rulesListCtrl->InsertColumn(3, "Density", wxLIST_FORMAT_LEFT, 70);
-	m_rulesListCtrl->InsertColumn(4, "Priority", wxLIST_FORMAT_LEFT, 60);
+	m_rulesListCtrl->InsertColumn(1, "Floor(s)", wxLIST_FORMAT_LEFT, 80);
+	m_rulesListCtrl->InsertColumn(2, "Items", wxLIST_FORMAT_LEFT, 50);
+	m_rulesListCtrl->InsertColumn(3, "Density", wxLIST_FORMAT_LEFT, 60);
+	m_rulesListCtrl->InsertColumn(4, "Priority", wxLIST_FORMAT_LEFT, 50);
+	m_rulesListCtrl->InsertColumn(5, "Border", wxLIST_FORMAT_LEFT, 50);
 
 	sizer->Add(m_rulesListCtrl, 1, wxALL | wxEXPAND, 5);
 
@@ -1696,6 +1857,7 @@ void AreaDecorationDialog::UpdateRulesList() {
 		m_rulesListCtrl->SetItem(idx, 2, wxString::Format("%zu", rule.items.size()));
 		m_rulesListCtrl->SetItem(idx, 3, wxString::Format("%.0f%%", rule.density * 100));
 		m_rulesListCtrl->SetItem(idx, 4, wxString::Format("%d", rule.priority));
+		m_rulesListCtrl->SetItem(idx, 5, rule.borderItemId > 0 ? wxString::Format("%d", rule.borderItemId) : wxString("-"));
 	}
 }
 
@@ -1783,6 +1945,37 @@ void AreaDecorationDialog::BuildAreaFromUI() {
 }
 
 void AreaDecorationDialog::OnAreaTypeChanged(wxCommandEvent& event) {
+	int areaType = m_areaTypeChoice ? m_areaTypeChoice->GetSelection() : 0;
+	if (areaType == 2) {
+		Editor* editor = g_gui.GetCurrentEditor();
+		if (editor) {
+			const Selection& selection = editor->getSelection();
+			if (selection.size() > 0) {
+				Position minPos(INT_MAX, INT_MAX, INT_MAX);
+				Position maxPos(INT_MIN, INT_MIN, INT_MIN);
+				std::unordered_set<int> zLevels;
+				const TileSet& tiles = selection.getTiles();
+				for (Tile* tile : tiles) {
+					const Position& pos = tile->getPosition();
+					minPos.x = std::min(minPos.x, pos.x);
+					minPos.y = std::min(minPos.y, pos.y);
+					minPos.z = std::min(minPos.z, pos.z);
+					maxPos.x = std::max(maxPos.x, pos.x);
+					maxPos.y = std::max(maxPos.y, pos.y);
+					maxPos.z = std::max(maxPos.z, pos.z);
+					zLevels.insert(pos.z);
+				}
+				UpdateZCountText(static_cast<int>(zLevels.size()), minPos.z, maxPos.z);
+			} else {
+				UpdateZCountText(1);
+			}
+		} else {
+			UpdateZCountText(1);
+		}
+	} else {
+		const int z = m_rectZSpin ? m_rectZSpin->GetValue() : -1;
+		UpdateZCountText(1, z, z);
+	}
 	UpdateUI();
 }
 
@@ -1800,12 +1993,48 @@ void AreaDecorationDialog::OnRectangleCoordsChanged(wxCommandEvent& event) {
 			m_rectY2Spin->GetValue(),
 			m_rectZSpin->GetValue()));
 	}
+
+	const int z = m_rectZSpin ? m_rectZSpin->GetValue() : -1;
+	UpdateZCountText(1, z, z);
 }
 
 void AreaDecorationDialog::OnSelectFromMap(wxCommandEvent& event) {
-	wxMessageBox("Click two corners on the map to define the rectangle area.\n\n"
-	             "Feature coming soon - for now, enter coordinates manually or use current selection.",
-	             "Select Area", wxOK | wxICON_INFORMATION);
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) {
+		wxMessageBox("No editor available", "Error", wxOK | wxICON_ERROR);
+		return;
+	}
+
+	g_gui.SetSelectionMode();
+
+	g_gui.BeginRectanglePick(
+		[this](const Position& first, const Position& second) {
+			int minX = std::min(first.x, second.x);
+			int minY = std::min(first.y, second.y);
+			int maxX = std::max(first.x, second.x);
+			int maxY = std::max(first.y, second.y);
+
+			m_rectX1Spin->SetValue(minX);
+			m_rectY1Spin->SetValue(minY);
+			m_rectX2Spin->SetValue(maxX);
+			m_rectY2Spin->SetValue(maxY);
+			m_rectZSpin->SetValue(first.z);
+
+			m_areaTypeChoice->SetSelection(0);
+			if (m_areaInfoText) {
+				m_areaInfoText->SetLabel(wxString::Format("Rectangle: (%d,%d) to (%d,%d) Z:%d",
+					minX, minY, maxX, maxY, first.z));
+			}
+
+			UpdateZCountText(1, first.z, first.z);
+			UpdateUI();
+		},
+		[this]() {
+			if (m_areaInfoText) {
+				m_areaInfoText->SetLabel("Rectangle selection cancelled");
+			}
+		}
+	);
 }
 
 void AreaDecorationDialog::OnUseSelection(wxCommandEvent& event) {
@@ -1823,6 +2052,7 @@ void AreaDecorationDialog::OnUseSelection(wxCommandEvent& event) {
 
 	Position minPos(INT_MAX, INT_MAX, INT_MAX);
 	Position maxPos(INT_MIN, INT_MIN, INT_MIN);
+	std::unordered_set<int> zLevels;
 
 	const TileSet& tiles = selection.getTiles();
 	for (Tile* tile : tiles) {
@@ -1833,6 +2063,7 @@ void AreaDecorationDialog::OnUseSelection(wxCommandEvent& event) {
 		maxPos.x = std::max(maxPos.x, pos.x);
 		maxPos.y = std::max(maxPos.y, pos.y);
 		maxPos.z = std::max(maxPos.z, pos.z);
+		zLevels.insert(pos.z);
 	}
 
 	m_rectX1Spin->SetValue(minPos.x);
@@ -1845,6 +2076,8 @@ void AreaDecorationDialog::OnUseSelection(wxCommandEvent& event) {
 
 	m_areaInfoText->SetLabel(wxString::Format("Selection: %zu tiles (%d,%d) to (%d,%d) Z:%d",
 		selection.size(), minPos.x, minPos.y, maxPos.x, maxPos.y, minPos.z));
+
+	UpdateZCountText(static_cast<int>(zLevels.size()), minPos.z, maxPos.z);
 
 	UpdateUI();
 }
@@ -2072,6 +2305,7 @@ void AreaDecorationDialog::OnRemoveLastApply(wxCommandEvent& event) {
 }
 
 void AreaDecorationDialog::OnClose(wxCloseEvent& event) {
+	g_gui.CancelRectanglePick();
 	if (m_engine) {
 		m_engine->clearPreview();
 		g_gui.RefreshView();

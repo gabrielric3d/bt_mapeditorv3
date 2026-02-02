@@ -133,6 +133,14 @@ struct FloorRule {
 	// Items for this rule
 	std::vector<ItemEntry> items;
 
+	// Border item to place on top of decoration items (0 = none)
+	uint16_t borderItemId = 0;
+
+	// Friend floor - bias placement toward another ground tile (0 = disabled)
+	uint16_t friendFloorId = 0;
+	int friendChance = 0; // 0-100 (%)
+	int friendStrength = 0; // 0-100 (stronger = tighter bias)
+
 	// Placement settings
 	int maxPlacements = -1;  // -1 = unlimited
 	float density = 0.3f;    // 0.0 - 1.0
@@ -340,6 +348,14 @@ private:
 	std::string m_lastError;
 	std::vector<AppliedItem> m_lastAppliedItems;
 	std::vector<Position> m_clusterCenters;
+	struct FriendDistanceLayer {
+		int minX = 0;
+		int minY = 0;
+		int width = 0;
+		int height = 0;
+		std::vector<int> distances;
+	};
+	std::unordered_map<uint16_t, std::unordered_map<int, FriendDistanceLayer>> m_friendDistanceCache;
 
 	std::mt19937 m_rng;
 	uint64_t m_currentSeed = 0;
@@ -354,6 +370,9 @@ private:
 	bool checkSpacingForPlacement(const std::vector<PreviewItem>& placementItems) const;
 	void commitPlacement(const std::vector<PreviewItem>& placementItems);
 	bool checkClusterCenterSpacing(const Position& pos, int minDistance) const;
+	void buildFriendDistanceCache(const std::vector<std::pair<Position, uint16_t>>& tiles);
+	float applyFriendBias(const FloorRule* rule, const Position& pos, float baseDensity) const;
+	int getFriendDistance(uint16_t friendFloorId, const Position& pos) const;
 
 	void generatePureRandom(const std::vector<std::pair<Position, uint16_t>>& tiles);
 	void generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles);

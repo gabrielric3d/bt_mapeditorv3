@@ -89,6 +89,15 @@ private:
 	wxSpinCtrl* m_maxPlacementsSpin;
 	wxSpinCtrl* m_prioritySpin;
 
+	// Border item controls
+	wxSpinCtrl* m_borderItemSpin;
+	wxPanel* m_borderPreviewPanel;
+
+	// Friend floor controls
+	wxSpinCtrl* m_friendFloorSpin;
+	wxSpinCtrl* m_friendChanceSpin;
+	wxSpinCtrl* m_friendStrengthSpin;
+
 	// Doodad selection with pagination and search
 	wxTextCtrl* m_doodadSearchCtrl;
 	wxListCtrl* m_doodadListCtrl;
@@ -106,6 +115,7 @@ private:
 	void LoadRuleData();
 	void UpdateItemsList();
 	void UpdateFloorPreview();
+	void UpdateBorderPreview();
 	void LoadDoodadList();
 	void UpdateDoodadListDisplay();
 	void FilterDoodads(const wxString& filter);
@@ -133,6 +143,9 @@ private:
 	void OnPrevPage(wxCommandEvent& event);
 	void OnNextPage(wxCommandEvent& event);
 	void OnPaintFloorPreview(wxPaintEvent& event);
+	void OnPaintBorderPreview(wxPaintEvent& event);
+	void OnBorderItemChanged(wxSpinEvent& event);
+	void OnBrowseBorderItem(wxCommandEvent& event);
 	void OnOK(wxCommandEvent& event);
 	void OnCancel(wxCommandEvent& event);
 	void OnClose(wxCloseEvent& event);
@@ -163,6 +176,7 @@ private:
 	wxSpinCtrl* m_rectX2Spin;
 	wxSpinCtrl* m_rectY2Spin;
 	wxSpinCtrl* m_rectZSpin;
+	wxStaticText* m_zCountText;
 
 	// UI Controls - Floor Rules Tab
 	wxListCtrl* m_rulesListCtrl;
@@ -206,6 +220,7 @@ private:
 	void UpdateStats();
 	void UpdateRulesList();
 	void UpdatePresetList();
+	void UpdateZCountText(int count, int minZ = -1, int maxZ = -1);
 	void BuildPresetFromUI();
 	void BuildAreaFromUI();
 	void LoadPresetToUI(const AreaDecoration::DecorationPreset& preset);

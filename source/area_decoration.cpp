@@ -112,6 +112,14 @@ bool DecorationPreset::validate(std::string& errorOut) const {
 			errorOut = "Floor rule has no floor ID specified";
 			return false;
 		}
+		if (rule.friendChance < 0 || rule.friendChance > 100) {
+			errorOut = "Friend chance must be between 0 and 100";
+			return false;
+		}
+		if (rule.friendStrength < 0 || rule.friendStrength > 100) {
+			errorOut = "Friend strength must be between 0 and 100";
+			return false;
+		}
 
 		if (rule.items.empty()) {
 			errorOut = "Floor rule '" + rule.name + "' has no items";
@@ -495,6 +503,7 @@ bool DecorationEngine::generatePreview(uint64_t seed) {
 	}
 
 	m_spatialHash.clear();
+	buildFriendDistanceCache(tiles);
 
 	switch (m_preset.distribution.mode) {
 		case DistributionMode::PureRandom:
@@ -556,6 +565,7 @@ bool DecorationEngine::generatePreviewVirtual(int width, int height, uint16_t gr
 	}
 
 	m_spatialHash.clear();
+	buildFriendDistanceCache(tiles);
 
 	switch (m_preset.distribution.mode) {
 		case DistributionMode::PureRandom:
@@ -585,6 +595,7 @@ void DecorationEngine::clearPreview() {
 	m_previewState.clear();
 	m_spatialHash.clear();
 	m_clusterCenters.clear();
+	m_friendDistanceCache.clear();
 	m_virtualPreview = false;
 	m_previewWasCapped = false;
 }
@@ -607,11 +618,234 @@ bool DecorationEngine::checkClusterCenterSpacing(const Position& pos, int minDis
 	return true;
 }
 
+void DecorationEngine::buildFriendDistanceCache(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	m_friendDistanceCache.clear();
+
+	std::unordered_set<uint16_t> friendIds;
+	friendIds.reserve(m_preset.floorRules.size());
+	for (const auto& rule : m_preset.floorRules) {
+		if (!rule.enabled) {
+			continue;
+		}
+		if (rule.friendFloorId > 0 && rule.friendChance > 0) {
+			friendIds.insert(rule.friendFloorId);
+		}
+	}
+	if (friendIds.empty()) {
+		return;
+	}
+
+	struct Bounds {
+		int minX = 0;
+		int minY = 0;
+		int maxX = 0;
+		int maxY = 0;
+		bool initialized = false;
+	};
+
+	std::unordered_map<int, Bounds> boundsByZ;
+	boundsByZ.reserve(8);
+
+	for (const auto& tile : tiles) {
+		const Position& pos = tile.first;
+		auto& bounds = boundsByZ[pos.z];
+		if (!bounds.initialized) {
+			bounds.minX = pos.x;
+			bounds.maxX = pos.x;
+			bounds.minY = pos.y;
+			bounds.maxY = pos.y;
+			bounds.initialized = true;
+		} else {
+			bounds.minX = std::min(bounds.minX, pos.x);
+			bounds.maxX = std::max(bounds.maxX, pos.x);
+			bounds.minY = std::min(bounds.minY, pos.y);
+			bounds.maxY = std::max(bounds.maxY, pos.y);
+		}
+	}
+
+	std::unordered_map<uint16_t, std::unordered_map<int, std::vector<Position>>> friendPositions;
+	if (m_editor && !m_virtualPreview) {
+		Map& map = m_editor->getMap();
+		const int kFriendPadding = 2;
+		for (auto& boundsPair : boundsByZ) {
+			int z = boundsPair.first;
+			Bounds& bounds = boundsPair.second;
+			if (!bounds.initialized) {
+				continue;
+			}
+			bounds.minX -= kFriendPadding;
+			bounds.minY -= kFriendPadding;
+			bounds.maxX += kFriendPadding;
+			bounds.maxY += kFriendPadding;
+
+			for (int y = bounds.minY; y <= bounds.maxY; ++y) {
+				for (int x = bounds.minX; x <= bounds.maxX; ++x) {
+					Tile* tile = map.getTile(x, y, z);
+					if (!tile || !tile->ground) {
+						continue;
+					}
+					uint16_t groundId = tile->ground->getID();
+					if (friendIds.find(groundId) == friendIds.end()) {
+						continue;
+					}
+					friendPositions[groundId][z].push_back(Position(x, y, z));
+				}
+			}
+		}
+	} else {
+		for (const auto& tile : tiles) {
+			uint16_t groundId = tile.second;
+			if (friendIds.find(groundId) == friendIds.end()) {
+				continue;
+			}
+			friendPositions[groundId][tile.first.z].push_back(tile.first);
+		}
+	}
+
+	for (uint16_t friendId : friendIds) {
+		auto positionsIt = friendPositions.find(friendId);
+		if (positionsIt == friendPositions.end()) {
+			continue;
+		}
+
+		for (const auto& zEntry : positionsIt->second) {
+			int z = zEntry.first;
+			auto boundsIt = boundsByZ.find(z);
+			if (boundsIt == boundsByZ.end() || !boundsIt->second.initialized) {
+				continue;
+			}
+
+			const Bounds& bounds = boundsIt->second;
+			int width = bounds.maxX - bounds.minX + 1;
+			int height = bounds.maxY - bounds.minY + 1;
+			if (width <= 0 || height <= 0) {
+				continue;
+			}
+
+			FriendDistanceLayer layer;
+			layer.minX = bounds.minX;
+			layer.minY = bounds.minY;
+			layer.width = width;
+			layer.height = height;
+			layer.distances.assign(static_cast<size_t>(width) * static_cast<size_t>(height), -1);
+
+			std::queue<Position> queue;
+			for (const Position& pos : zEntry.second) {
+				int x = pos.x - bounds.minX;
+				int y = pos.y - bounds.minY;
+				if (x < 0 || y < 0 || x >= width || y >= height) {
+					continue;
+				}
+				size_t idx = static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x);
+				if (layer.distances[idx] == 0) {
+					continue;
+				}
+				layer.distances[idx] = 0;
+				queue.push(pos);
+			}
+
+			static const int kOffsets[8][2] = {
+				{-1, -1}, {0, -1}, {1, -1},
+				{-1,  0},          {1,  0},
+				{-1,  1}, {0,  1}, {1,  1}
+			};
+
+			while (!queue.empty()) {
+				Position current = queue.front();
+				queue.pop();
+
+				int baseX = current.x - bounds.minX;
+				int baseY = current.y - bounds.minY;
+				size_t baseIdx = static_cast<size_t>(baseY) * static_cast<size_t>(width) + static_cast<size_t>(baseX);
+				int baseDist = layer.distances[baseIdx];
+
+				for (const auto& offset : kOffsets) {
+					int nx = current.x + offset[0];
+					int ny = current.y + offset[1];
+					if (nx < bounds.minX || nx > bounds.maxX || ny < bounds.minY || ny > bounds.maxY) {
+						continue;
+					}
+
+					int lx = nx - bounds.minX;
+					int ly = ny - bounds.minY;
+					size_t nIdx = static_cast<size_t>(ly) * static_cast<size_t>(width) + static_cast<size_t>(lx);
+					if (layer.distances[nIdx] != -1) {
+						continue;
+					}
+
+					layer.distances[nIdx] = baseDist + 1;
+					queue.push(Position(nx, ny, z));
+				}
+			}
+
+			m_friendDistanceCache[friendId][z] = std::move(layer);
+		}
+	}
+}
+
+int DecorationEngine::getFriendDistance(uint16_t friendFloorId, const Position& pos) const {
+	auto friendIt = m_friendDistanceCache.find(friendFloorId);
+	if (friendIt == m_friendDistanceCache.end()) {
+		return -1;
+	}
+	auto layerIt = friendIt->second.find(pos.z);
+	if (layerIt == friendIt->second.end()) {
+		return -1;
+	}
+	const FriendDistanceLayer& layer = layerIt->second;
+	if (pos.x < layer.minX || pos.x >= layer.minX + layer.width ||
+	    pos.y < layer.minY || pos.y >= layer.minY + layer.height) {
+		return -1;
+	}
+	size_t idx = static_cast<size_t>(pos.y - layer.minY) * static_cast<size_t>(layer.width) +
+	             static_cast<size_t>(pos.x - layer.minX);
+	if (idx >= layer.distances.size()) {
+		return -1;
+	}
+	return layer.distances[idx];
+}
+
+float DecorationEngine::applyFriendBias(const FloorRule* rule, const Position& pos, float baseDensity) const {
+	if (!rule || rule->friendFloorId == 0 || rule->friendChance <= 0) {
+		return baseDensity;
+	}
+	int distance = getFriendDistance(rule->friendFloorId, pos);
+	if (distance < 0) {
+		return baseDensity;
+	}
+
+	float friendChance = rule->friendChance / 100.0f;
+	if (friendChance < 0.0f) {
+		friendChance = 0.0f;
+	} else if (friendChance > 1.0f) {
+		friendChance = 1.0f;
+	}
+
+	float proximity = 1.0f / (1.0f + static_cast<float>(distance));
+	if (rule->friendStrength > 0) {
+		float exponent = 1.0f + (static_cast<float>(rule->friendStrength) / 20.0f);
+		proximity = std::pow(proximity, exponent);
+	}
+	float biasedDensity = baseDensity * proximity;
+	return baseDensity * (1.0f - friendChance) + biasedDensity * friendChance;
+}
+
 bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>>& outTiles) {
 	if (!m_editor) return false;
 
 	Map& map = m_editor->getMap();
 	std::vector<Position> positions = m_area.getAllPositions(map);
+
+	std::unordered_set<uint16_t> friendIds;
+	friendIds.reserve(m_preset.floorRules.size());
+	for (const auto& rule : m_preset.floorRules) {
+		if (!rule.enabled) {
+			continue;
+		}
+		if (rule.friendFloorId > 0 && rule.friendChance > 0) {
+			friendIds.insert(rule.friendFloorId);
+		}
+	}
 
 	outTiles.reserve(positions.size());
 
@@ -624,7 +858,8 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 
 		uint16_t groundId = ground->getID();
 
-		if (m_preset.skipBlockedTiles && tile->isBlocking()) {
+		if (m_preset.skipBlockedTiles && tile->isBlocking() &&
+		    friendIds.find(groundId) == friendIds.end()) {
 			continue;
 		}
 
@@ -689,6 +924,17 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
                                            const FloorRule* rule, std::vector<PreviewItem>& outItems) {
 	outItems.clear();
 
+	// Helper to add border item on top of placed items at a position
+	auto addBorderItem = [&](const Position& pos) {
+		if (rule && rule->borderItemId > 0) {
+			PreviewItem borderItem;
+			borderItem.position = pos;
+			borderItem.itemId = rule->borderItemId;
+			borderItem.sourceRule = rule;
+			outItems.push_back(borderItem);
+		}
+	};
+
 	if (!entry.isCompositeEntry()) {
 		if (entry.itemId == 0) return false;
 		if (!validateTilePlacement(basePos, entry.itemId)) return false;
@@ -698,10 +944,17 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
 		previewItem.itemId = entry.itemId;
 		previewItem.sourceRule = rule;
 		outItems.push_back(previewItem);
+
+		// Add border item on top
+		addBorderItem(basePos);
+
 		return true;
 	}
 
 	if (entry.compositeTiles.empty()) return false;
+
+	// Track positions where we placed items (to add border items)
+	std::vector<Position> placedPositions;
 
 	auto appendCompositeAt = [&](const Position& origin) -> bool {
 		for (const auto& tile : entry.compositeTiles) {
@@ -721,6 +974,7 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
 				return false;
 			}
 
+			bool addedAny = false;
 			for (uint16_t id : tile.itemIds) {
 				if (id == 0) continue;
 				PreviewItem previewItem;
@@ -728,6 +982,12 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
 				previewItem.itemId = id;
 				previewItem.sourceRule = rule;
 				outItems.push_back(previewItem);
+				addedAny = true;
+			}
+
+			// Track position for border item
+			if (addedAny) {
+				placedPositions.push_back(pos);
 			}
 		}
 		return true;
@@ -735,6 +995,10 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
 
 	if (!entry.isClusterEntry()) {
 		if (!appendCompositeAt(basePos)) return false;
+		// Add border items on top of all placed positions
+		for (const auto& pos : placedPositions) {
+			addBorderItem(pos);
+		}
 		return !outItems.empty();
 	}
 
@@ -778,6 +1042,11 @@ bool DecorationEngine::buildPlacementItems(const Position& basePos, const ItemEn
 		if (!appendCompositeAt(basePos + center)) {
 			return false;
 		}
+	}
+
+	// Add border items on top of all placed positions
+	for (const auto& pos : placedPositions) {
+		addBorderItem(pos);
 	}
 
 	return !outItems.empty();
@@ -853,8 +1122,9 @@ void DecorationEngine::generatePureRandom(const std::vector<std::pair<Position, 
 			continue;
 		}
 
+		float adjustedDensity = applyFriendBias(rule, pos, rule->density);
 		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
-		if (densityDist(m_rng) > rule->density) {
+		if (densityDist(m_rng) > adjustedDensity) {
 			continue;
 		}
 
@@ -948,6 +1218,7 @@ void DecorationEngine::generateClustered(const std::vector<std::pair<Position, u
 			float falloff = std::exp(-distanceScore * distConfig.clusterStrength * 0.1f);
 			adjustedDensity *= falloff;
 		}
+		adjustedDensity = applyFriendBias(rule, pos, adjustedDensity);
 
 		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
 		if (densityDist(m_rng) > adjustedDensity) {
@@ -1046,8 +1317,9 @@ void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, u
 				continue;
 			}
 
+			float adjustedDensity = applyFriendBias(rule, pos, rule->density);
 			std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
-			if (densityDist(m_rng) > rule->density) {
+			if (densityDist(m_rng) > adjustedDensity) {
 				continue;
 			}
 
@@ -1296,6 +1568,10 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 		ruleNode.append_attribute("max_placements") = rule.maxPlacements;
 		ruleNode.append_attribute("priority") = rule.priority;
 		ruleNode.append_attribute("enabled") = rule.enabled;
+		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
+		ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+		ruleNode.append_attribute("friend_chance") = rule.friendChance;
+		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
 
 		pugi::xml_node itemsNode = ruleNode.append_child("items");
 		for (const auto& item : rule.items) {
@@ -1384,6 +1660,10 @@ bool DecorationPreset::loadFromFile(const std::string& filepath) {
 		rule.maxPlacements = ruleNode.attribute("max_placements").as_int(-1);
 		rule.priority = ruleNode.attribute("priority").as_int(0);
 		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
+		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
+		rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+		rule.friendChance = ruleNode.attribute("friend_chance").as_int(0);
+		rule.friendStrength = ruleNode.attribute("friend_strength").as_int(0);
 
 		pugi::xml_node itemsNode = ruleNode.child("items");
 		for (pugi::xml_node itemNode = itemsNode.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
@@ -1471,6 +1751,10 @@ std::string DecorationPreset::toXmlString() const {
 		ruleNode.append_attribute("density") = rule.density;
 		ruleNode.append_attribute("max_placements") = rule.maxPlacements;
 		ruleNode.append_attribute("priority") = rule.priority;
+		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
+		ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+		ruleNode.append_attribute("friend_chance") = rule.friendChance;
+		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
 
 		pugi::xml_node itemsNode = ruleNode.append_child("items");
 		for (const auto& item : rule.items) {
@@ -1553,6 +1837,10 @@ bool DecorationPreset::fromXmlString(const std::string& xml) {
 		rule.density = ruleNode.attribute("density").as_float(0.3f);
 		rule.maxPlacements = ruleNode.attribute("max_placements").as_int(-1);
 		rule.priority = ruleNode.attribute("priority").as_int(0);
+		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
+		rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+		rule.friendChance = ruleNode.attribute("friend_chance").as_int(0);
+		rule.friendStrength = ruleNode.attribute("friend_strength").as_int(0);
 
 		pugi::xml_node itemsNode = ruleNode.child("items");
 		for (pugi::xml_node itemNode = itemsNode.first_child(); itemNode; itemNode = itemNode.next_sibling()) {
