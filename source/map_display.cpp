@@ -59,6 +59,7 @@
 #include "carpet_brush.h"
 #include "table_brush.h"
 #include "gif_recorder.h"
+#include "camera_path.h"
 
 namespace
 {
@@ -147,6 +148,7 @@ BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_MOUSEWHEEL(MapCanvas::OnWheel)
 	EVT_ENTER_WINDOW(MapCanvas::OnGainMouse)
 	EVT_LEAVE_WINDOW(MapCanvas::OnLoseMouse)
+	EVT_TIMER(CAMERA_PATH_TIMER, MapCanvas::OnCameraPathTimer)
 
 	//Drawing events
 	EVT_PAINT(MapCanvas::OnPaint)
@@ -226,6 +228,10 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	gif_height(0),
 	gif_frames_written(0),
 	gif_frame_interval(std::chrono::steady_clock::duration::zero()),
+	camera_path_timer(this, CAMERA_PATH_TIMER),
+	camera_path_playing(false),
+	camera_path_time(0.0),
+	camera_path_last_tick(),
 
 	drag_start_x(-1),
 	drag_start_y(-1),
@@ -559,6 +565,7 @@ MapCanvas::~MapCanvas()
 	delete animation_timer;
 	delete drawer;
 	delete autoborder_preview_map;
+	camera_path_timer.Stop();
 	StopGifRecording(false, false);
 	free(screenshot_buffer);
 }
@@ -977,6 +984,66 @@ void MapCanvas::StopGifRecording(bool keepFile, bool notify)
 	gif_height = 0;
 	gif_frames_written = 0;
 	gif_output_path.Clear();
+}
+
+void MapCanvas::ToggleCameraPathPlayback()
+{
+	if(camera_path_playing) {
+		camera_path_timer.Stop();
+		camera_path_playing = false;
+		camera_path_time = 0.0;
+		camera_path_name.clear();
+		g_gui.SetStatusText("Camera path playback stopped.");
+		return;
+	}
+
+	CameraPaths& cameraPaths = editor.getMap().camera_paths;
+	CameraPath* path = cameraPaths.getActivePath();
+	if(!path || path->keyframes.size() < 2) {
+		g_gui.SetStatusText("No camera path with at least 2 keyframes selected.");
+		return;
+	}
+
+	camera_path_name = path->name;
+	camera_path_time = 0.0;
+	camera_path_last_tick = std::chrono::steady_clock::now();
+	camera_path_playing = true;
+	camera_path_timer.Start(16);
+	g_gui.SetStatusText("Camera path playback started.");
+}
+
+void MapCanvas::OnCameraPathTimer(wxTimerEvent& WXUNUSED(event))
+{
+	if(!camera_path_playing) {
+		return;
+	}
+
+	CameraPaths& cameraPaths = editor.getMap().camera_paths;
+	CameraPath* path = cameraPaths.getPath(camera_path_name);
+	if(!path || path->keyframes.size() < 2) {
+		ToggleCameraPathPlayback();
+		return;
+	}
+
+	auto now = std::chrono::steady_clock::now();
+	std::chrono::duration<double> delta = now - camera_path_last_tick;
+	camera_path_last_tick = now;
+	camera_path_time += delta.count();
+
+	bool finished = false;
+	CameraPathSample sample = SampleCameraPathByTime(*path, camera_path_time, path->loop, &finished);
+
+	const int sample_z = static_cast<int>(std::round(sample.z));
+	MapWindow* window = GetMapWindow();
+	if(window) {
+		SetZoom(sample.zoom);
+		window->SetScreenCenterPosition(sample.x, sample.y, sample_z, false);
+	}
+	Refresh();
+
+	if(finished && !path->loop) {
+		ToggleCameraPathPlayback();
+	}
 }
 
 void MapCanvas::captureGifFrame()
@@ -1721,6 +1788,9 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
+	if(g_gui.HandleRectanglePickClick(Position(mouse_map_x, mouse_map_y, floor))) {
+		return;
+	}
 	boundbox_select_creatures = false;
 
 	const int raw_palette_modifier = g_settings.getInteger(Config::RAW_PALETTE_SELECT_MODIFIER);
@@ -1952,8 +2022,12 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 						editor.draw(tilestodraw, tilestoborder, event.AltDown());
 					}
 				} else if(brush->oneSizeFitsAll()) {
-					if(brush->isHouseExit() || brush->isWaypoint()) {
-						editor.draw(Position(mouse_map_x, mouse_map_y, floor), event.AltDown());
+					if(brush->isHouseExit() || brush->isWaypoint() || brush->isCameraPath()) {
+						if(brush->isCameraPath() && event.ControlDown()) {
+							editor.undraw(Position(mouse_map_x, mouse_map_y, floor), event.AltDown());
+						} else {
+							editor.draw(Position(mouse_map_x, mouse_map_y, floor), event.AltDown());
+						}
 					} else {
 						PositionVector tilestodraw;
 						tilestodraw.push_back(Position(mouse_map_x,mouse_map_y, floor));
@@ -2776,6 +2850,11 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event)
 	// Signal that user is active
 	animation_timer->RequestRefresh();
 
+	if(event.GetKeyCode() == WXK_ESCAPE && g_gui.IsRectanglePickActive()) {
+		g_gui.CancelRectanglePick();
+		return;
+	}
+
 	if(StructureManagerDialog::HandleGlobalHotkey(event))
 		return;
 
@@ -3550,6 +3629,12 @@ void MapCanvas::EndPasting()
 void MapCanvas::Reset()
 {
 	StopGifRecording(false, false);
+	if(camera_path_playing) {
+		camera_path_timer.Stop();
+		camera_path_playing = false;
+		camera_path_time = 0.0;
+		camera_path_name.clear();
+	}
 
 	cursor_x = 0;
 	cursor_y = 0;

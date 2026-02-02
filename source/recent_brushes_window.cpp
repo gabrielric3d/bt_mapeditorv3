@@ -45,7 +45,7 @@ wxSize GetButtonPixelSize(RenderSize size)
 	}
 }
 
-const std::array<TilesetCategoryType, 7> kCategoryOrder = {
+const std::array<TilesetCategoryType, 8> kCategoryOrder = {
 	TILESET_TERRAIN,
 	TILESET_RAW,
 	TILESET_DOODAD,
@@ -53,6 +53,7 @@ const std::array<TilesetCategoryType, 7> kCategoryOrder = {
 	TILESET_CREATURE,
 	TILESET_HOUSE,
 	TILESET_WAYPOINT,
+	TILESET_CAMERA_PATH,
 };
 
 } // namespace
@@ -292,6 +293,7 @@ wxString RecentBrushesWindow::GetCategoryLabel(TilesetCategoryType type) const
 	case TILESET_CREATURE: return "Creatures";
 	case TILESET_HOUSE: return "House";
 	case TILESET_WAYPOINT: return "Waypoint";
+	case TILESET_CAMERA_PATH: return "Camera Path";
 	default: return "Other";
 	}
 }

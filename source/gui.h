@@ -34,6 +34,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <functional>
 
 class BaseMap;
 class Map;
@@ -43,6 +44,7 @@ class Brush;
 class HouseBrush;
 class HouseExitBrush;
 class WaypointBrush;
+class CameraPathBrush;
 class OptionalBorderBrush;
 class EraserBrush;
 class SpawnBrush;
@@ -262,6 +264,12 @@ public:
 	bool IsSelectionMode() const { return mode == SELECTION_MODE; }
 	bool IsDrawingMode() const { return mode == DRAWING_MODE; }
 
+	void BeginRectanglePick(std::function<void(const Position&, const Position&)> onComplete,
+	                        std::function<void()> onCancel = nullptr);
+	void CancelRectanglePick();
+	bool IsRectanglePickActive() const { return rect_pick.active; }
+	bool HandleRectanglePickClick(const Position& pos);
+
 	void SetHotkey(int index, Hotkey& hotkey);
 	const Hotkey& GetHotkey(int index) const;
 	void SaveHotkeys() const;
@@ -333,6 +341,9 @@ public:
 	void SetScreenCenterPosition(const Position& position, bool showIndicator = true);
 	// Refresh the view canvas
 	void RefreshView();
+	// Camera paths
+	void ToggleCameraPathPlayback();
+	void AddCameraPathKeyframeAtCursor();
 	// Fit all/specified current map view to map dimensions
 	void FitViewToMap();
 	void FitViewToMap(MapTab* mt);
@@ -458,6 +469,7 @@ public:
 	HouseBrush* house_brush;
 	HouseExitBrush* house_exit_brush;
 	WaypointBrush* waypoint_brush;
+	CameraPathBrush* camera_path_brush;
 	OptionalBorderBrush* optional_brush;
 	EraserBrush* eraser;
 	SpawnBrush* spawn_brush;
@@ -504,6 +516,15 @@ protected:
 
 	bool use_custom_thickness;
 	float custom_thickness_mod;
+
+	struct RectanglePickState {
+		bool active = false;
+		bool hasFirst = false;
+		Position first;
+		std::function<void(const Position&, const Position&)> onComplete;
+		std::function<void()> onCancel;
+	};
+	RectanglePickState rect_pick;
 
 	//=========================================================================
 	// Progress bar tracking

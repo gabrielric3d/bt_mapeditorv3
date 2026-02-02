@@ -25,6 +25,7 @@
 #include "spawn.h"
 #include "complexitem.h"
 #include "waypoints.h"
+#include "camera_path.h"
 #include "templates.h"
 
 class Map : public BaseMap
@@ -134,6 +135,7 @@ protected:
 
 public:
 	Waypoints waypoints;
+	CameraPaths camera_paths;
 
 private:
 	std::vector<uint16_t> uniqueIds;

@@ -347,6 +347,8 @@
     <ClCompile Include="..\..\source\palette_brushlist.cpp" />
     <ClInclude Include="..\..\source\palette_common.h" />
     <ClCompile Include="..\..\source\palette_common.cpp" />
+    <ClInclude Include="..\..\source\palette_camera_paths.h" />
+    <ClCompile Include="..\..\source\palette_camera_paths.cpp" />
     <ClInclude Include="..\..\source\palette_creature.h" />
     <ClCompile Include="..\..\source\palette_creature.cpp" />
     <ClInclude Include="..\..\source\palette_house.h" />
@@ -375,6 +377,8 @@
     <ClCompile Include="..\..\source\map_window.cpp" />
     <ClInclude Include="..\..\source\action.h" />
     <ClCompile Include="..\..\source\action.cpp" />
+    <ClInclude Include="..\..\source\camera_path.h" />
+    <ClCompile Include="..\..\source\camera_path.cpp" />
     <ClInclude Include="..\..\source\client_version.h" />
     <ClCompile Include="..\..\source\client_version.cpp" />
     <ClInclude Include="..\..\source\copybuffer.h" />
@@ -393,6 +397,8 @@
     <ClCompile Include="..\..\source\updater.cpp" />
     <ClInclude Include="..\..\source\brush.h" />
     <ClCompile Include="..\..\source\brush.cpp" />
+    <ClInclude Include="..\..\source\camera_path_brush.h" />
+    <ClCompile Include="..\..\source\camera_path_brush.cpp" />
     <ClCompile Include="..\..\source\theme.cpp" />
     <ClInclude Include="..\..\source\brush_enums.h" />
     <ClInclude Include="..\..\source\materials.h" />

@@ -20,6 +20,7 @@
 #include "action.h"
 #include "settings.h"
 #include "map.h"
+#include "camera_path.h"
 #include "editor.h"
 #include "gui.h"
 
@@ -50,6 +51,14 @@ Change* Change::Create(Waypoint* waypoint, const Position& position)
 	return change;
 }
 
+Change* Change::Create(const CameraPathsSnapshot& snapshot)
+{
+	Change* change = new Change();
+	change->type = CHANGE_CAMERA_PATHS;
+	change->data = new CameraPathsSnapshot(snapshot);
+	return change;
+}
+
 Change::~Change()
 {
 	clear();
@@ -69,6 +78,10 @@ void Change::clear()
 		case CHANGE_MOVE_WAYPOINT:
 			ASSERT(data);
 			delete reinterpret_cast<WaypointData*>(data);
+			break;
+		case CHANGE_CAMERA_PATHS:
+			ASSERT(data);
+			delete reinterpret_cast<CameraPathsSnapshot*>(data);
 			break;
 		case CHANGE_NONE:
 			break;
@@ -250,6 +263,16 @@ void Action::commit(DirtyList* dirty_list)
 				}
 				break;
 			}
+			case CHANGE_CAMERA_PATHS: {
+				CameraPathsSnapshot* data = reinterpret_cast<CameraPathsSnapshot*>(change->data);
+				ASSERT(data);
+
+				map.camera_paths.swapSnapshot(*data);
+				map.doChange();
+				g_gui.RefreshPalettes(&map);
+				g_gui.RefreshView();
+				break;
+			}
 
 			default:
 				break;
@@ -364,6 +387,15 @@ void Action::undo(DirtyList* dirty_list)
 					waypoint->pos = data->position;
 					data->position = old_pos;
 				}
+				break;
+			}
+			case CHANGE_CAMERA_PATHS: {
+				CameraPathsSnapshot* data = reinterpret_cast<CameraPathsSnapshot*>(change->data);
+				ASSERT(data);
+
+				map.camera_paths.swapSnapshot(*data);
+				g_gui.RefreshPalettes(&map);
+				g_gui.RefreshView();
 				break;
 			}
 

@@ -230,6 +230,7 @@ void Settings::IO(IOMode mode)
 	Int(SHOW_WALL_BORDERS, 0);
 	Int(SHOW_MOUNTAIN_OVERLAY, 0);
 	Int(SHOW_STAIR_DIRECTION, 0);
+	Int(SHOW_CAMERA_PATHS, 1);
 	Int(SHOW_ONLY_GROUNDS, 0);
 
 	section("Version");

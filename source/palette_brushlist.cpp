@@ -558,7 +558,7 @@ void BrushPanel::OnZoomOut(wxCommandEvent& event)
 
 void BrushPanel::OnClickListBoxRow(wxCommandEvent& event)
 {
-	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_HOUSE);
+	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_CAMERA_PATH);
 	// We just notify the GUI of the action, it will take care of everything else
 	ASSERT(brushbox);
 	size_t n = event.GetSelection();
@@ -594,7 +594,7 @@ BrushIconBox::BrushIconBox(wxWindow *parent, const TilesetCategory *_tileset, Re
 	icon_size(rsz),
 	dragging(false)
 {
-	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_HOUSE);
+	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_CAMERA_PATH);
 	int width;
 	if(icon_size == RENDER_SIZE_32x32) {
 		width = std::max(g_settings.getInteger(Config::PALETTE_COL_COUNT) / 2 + 1, 1);

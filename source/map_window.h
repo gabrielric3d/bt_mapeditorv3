@@ -68,6 +68,7 @@ public:
 	// Screen position.
 	Position GetScreenCenterPosition();
 	void SetScreenCenterPosition(const Position& position, bool showIndicator = false);
+	void SetScreenCenterPosition(double x, double y, int z, bool showIndicator = false);
 	void GoToPreviousCenterPosition();
 	void SetPreviewMode(bool preview);
 	bool IsPreviewMode() const noexcept { return preview_mode; }

@@ -51,6 +51,7 @@
 #include "live_server.h"
 #include "sprite_cache.h"
 #include "filehandle.h"
+#include "camera_path.h"
 
 #include <algorithm>
 
@@ -81,6 +82,8 @@ TilesetCategoryType GetRecentBrushCategory(const Brush* brush)
 		return TILESET_HOUSE;
 	if(brush->isWaypoint())
 		return TILESET_WAYPOINT;
+	if(brush->isCameraPath())
+		return TILESET_CAMERA_PATH;
 	if(brush->isTerrain() || brush->isGround() || brush->isWall() || brush->isDoor() || brush->isOptionalBorder() ||
 		brush->isFlag() || brush->isCarpet() || brush->isTable() || brush->isEraser())
 		return TILESET_TERRAIN;
@@ -110,6 +113,7 @@ GUI::GUI() :
 	house_brush(nullptr),
 	house_exit_brush(nullptr),
 	waypoint_brush(nullptr),
+	camera_path_brush(nullptr),
 	optional_brush(nullptr),
 	eraser(nullptr),
 	normal_door_brush(nullptr),
@@ -575,6 +579,7 @@ bool GUI::ReloadBrushes(wxString& error, wxArrayString& warnings)
 	house_brush = nullptr;
 	house_exit_brush = nullptr;
 	waypoint_brush = nullptr;
+	camera_path_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
 	normal_door_brush = nullptr;
@@ -654,6 +659,7 @@ void GUI::UnloadVersion()
 	house_brush = nullptr;
 	house_exit_brush = nullptr;
 	waypoint_brush = nullptr;
+	camera_path_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
 	normal_door_brush = nullptr;
@@ -1844,6 +1850,63 @@ void GUI::RefreshView()
 	}
 }
 
+void GUI::ToggleCameraPathPlayback()
+{
+	MapTab* mapTab = GetCurrentMapTab();
+	if(!mapTab) {
+		return;
+	}
+	MapCanvas* canvas = mapTab->GetCanvas();
+	if(canvas) {
+		canvas->ToggleCameraPathPlayback();
+	}
+}
+
+void GUI::AddCameraPathKeyframeAtCursor()
+{
+	MapTab* mapTab = GetCurrentMapTab();
+	if(!mapTab) {
+		return;
+	}
+
+	Editor* editor = mapTab->GetEditor();
+	if(!editor) {
+		return;
+	}
+
+	CameraPaths temp = editor->getMap().camera_paths;
+	CameraPath* path = temp.getActivePath();
+	if(!path) {
+		path = temp.addPath("Path");
+	}
+
+	Position pos = mapTab->GetCanvas()->GetCursorPosition();
+	if(!pos.isValid()) {
+		pos = mapTab->GetScreenCenterPosition();
+	}
+	if(!pos.isValid()) {
+		return;
+	}
+
+	CameraKeyframe key;
+	key.pos = pos;
+	key.duration = 1.0;
+	key.speed = 0.0;
+	key.zoom = GetCurrentZoom();
+
+	int insertIndex = static_cast<int>(path->keyframes.size());
+	int activeIndex = temp.getActiveKeyframe();
+	if(activeIndex >= 0 && activeIndex < static_cast<int>(path->keyframes.size())) {
+		insertIndex = activeIndex + 1;
+	}
+	path->keyframes.insert(path->keyframes.begin() + insertIndex, key);
+	temp.setActiveKeyframe(insertIndex);
+
+	editor->ApplyCameraPathsSnapshot(temp.snapshot(), ACTION_DRAW);
+	editor->resetActionsTimer();
+	editor->updateActions();
+}
+
 void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */ )
 {
 	progressText = message;
@@ -2285,6 +2348,50 @@ void GUI::SwitchMode()
 	} else {
 		SetDrawingMode();
 	}
+}
+
+void GUI::BeginRectanglePick(std::function<void(const Position&, const Position&)> onComplete,
+                             std::function<void()> onCancel)
+{
+	rect_pick.active = true;
+	rect_pick.hasFirst = false;
+	rect_pick.onComplete = std::move(onComplete);
+	rect_pick.onCancel = std::move(onCancel);
+	SetStatusText("Select first corner on the map (Esc cancels).");
+}
+
+void GUI::CancelRectanglePick()
+{
+	if(!rect_pick.active) {
+		return;
+	}
+	if(rect_pick.onCancel) {
+		rect_pick.onCancel();
+	}
+	rect_pick = RectanglePickState();
+	SetStatusText("Rectangle selection cancelled.");
+}
+
+bool GUI::HandleRectanglePickClick(const Position& pos)
+{
+	if(!rect_pick.active) {
+		return false;
+	}
+	if(!rect_pick.hasFirst) {
+		rect_pick.first = pos;
+		rect_pick.hasFirst = true;
+		SetStatusText("Select second corner on the map.");
+		return true;
+	}
+
+	Position first = rect_pick.first;
+	auto onComplete = rect_pick.onComplete;
+	rect_pick = RectanglePickState();
+	if(onComplete) {
+		onComplete(first, pos);
+	}
+	SetStatusText("Rectangle selected.");
+	return true;
 }
 
 void GUI::SetSelectionMode()

@@ -29,6 +29,7 @@
 #include "table_brush.h"
 #include "wall_brush.h"
 #include "waypoint_brush.h"
+#include "camera_path_brush.h"
 
 #include "settings.h"
 
@@ -81,6 +82,7 @@ void Brushes::init()
 	addBrush(g_gui.house_brush = newd HouseBrush());
 	addBrush(g_gui.house_exit_brush = newd HouseExitBrush());
 	addBrush(g_gui.waypoint_brush = newd WaypointBrush());
+	addBrush(g_gui.camera_path_brush = newd CameraPathBrush());
 
 	addBrush(g_gui.pz_brush = newd FlagBrush(TILESTATE_PROTECTIONZONE));
 	addBrush(g_gui.rook_brush = newd FlagBrush(TILESTATE_NOPVP));

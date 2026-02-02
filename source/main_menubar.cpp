@@ -295,7 +295,10 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SHOW_WALL_BORDERS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_MOUNTAIN_OVERLAY, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_STAIR_DIRECTION, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CAMERA_PATHS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_ONLY_GROUNDS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(CAMERA_PLAY_PAUSE, wxITEM_NORMAL, OnCameraPlayPause);
+	MAKE_ACTION(CAMERA_ADD_KEYFRAME, wxITEM_NORMAL, OnCameraAddKeyframe);
 
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
@@ -320,6 +323,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SELECT_CREATURE, wxITEM_NORMAL, OnSelectCreaturePalette);
 	MAKE_ACTION(SELECT_HOUSE, wxITEM_NORMAL, OnSelectHousePalette);
 	MAKE_ACTION(SELECT_WAYPOINT, wxITEM_NORMAL, OnSelectWaypointPalette);
+	MAKE_ACTION(SELECT_CAMERA_PATH, wxITEM_NORMAL, OnSelectCameraPathPalette);
 	MAKE_ACTION(SELECT_RAW, wxITEM_NORMAL, OnSelectRawPalette);
 
 	MAKE_ACTION(FLOOR_0, wxITEM_RADIO, OnChangeFloor);
@@ -561,7 +565,11 @@ void MainMenuBar::Update()
 	EnableItem(SELECT_HOUSE, loaded);
 	EnableItem(SELECT_CREATURE, loaded);
 	EnableItem(SELECT_WAYPOINT, loaded);
+	EnableItem(SELECT_CAMERA_PATH, loaded);
 	EnableItem(SELECT_RAW, loaded);
+
+	EnableItem(CAMERA_PLAY_PAUSE, has_map);
+	EnableItem(CAMERA_ADD_KEYFRAME, has_map);
 
 	EnableItem(LIVE_START, is_local);
 	EnableItem(LIVE_JOIN, loaded);
@@ -702,6 +710,7 @@ void MainMenuBar::UpdateIndicatorsMenu()
 	CheckItem(SHOW_WALL_BORDERS, g_settings.getBoolean(Config::SHOW_WALL_BORDERS));
 	CheckItem(SHOW_MOUNTAIN_OVERLAY, g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY));
 	CheckItem(SHOW_STAIR_DIRECTION, g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION));
+	CheckItem(SHOW_CAMERA_PATHS, g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
 }
 
 bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& error)
@@ -2571,6 +2580,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 	g_settings.setInteger(Config::SHOW_WALL_BORDERS, IsItemChecked(MenuBar::SHOW_WALL_BORDERS));
 	g_settings.setInteger(Config::SHOW_MOUNTAIN_OVERLAY, IsItemChecked(MenuBar::SHOW_MOUNTAIN_OVERLAY));
 	g_settings.setInteger(Config::SHOW_STAIR_DIRECTION, IsItemChecked(MenuBar::SHOW_STAIR_DIRECTION));
+	g_settings.setInteger(Config::SHOW_CAMERA_PATHS, IsItemChecked(MenuBar::SHOW_CAMERA_PATHS));
 	g_settings.setInteger(Config::SHOW_ONLY_GROUNDS, IsItemChecked(MenuBar::SHOW_ONLY_GROUNDS));
 
 	g_gui.RefreshView();
@@ -2707,9 +2717,24 @@ void MainMenuBar::OnSelectWaypointPalette(wxCommandEvent& WXUNUSED(event))
 	g_gui.SelectPalettePage(TILESET_WAYPOINT);
 }
 
+void MainMenuBar::OnSelectCameraPathPalette(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.SelectPalettePage(TILESET_CAMERA_PATH);
+}
+
 void MainMenuBar::OnSelectRawPalette(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.SelectPalettePage(TILESET_RAW);
+}
+
+void MainMenuBar::OnCameraPlayPause(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.ToggleCameraPathPlayback();
+}
+
+void MainMenuBar::OnCameraAddKeyframe(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.AddCameraPathKeyframeAtCursor();
 }
 
 void MainMenuBar::OnStartLive(wxCommandEvent& event)

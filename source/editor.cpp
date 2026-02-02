@@ -255,6 +255,9 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 			}
 		}
 		*/
+		if(success) {
+			map.camera_paths.loadFromFile(fn);
+		}
 	}
 }
 
@@ -504,6 +507,9 @@ void Editor::saveMap(FileName filename, bool showdialog)
 		if(!success)
 			return;
 	}
+
+	// Save camera paths sidecar
+	map.camera_paths.saveToFile(wxFileName(wxstr(savefile)));
 
 	// Move to permanent backup
 	if(!save_as && g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP)) {
@@ -1402,6 +1408,19 @@ void Editor::drawGroundSingleTile(const Position& position)
 	addBatch(batch, 2);
 }
 
+void Editor::ApplyCameraPathsSnapshot(const CameraPathsSnapshot& snapshot, ActionIdentifier actionType)
+{
+	if(!CanEdit()) {
+		return;
+	}
+
+	BatchAction* batch = actionQueue->createBatch(actionType);
+	Action* action = actionQueue->createAction(batch);
+	action->addChange(Change::Create(snapshot));
+	batch->addAndCommitAction(action);
+	addBatch(batch, 2);
+}
+
 void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 {
 	if(!CanEdit()) {
@@ -1527,6 +1546,62 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 		action->addChange(Change::Create(waypoint, offset));
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);
+	} else if(brush->isCameraPath()) {
+		if(!dodraw) {
+			CameraPaths temp = map.camera_paths;
+			CameraPath* path = temp.getActivePath();
+			if(!path) {
+				return;
+			}
+			int index = temp.getActiveKeyframe();
+			if(index < 0 || index >= static_cast<int>(path->keyframes.size())) {
+				return;
+			}
+			path->keyframes.erase(path->keyframes.begin() + index);
+			if(index >= static_cast<int>(path->keyframes.size())) {
+				index = static_cast<int>(path->keyframes.size()) - 1;
+			}
+			temp.setActiveKeyframe(index);
+			ApplyCameraPathsSnapshot(temp.snapshot(), ACTION_DRAW);
+			return;
+		}
+
+		CameraPaths temp = map.camera_paths;
+		CameraPath* path = temp.getActivePath();
+		if(!path) {
+			path = temp.addPath("Path");
+		}
+
+		const int activeIndex = temp.getActiveKeyframe();
+		const bool canMove = activeIndex >= 0 && activeIndex < static_cast<int>(path->keyframes.size());
+		const bool moveExisting = canMove && !alt;
+
+		if(moveExisting) {
+			CameraKeyframe& key = path->keyframes[activeIndex];
+			if(key.pos == offset) {
+				return;
+			}
+			key.pos = offset;
+			ApplyCameraPathsSnapshot(temp.snapshot(), ACTION_DRAW);
+			return;
+		}
+
+		CameraKeyframe key;
+		key.pos = offset;
+		key.zoom = g_gui.GetCurrentZoom();
+		key.duration = 1.0;
+		key.speed = 0.0;
+
+		int insertIndex = static_cast<int>(path->keyframes.size());
+		if(canMove) {
+			insertIndex = activeIndex + 1;
+		}
+		if(insertIndex < 0 || insertIndex > static_cast<int>(path->keyframes.size())) {
+			insertIndex = static_cast<int>(path->keyframes.size());
+		}
+		path->keyframes.insert(path->keyframes.begin() + insertIndex, key);
+		temp.setActiveKeyframe(insertIndex);
+		ApplyCameraPathsSnapshot(temp.snapshot(), ACTION_DRAW);
 	} else if(brush->isWall()) {
 		BatchAction* batch = actionQueue->createBatch(dodraw ? ACTION_DRAW : ACTION_ERASE);
 		Action* action = actionQueue->createAction(batch);

@@ -55,6 +55,9 @@
     <ClInclude Include="..\..\source\action.h">
       <Filter>editor</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\camera_path.h">
+      <Filter>editor</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\application.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -62,6 +65,9 @@
       <Filter>objects</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\brush.h">
+      <Filter>editor\brushes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\camera_path_brush.h">
       <Filter>editor\brushes</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\brush_enums.h">
@@ -210,6 +216,9 @@
       <Filter>gui\palette</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\palette_common.h">
+      <Filter>gui\palette</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\palette_camera_paths.h">
       <Filter>gui\palette</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\palette_creature.h">
@@ -391,6 +400,9 @@
     <ClCompile Include="..\..\source\action.cpp">
       <Filter>editor</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\camera_path.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\copybuffer.cpp">
       <Filter>editor</Filter>
     </ClCompile>
@@ -562,6 +574,9 @@
     <ClCompile Include="..\..\source\palette_common.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\palette_camera_paths.cpp">
+      <Filter>gui\palette</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\palette_creature.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
@@ -578,6 +593,9 @@
       <Filter>gui</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\brush.cpp">
+      <Filter>editor\brushes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\camera_path_brush.cpp">
       <Filter>editor\brushes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\waypoint_brush.cpp">

@@ -22,6 +22,7 @@
 #include "tile.h"
 #include "iomap.h"
 #include "map.h"
+#include "camera_path.h"
 
 #include "action.h"
 #include "selection.h"
@@ -131,6 +132,7 @@ public: // Functions
 	void undraw(const PositionVector& posvec, bool alt);
 	void undraw(const PositionVector& todraw, PositionVector& toborder, bool alt);
 	void drawGroundSingleTile(const Position& position);
+	void ApplyCameraPathsSnapshot(const CameraPathsSnapshot& snapshot, ActionIdentifier actionType = ACTION_DRAW);
 
 protected:
 	void drawInternal(const Position offset, bool alt, bool dodraw);

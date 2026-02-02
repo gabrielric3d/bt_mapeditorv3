@@ -22,6 +22,7 @@
 #include <memory>
 #include <vector>
 #include <set>
+#include <string>
 
 #include <wx/filename.h>
 
@@ -68,6 +69,7 @@ public:
 	void OnMouseAux2Click(wxMouseEvent& event);
 	void OnMouseAux2Release(wxMouseEvent& event);
 	void OnMouseAuxEvent(wxMouseEvent& event);
+	void OnCameraPathTimer(wxTimerEvent& event);
 	bool HandleMouseKeyboardHotkey(wxKeyEvent& event, bool keyDown);
 	void DispatchKeyboardMouseAction(MouseActionID action, bool keyDown, const wxKeyEvent& source);
 
@@ -151,6 +153,8 @@ public:
 	bool StartGifRecording(const wxFileName& path, int fps);
 	void StopGifRecording(bool keepFile, bool notify = true);
 	bool IsGifRecording() const noexcept { return gif_recording; }
+	void ToggleCameraPathPlayback();
+	bool IsCameraPathPlaying() const noexcept { return camera_path_playing; }
 
 protected:
 	void getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill = false);
@@ -223,6 +227,11 @@ private:
 	wxFileName gif_output_path;
 	std::chrono::steady_clock::time_point gif_next_frame_time;
 	std::chrono::steady_clock::duration gif_frame_interval;
+	wxTimer camera_path_timer;
+	bool camera_path_playing;
+	std::string camera_path_name;
+	double camera_path_time;
+	std::chrono::steady_clock::time_point camera_path_last_tick;
 
 	int drag_start_x;
 	int drag_start_y;

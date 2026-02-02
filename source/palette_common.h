@@ -133,8 +133,11 @@ public:
 	void OnClickBrushSize6(wxCommandEvent& event) { OnClickBrushSize(6); }
 	void OnClickBrushSize8(wxCommandEvent& event) { OnClickBrushSize(8); }
 	void OnClickBrushSize11(wxCommandEvent& event){ OnClickBrushSize(11); }
+	void OnBrushSizeSlider(wxCommandEvent& event);
 
 protected:
+	void UpdateBrushSizeLabel(int size);
+
 	bool loaded;
 	bool large_icons;
 
@@ -148,6 +151,9 @@ protected:
 	DCButton* brushsize6Button;
 	DCButton* brushsize8Button;
 	DCButton* brushsize11Button;
+	wxSlider* brushsizeSlider;
+	wxStaticText* brushsizeLabel;
+	int brushsizeSliderMax;
 
 	DECLARE_EVENT_TABLE()
 };

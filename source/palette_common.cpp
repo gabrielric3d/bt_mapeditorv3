@@ -106,6 +106,7 @@ wxString PalettePanel::GetName() const
 		case TILESET_HOUSE: return "House Palette";
 		case TILESET_RAW: return "RAW Palette";
 		case TILESET_WAYPOINT: return "Waypoint Palette";
+		case TILESET_CAMERA_PATH: return "Camera Path Palette";
 		case TILESET_UNKNOWN: return "Unknown";
 	}
 	return wxEmptyString;
@@ -191,6 +192,7 @@ BEGIN_EVENT_TABLE(BrushSizePanel, wxPanel)
 	EVT_TOGGLEBUTTON(PALETTE_TERRAIN_BRUSHSIZE_6, BrushSizePanel::OnClickBrushSize6)
 	EVT_TOGGLEBUTTON(PALETTE_TERRAIN_BRUSHSIZE_8, BrushSizePanel::OnClickBrushSize8)
 	EVT_TOGGLEBUTTON(PALETTE_TERRAIN_BRUSHSIZE_11,BrushSizePanel::OnClickBrushSize11)
+	EVT_SLIDER(PALETTE_TERRAIN_BRUSHSIZE_SLIDER, BrushSizePanel::OnBrushSizeSlider)
 END_EVENT_TABLE()
 
 BrushSizePanel::BrushSizePanel(wxWindow* parent) :
@@ -205,7 +207,10 @@ BrushSizePanel::BrushSizePanel(wxWindow* parent) :
 	brushsize4Button(nullptr),
 	brushsize6Button(nullptr),
 	brushsize8Button(nullptr),
-	brushsize11Button(nullptr)
+	brushsize11Button(nullptr),
+	brushsizeSlider(nullptr),
+	brushsizeLabel(nullptr),
+	brushsizeSliderMax(0)
 {
 	////
 }
@@ -225,6 +230,9 @@ void BrushSizePanel::InvalidateContents()
 		brushsize6Button =
 		brushsize8Button =
 		brushsize11Button = nullptr;
+		brushsizeSlider = nullptr;
+		brushsizeLabel = nullptr;
+		brushsizeSliderMax = 0;
 
 		loaded = false;
 	}
@@ -292,6 +300,22 @@ void BrushSizePanel::LoadAllContents()
 		brushsize11Button->SetToolTip("Brush size 12");
 
 	size_sizer->Add(sub_sizer);
+
+	const int slider_max = std::max(11, g_settings.getInteger(Config::MAX_SPAWN_RADIUS));
+	brushsizeSliderMax = std::max(slider_max, g_gui.GetBrushSize());
+	const int initial_size = std::min(std::max(g_gui.GetBrushSize(), 0), brushsizeSliderMax);
+
+	wxSizer* slider_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	slider_sizer->Add(newd wxStaticText(this, wxID_ANY, "Size"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	brushsizeSlider = newd wxSlider(this, PALETTE_TERRAIN_BRUSHSIZE_SLIDER, initial_size, 0, brushsizeSliderMax, wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+	brushsizeSlider->SetToolTip("Adjust brush size in real time");
+	slider_sizer->Add(brushsizeSlider, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	brushsizeLabel = newd wxStaticText(this, wxID_ANY, "");
+	brushsizeLabel->SetMinSize(FROM_DIP(this, wxSize(52, -1)));
+	slider_sizer->Add(brushsizeLabel, 0, wxALIGN_CENTER_VERTICAL);
+	size_sizer->Add(slider_sizer, 0, wxEXPAND | wxTOP, 4);
+	UpdateBrushSizeLabel(initial_size);
+
 	SetSizerAndFit(size_sizer);
 
 	loaded = true;
@@ -356,8 +380,17 @@ void BrushSizePanel::OnUpdateBrushSize(BrushShape shape, int size)
 		case 6:  brushsize6Button->SetValue(true);  break;
 		case 8:  brushsize8Button->SetValue(true);  break;
 		case 11: brushsize11Button->SetValue(true); break;
-		default: brushsize0Button->SetValue(true);  break;
+		default: break;
 	}
+
+	if(brushsizeSlider) {
+		if(size > brushsizeSliderMax) {
+			brushsizeSliderMax = size;
+			brushsizeSlider->SetMax(brushsizeSliderMax);
+		}
+		brushsizeSlider->SetValue(std::max(0, std::min(size, brushsizeSliderMax)));
+	}
+	UpdateBrushSizeLabel(size);
 }
 
 void BrushSizePanel::OnClickCircleBrush(wxCommandEvent &event)
@@ -376,6 +409,23 @@ void BrushSizePanel::OnClickBrushSize(int which)
 {
 	g_gui.ActivatePalette(GetParentPalette());
 	g_gui.SetBrushSize(which);
+}
+
+void BrushSizePanel::OnBrushSizeSlider(wxCommandEvent& event)
+{
+	g_gui.ActivatePalette(GetParentPalette());
+	g_gui.SetBrushSize(event.GetInt());
+	g_gui.RefreshView();
+}
+
+void BrushSizePanel::UpdateBrushSizeLabel(int size)
+{
+	if(!brushsizeLabel) {
+		return;
+	}
+
+	const int diameter = std::max(1, size * 2 + 1);
+	brushsizeLabel->SetLabel(wxString::Format("%dx%d", diameter, diameter));
 }
 
 // ============================================================================

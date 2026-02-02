@@ -96,6 +96,7 @@ public:
 	bool show_wall_borders;
 	bool show_mountain_overlay;
 	bool show_stair_direction;
+	bool show_camera_paths;
 	bool show_only_grounds;
 	bool hide_items_when_zoomed;
 	bool full_detail_zoom_out;
@@ -175,6 +176,7 @@ public:
 	void DrawWallBorderLines();
 	void DrawMountainOverlay();
 	void DrawStairDirections();
+	void DrawCameraPaths();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 

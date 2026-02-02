@@ -9,6 +9,8 @@ ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
 ${CMAKE_CURRENT_LIST_DIR}/basemap.h
 ${CMAKE_CURRENT_LIST_DIR}/border_editor_window.h
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
+${CMAKE_CURRENT_LIST_DIR}/camera_path.h
+${CMAKE_CURRENT_LIST_DIR}/camera_path_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
@@ -83,6 +85,7 @@ ${CMAKE_CURRENT_LIST_DIR}/outfit.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_brushlist.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.h
+${CMAKE_CURRENT_LIST_DIR}/palette_camera_paths.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.h
 ${CMAKE_CURRENT_LIST_DIR}/palette_window.h
@@ -131,6 +134,8 @@ ${CMAKE_CURRENT_LIST_DIR}/border_editor_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tables.cpp
 ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/camera_path.cpp
+${CMAKE_CURRENT_LIST_DIR}/camera_path_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
@@ -197,6 +202,7 @@ ${CMAKE_CURRENT_LIST_DIR}/numbertextctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/old_properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_brushlist.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_common.cpp
+${CMAKE_CURRENT_LIST_DIR}/palette_camera_paths.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_creature.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_house.cpp
 ${CMAKE_CURRENT_LIST_DIR}/palette_waypoints.cpp

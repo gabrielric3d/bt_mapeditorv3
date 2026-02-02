@@ -135,7 +135,10 @@ namespace MenuBar
 		SHOW_WALL_BORDERS,
 		SHOW_MOUNTAIN_OVERLAY,
 		SHOW_STAIR_DIRECTION,
+		SHOW_CAMERA_PATHS,
 		SHOW_ONLY_GROUNDS,
+		CAMERA_PLAY_PAUSE,
+		CAMERA_ADD_KEYFRAME,
 		WIN_MINIMAP,
 		WIN_ACTIONS_HISTORY,
 		WIN_RECENT_BRUSHES,
@@ -155,6 +158,7 @@ namespace MenuBar
 		SELECT_CREATURE,
 		SELECT_HOUSE,
 		SELECT_WAYPOINT,
+		SELECT_CAMERA_PATH,
 		SELECT_RAW,
 		FLOOR_0,
 		FLOOR_1,
@@ -332,7 +336,11 @@ public:
 	void OnSelectHousePalette(wxCommandEvent& event);
 	void OnSelectCreaturePalette(wxCommandEvent& event);
 	void OnSelectWaypointPalette(wxCommandEvent& event);
+	void OnSelectCameraPathPalette(wxCommandEvent& event);
 	void OnSelectRawPalette(wxCommandEvent& event);
+
+	void OnCameraPlayPause(wxCommandEvent& event);
+	void OnCameraAddKeyframe(wxCommandEvent& event);
 
 	// Floor menu
 	void OnChangeFloor(wxCommandEvent& event);

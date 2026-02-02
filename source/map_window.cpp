@@ -213,6 +213,40 @@ void MapWindow::SetScreenCenterPosition(const Position& position, bool showIndic
 	}
 }
 
+void MapWindow::SetScreenCenterPosition(double x, double y, int z, bool showIndicator)
+{
+	if(z < 0 || z > rme::MapMaxLayer) {
+		return;
+	}
+
+	const int pixel_x = static_cast<int>(std::round(x * rme::TileSize));
+	const int pixel_y = static_cast<int>(std::round(y * rme::TileSize));
+	int scroll_x = pixel_x;
+	int scroll_y = pixel_y;
+
+	if(z < rme::MapGroundLayer) {
+		const int offset = (rme::MapGroundLayer - z) * rme::TileSize;
+		scroll_x -= offset;
+		scroll_y -= offset;
+	}
+
+	const Position& center = GetScreenCenterPosition();
+	if(previous_position != center) {
+		previous_position.x = center.x;
+		previous_position.y = center.y;
+		previous_position.z = center.z;
+	}
+
+	Scroll(scroll_x, scroll_y, true);
+	canvas->ChangeFloor(z);
+
+	if(showIndicator) {
+		const Position indicator_pos(static_cast<int>(std::round(x)), static_cast<int>(std::round(y)), z);
+		canvas->ShowPositionIndicator(indicator_pos);
+		Refresh();
+	}
+}
+
 void MapWindow::GoToPreviousCenterPosition()
 {
 	SetScreenCenterPosition(previous_position, true);

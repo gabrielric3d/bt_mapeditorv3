@@ -122,6 +122,10 @@
         <item name="$Take Screenshot" hotkey="F10" action="TAKE_SCREENSHOT" help="Saves the current view to the disk."/>
         <item name="$Take Area Screenshot" hotkey="Ctrl+F10" action="TAKE_REGION_SCREENSHOT" help="Stitches multiple views to capture the selected area."/>
         <item name="$Record GIF" hotkey="F12" action="RECORD_GIF" help="Start/stop recording the current view as an animated GIF."/>
+        <menu name="Camera Path">
+            <item name="$Play/Pause" hotkey="Ctrl+Space" action="CAMERA_PLAY_PAUSE" help="Play/pause the active camera path."/>
+            <item name="$Add Keyframe" hotkey="Ctrl+Shift+K" action="CAMERA_ADD_KEYFRAME" help="Add a camera keyframe at the cursor position."/>
+        </menu>
         <separator/>
         <item name="Zoom In" hotkey="Ctrl++" action="ZOOM_IN" help="Increase the zoom."/>
         <item name="Zoom Out" hotkey="Ctrl+-" action="ZOOM_OUT" help="Decrease the zoom."/>
@@ -161,6 +165,7 @@
             <item name="Show Wall $Borders" action="SHOW_WALL_BORDERS" help="Show border lines on walls and terrain edges."/>
             <item name="Show $Mountain Overlay" action="SHOW_MOUNTAIN_OVERLAY" help="Show transparent overlay on mountain tiles."/>
             <item name="Show $Stair Direction" action="SHOW_STAIR_DIRECTION" help="Show directional arrows on stairs and ramps."/>
+            <item name="Show Camera $Paths" action="SHOW_CAMERA_PATHS" help="Show camera path overlays."/>
         </menu>
     </menu>
     <menu name="$Window">
@@ -180,6 +185,7 @@
         <item name="$House Palette" hotkey="H" action="SELECT_HOUSE" help="Select the House palette."/>
         <item name="$Creature Palette" hotkey="C" action="SELECT_CREATURE" help="Select the Creature palette."/>
         <item name="$Waypoint Palette" hotkey="W" action="SELECT_WAYPOINT" help="Select the Waypoint palette."/>
+        <item name="Camera $Path Palette" action="SELECT_CAMERA_PATH" help="Select the Camera Path palette."/>
         <item name="$RAW Palette" hotkey="R" action="SELECT_RAW" help="Select the RAW palette."/>
     </menu>
     <!--

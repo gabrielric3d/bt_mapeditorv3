@@ -33,6 +33,7 @@
 #include "live_socket.h"
 #include "graphics.h"
 #include "complexitem.h"
+#include "camera_path.h"
 
 #include "doodad_brush.h"
 #include "creature_brush.h"
@@ -87,6 +88,7 @@ void DrawingOptions::SetDefault()
 	show_pickupables = false;
 	show_moveables = false;
 	show_only_grounds = false;
+	show_camera_paths = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
 	full_detail_zoom_out = false;
@@ -132,6 +134,7 @@ void DrawingOptions::SetIngame()
 	show_pickupables = false;
 	show_moveables = false;
 	show_only_grounds = false;
+	show_camera_paths = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
 	full_detail_zoom_out = false;
@@ -176,6 +179,7 @@ void DrawingOptions::LoadFromSettings()
 	show_wall_borders = g_settings.getBoolean(Config::SHOW_WALL_BORDERS);
 	show_mountain_overlay = g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY);
 	show_stair_direction = g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION);
+	show_camera_paths = g_settings.getBoolean(Config::SHOW_CAMERA_PATHS);
 	show_only_grounds = g_settings.getBoolean(Config::SHOW_ONLY_GROUNDS);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
@@ -214,6 +218,16 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr uint8_t kDayBrightness = 240;
 constexpr uint8_t kNightBrightness = 35;
+
+double CatmullRomValue(double p0, double p1, double p2, double p3, double t)
+{
+	const double t2 = t * t;
+	const double t3 = t2 * t;
+	return 0.5 * ((2.0 * p1) +
+		(-p0 + p2) * t +
+		(2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
+		(-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3);
+}
 
 uint8_t CalculateAmbientBrightness(int hour)
 {
@@ -364,6 +378,8 @@ void MapDrawer::Draw()
 	// Skip grid in high LOD levels
 	if(options.show_grid && (zoom <= 10.f || options.full_detail_zoom_out) && lod_level < 3)
 		DrawGrid();
+	if(options.show_camera_paths)
+		DrawCameraPaths();
 
 	// Skip lights in medium/high LOD levels
 	if(options.isDrawLight() && lod_level < 2)
@@ -724,6 +740,122 @@ void MapDrawer::DrawGrid()
 	}
 
 	glEnd();
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawCameraPaths()
+{
+	if(options.ingame) {
+		return;
+	}
+
+	const CameraPaths& cameraPaths = editor.getMap().camera_paths;
+	const std::vector<CameraPath>& paths = cameraPaths.getPaths();
+	if(paths.empty()) {
+		return;
+	}
+
+	const std::string& activePathName = cameraPaths.getActivePathName();
+	const int activeKeyframe = cameraPaths.getActiveKeyframe();
+
+	auto toScreen = [&](double mapX, double mapY, int mapZ, float& sx, float& sy) {
+		int offset = 0;
+		if(mapZ <= rme::MapGroundLayer) {
+			offset = (rme::MapGroundLayer - mapZ) * rme::TileSize;
+		} else {
+			offset = rme::TileSize * (floor - mapZ);
+		}
+		sx = static_cast<float>((mapX * rme::TileSize) - view_scroll_x - offset);
+		sy = static_cast<float>((mapY * rme::TileSize) - view_scroll_y - offset);
+	};
+
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_LINE_SMOOTH);
+
+	for(const CameraPath& path : paths) {
+		if(path.keyframes.size() < 2) {
+			continue;
+		}
+
+		const bool isActive = path.name == activePathName;
+		const uint8_t alpha = isActive ? 220 : 120;
+		glColor4ub(path.color.r, path.color.g, path.color.b, alpha);
+		glLineWidth(isActive ? 2.0f : 1.0f);
+
+		const size_t count = path.keyframes.size();
+		const size_t segments = path.loop ? count : (count - 1);
+
+		for(size_t seg = 0; seg < segments; ++seg) {
+			const size_t next = path.loop ? (seg + 1) % count : (seg + 1);
+			const CameraKeyframe& a = path.keyframes[seg];
+			const CameraKeyframe& b = path.keyframes[next];
+			if(a.pos.z != floor || b.pos.z != floor) {
+				continue;
+			}
+
+			const size_t i0 = (seg == 0 && !path.loop) ? seg : (seg + count - 1) % count;
+			const size_t i1 = seg;
+			const size_t i2 = next;
+			const size_t i3 = (seg + 2 >= count && !path.loop) ? (count - 1) : (seg + 2) % count;
+
+			const CameraKeyframe& p0 = path.keyframes[i0];
+			const CameraKeyframe& p1 = path.keyframes[i1];
+			const CameraKeyframe& p2 = path.keyframes[i2];
+			const CameraKeyframe& p3 = path.keyframes[i3];
+
+			const int steps = 12;
+			glBegin(GL_LINE_STRIP);
+			for(int s = 0; s <= steps; ++s) {
+				double t = static_cast<double>(s) / static_cast<double>(steps);
+				double x = CatmullRomValue(p0.pos.x, p1.pos.x, p2.pos.x, p3.pos.x, t);
+				double y = CatmullRomValue(p0.pos.y, p1.pos.y, p2.pos.y, p3.pos.y, t);
+				float sx, sy;
+				toScreen(x, y, p1.pos.z, sx, sy);
+				glVertex2f(sx + rme::TileSize * 0.5f, sy + rme::TileSize * 0.5f);
+			}
+			glEnd();
+		}
+	}
+
+	glLineWidth(1.0f);
+
+	for(const CameraPath& path : paths) {
+		const bool isActive = path.name == activePathName;
+		const uint8_t alpha = isActive ? 230 : 160;
+		const wxColor fill(path.color.r, path.color.g, path.color.b, alpha);
+		const wxColor outline(0, 0, 0, 200);
+		const wxColor activeOutline(255, 255, 255, 230);
+
+		for(size_t i = 0; i < path.keyframes.size(); ++i) {
+			const CameraKeyframe& key = path.keyframes[i];
+			if(key.pos.z != floor) {
+				continue;
+			}
+
+			float sx, sy;
+			toScreen(key.pos.x, key.pos.y, key.pos.z, sx, sy);
+			const float centerX = sx + rme::TileSize * 0.5f;
+			const float centerY = sy + rme::TileSize * 0.5f;
+			const int size = isActive && static_cast<int>(i) == activeKeyframe ? 10 : 8;
+			const int half = size / 2;
+
+			drawFilledRect(static_cast<int>(centerX) - half, static_cast<int>(centerY) - half, size, size, fill);
+			drawRect(static_cast<int>(centerX) - half, static_cast<int>(centerY) - half, size, size,
+				(isActive && static_cast<int>(i) == activeKeyframe) ? activeOutline : outline, 1);
+
+			const std::string label = i2s(static_cast<int>(i + 1));
+			int textWidth = 0;
+			for(char c : label) {
+				textWidth += glutBitmapWidth(GLUT_BITMAP_8_BY_13, c);
+			}
+			glColor4ub(0, 0, 0, 220);
+			glRasterPos2f(centerX - (textWidth * 0.5f), centerY - 6.0f);
+			for(char c : label) {
+				glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
+			}
+		}
+	}
+
 	glEnable(GL_TEXTURE_2D);
 }
 

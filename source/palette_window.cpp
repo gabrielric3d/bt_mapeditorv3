@@ -27,6 +27,7 @@
 #include "palette_house.h"
 #include "palette_creature.h"
 #include "palette_waypoints.h"
+#include "palette_camera_paths.h"
 
 #include "house_brush.h"
 #include "map.h"
@@ -51,6 +52,7 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	creature_palette(nullptr),
 	house_palette(nullptr),
 	waypoint_palette(nullptr),
+	camera_path_palette(nullptr),
 	raw_palette(nullptr)
 {
 	SetMinSize(wxSize(225, 250));
@@ -72,6 +74,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	waypoint_palette = static_cast<WaypointPalettePanel*>(CreateWaypointPalette(choicebook, tilesets));
 	choicebook->AddPage(waypoint_palette, waypoint_palette->GetName());
+
+	camera_path_palette = static_cast<CameraPathPalettePanel*>(CreateCameraPathPalette(choicebook, tilesets));
+	choicebook->AddPage(camera_path_palette, camera_path_palette->GetName());
 
 	creature_palette = static_cast<CreaturePalettePanel*>(CreateCreaturePalette(choicebook, tilesets));
 	choicebook->AddPage(creature_palette, creature_palette->GetName());
@@ -153,6 +158,12 @@ PalettePanel* PaletteWindow::CreateWaypointPalette(wxWindow *parent, const Tiles
 	return panel;
 }
 
+PalettePanel* PaletteWindow::CreateCameraPathPalette(wxWindow *parent, const TilesetContainer& tilesets)
+{
+	CameraPathPalettePanel* panel = newd CameraPathPalettePanel(parent);
+	return panel;
+}
+
 PalettePanel* PaletteWindow::CreateCreaturePalette(wxWindow *parent, const TilesetContainer& tilesets)
 {
 	CreaturePalettePanel* panel = newd CreaturePalettePanel(parent);
@@ -187,6 +198,9 @@ void PaletteWindow::ReloadSettings(Map* map)
 	}
 	if(waypoint_palette) {
 		waypoint_palette->SetMap(map);
+	}
+	if(camera_path_palette) {
+		camera_path_palette->SetMap(map);
 	}
 	if(item_palette) {
 		item_palette->SetListType(wxstr(g_settings.getString(Config::PALETTE_ITEM_STYLE)));
@@ -225,6 +239,9 @@ void PaletteWindow::InvalidateContents()
 	}
 	if(waypoint_palette) {
 		waypoint_palette->OnUpdate();
+	}
+	if(camera_path_palette) {
+		camera_path_palette->OnUpdate();
 	}
 }
 
@@ -400,6 +417,10 @@ void PaletteWindow::OnUpdate(Map* map)
 	if(waypoint_palette) {
 		waypoint_palette->SetMap(map);
 		waypoint_palette->OnUpdate();
+	}
+	if(camera_path_palette) {
+		camera_path_palette->SetMap(map);
+		camera_path_palette->OnUpdate();
 	}
 }
 
