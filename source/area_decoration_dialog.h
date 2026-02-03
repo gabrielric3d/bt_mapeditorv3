@@ -73,7 +73,8 @@ private:
 	wxSpinCtrl* m_toFloorSpin;
 
 	// Floor preview panel
-	wxPanel* m_floorPreviewPanel;
+	wxPanel* m_floorPreviewPanelFrom;
+	wxPanel* m_floorPreviewPanelTo;
 
 	wxListCtrl* m_itemsListCtrl;
 	wxImageList* m_itemsImageList;
@@ -94,7 +95,13 @@ private:
 	wxPanel* m_borderPreviewPanel;
 
 	// Friend floor controls
-	wxSpinCtrl* m_friendFloorSpin;
+	wxRadioButton* m_friendSingleFloorRadio;
+	wxRadioButton* m_friendRangeRadio;
+	wxSpinCtrl* m_friendSingleFloorSpin;
+	wxSpinCtrl* m_friendFromFloorSpin;
+	wxSpinCtrl* m_friendToFloorSpin;
+	wxPanel* m_friendPreviewPanelFrom;
+	wxPanel* m_friendPreviewPanelTo;
 	wxSpinCtrl* m_friendChanceSpin;
 	wxSpinCtrl* m_friendStrengthSpin;
 
@@ -115,6 +122,7 @@ private:
 	void LoadRuleData();
 	void UpdateItemsList();
 	void UpdateFloorPreview();
+	void UpdateFriendPreview();
 	void UpdateBorderPreview();
 	void LoadDoodadList();
 	void UpdateDoodadListDisplay();
@@ -128,6 +136,8 @@ private:
 
 	void OnFloorTypeChanged(wxCommandEvent& event);
 	void OnFloorIdChanged(wxSpinEvent& event);
+	void OnFriendFloorTypeChanged(wxCommandEvent& event);
+	void OnFriendFloorIdChanged(wxSpinEvent& event);
 	void OnAddItem(wxCommandEvent& event);
 	void OnEditItem(wxCommandEvent& event);
 	void OnReplaceClusterFromSelection(wxCommandEvent& event);
@@ -143,6 +153,7 @@ private:
 	void OnPrevPage(wxCommandEvent& event);
 	void OnNextPage(wxCommandEvent& event);
 	void OnPaintFloorPreview(wxPaintEvent& event);
+	void OnPaintFriendPreview(wxPaintEvent& event);
 	void OnPaintBorderPreview(wxPaintEvent& event);
 	void OnBorderItemChanged(wxSpinEvent& event);
 	void OnBrowseBorderItem(wxCommandEvent& event);
@@ -162,6 +173,9 @@ public:
 	virtual ~AreaDecorationDialog();
 	void SetSeedInputValue(uint64_t seed);
 
+	// Update the engine when editor changes (called when dialog is shown again)
+	void UpdateEngine();
+
 private:
 	// UI Controls - Preset Management
 	wxChoice* m_presetChoice;
@@ -175,11 +189,14 @@ private:
 	wxSpinCtrl* m_rectY1Spin;
 	wxSpinCtrl* m_rectX2Spin;
 	wxSpinCtrl* m_rectY2Spin;
-	wxSpinCtrl* m_rectZSpin;
+	wxSpinCtrl* m_rectZ1Spin;
+	wxSpinCtrl* m_rectZ2Spin;
 	wxStaticText* m_zCountText;
+	wxStaticText* m_pickStatusText;
 
 	// UI Controls - Floor Rules Tab
 	wxListCtrl* m_rulesListCtrl;
+	wxImageList* m_rulesImageList;
 
 	// UI Controls - Settings Tab
 	wxSpinCtrl* m_minDistanceSpin;
@@ -235,11 +252,13 @@ private:
 	void OnEditRule(wxCommandEvent& event);
 	void OnRemoveRule(wxCommandEvent& event);
 	void OnRuleDoubleClick(wxListEvent& event);
+	void OnRuleCheckChanged(wxListEvent& event);
 
 	void OnDistributionChanged(wxCommandEvent& event);
 
 	void OnPreview(wxCommandEvent& event);
 	void OnReroll(wxCommandEvent& event);
+	void OnRerollApply(wxCommandEvent& event);
 	void OnApply(wxCommandEvent& event);
 	void OnRevert(wxCommandEvent& event);
 	void OnRemoveLastApply(wxCommandEvent& event);
@@ -247,6 +266,7 @@ private:
 	// Preset event handlers
 	void OnPresetSelected(wxCommandEvent& event);
 	void OnSavePreset(wxCommandEvent& event);
+	void OnRefreshPresets(wxCommandEvent& event);
 	void OnDeletePreset(wxCommandEvent& event);
 	void OnExportPreset(wxCommandEvent& event);
 	void OnImportPreset(wxCommandEvent& event);

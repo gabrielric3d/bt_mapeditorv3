@@ -138,17 +138,27 @@ struct FloorRule {
 
 	// Friend floor - bias placement toward another ground tile (0 = disabled)
 	uint16_t friendFloorId = 0;
+	uint16_t friendFromFloorId = 0;
+	uint16_t friendToFloorId = 0;
 	int friendChance = 0; // 0-100 (%)
 	int friendStrength = 0; // 0-100 (stronger = tighter bias)
 
 	// Placement settings
 	int maxPlacements = -1;  // -1 = unlimited
-	float density = 0.3f;    // 0.0 - 1.0
+	float density = 1.0f;    // 0.0 - 1.0
 	int priority = 0;
 	bool enabled = true;
 
 	bool matchesFloor(uint16_t groundId) const;
 	bool isRangeRule() const { return fromFloorId > 0 && toFloorId > 0; }
+	bool isFriendRange() const { return friendFromFloorId > 0 && friendToFloorId > 0; }
+	bool matchesFriendFloor(uint16_t groundId) const {
+		if (isFriendRange()) {
+			return groundId >= friendFromFloorId && groundId <= friendToFloorId;
+		}
+		return groundId == friendFloorId;
+	}
+	bool hasFriendFloor() const { return (friendFloorId > 0) || isFriendRange(); }
 };
 
 //=============================================================================
@@ -179,6 +189,37 @@ struct DistributionConfig {
 };
 
 //=============================================================================
+// AreaDefinition - Selected region to decorate
+//=============================================================================
+struct AreaDefinition {
+	enum class Type {
+		Rectangle,
+		FloodFill,
+		Selection
+	};
+
+	Type type = Type::Rectangle;
+
+	// For Rectangle
+	Position rectMin;
+	Position rectMax;
+
+	// For FloodFill
+	Position floodOrigin;
+	uint16_t floodTargetGround = 0;
+	int floodMaxRadius = 100;
+
+	std::vector<Position> getAllPositions(Map& map) const;
+	bool contains(const Position& pos) const;
+	void getBounds(Position& outMin, Position& outMax) const;
+
+private:
+	std::vector<Position> getPositionsRectangle() const;
+	std::vector<Position> getPositionsFloodFill(Map& map) const;
+	std::vector<Position> getPositionsFromSelection(Map& map) const;
+};
+
+//=============================================================================
 // DecorationPreset - Complete configuration
 //=============================================================================
 struct DecorationPreset {
@@ -189,8 +230,11 @@ struct DecorationPreset {
 	int maxItemsTotal = -1;
 	bool skipBlockedTiles = true;
 	uint64_t defaultSeed = 0;
+	AreaDefinition area;
+	bool hasArea = false;
 
 	const FloorRule* findRule(uint16_t groundId) const;
+	void getMatchingRules(uint16_t groundId, std::vector<const FloorRule*>& outRules) const;
 	void sortRulesByPriority();
 	bool validate(std::string& errorOut) const;
 
@@ -268,37 +312,6 @@ private:
 };
 
 //=============================================================================
-// AreaDefinition - Selected region to decorate
-//=============================================================================
-struct AreaDefinition {
-	enum class Type {
-		Rectangle,
-		FloodFill,
-		Selection
-	};
-
-	Type type = Type::Rectangle;
-
-	// For Rectangle
-	Position rectMin;
-	Position rectMax;
-
-	// For FloodFill
-	Position floodOrigin;
-	uint16_t floodTargetGround = 0;
-	int floodMaxRadius = 100;
-
-	std::vector<Position> getAllPositions(Map& map) const;
-	bool contains(const Position& pos) const;
-	void getBounds(Position& outMin, Position& outMax) const;
-
-private:
-	std::vector<Position> getPositionsRectangle() const;
-	std::vector<Position> getPositionsFloodFill(Map& map) const;
-	std::vector<Position> getPositionsFromSelection(Map& map) const;
-};
-
-//=============================================================================
 // SpatialHashGrid - For efficient spacing checks
 //=============================================================================
 class SpatialHashGrid {
@@ -355,7 +368,7 @@ private:
 		int height = 0;
 		std::vector<int> distances;
 	};
-	std::unordered_map<uint16_t, std::unordered_map<int, FriendDistanceLayer>> m_friendDistanceCache;
+	std::unordered_map<uint32_t, std::unordered_map<int, FriendDistanceLayer>> m_friendDistanceCache;
 
 	std::mt19937 m_rng;
 	uint64_t m_currentSeed = 0;
@@ -372,7 +385,7 @@ private:
 	bool checkClusterCenterSpacing(const Position& pos, int minDistance) const;
 	void buildFriendDistanceCache(const std::vector<std::pair<Position, uint16_t>>& tiles);
 	float applyFriendBias(const FloorRule* rule, const Position& pos, float baseDensity) const;
-	int getFriendDistance(uint16_t friendFloorId, const Position& pos) const;
+	int getFriendDistance(uint32_t friendKey, const Position& pos) const;
 
 	void generatePureRandom(const std::vector<std::pair<Position, uint16_t>>& tiles);
 	void generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles);

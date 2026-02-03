@@ -96,6 +96,15 @@ const FloorRule* DecorationPreset::findRule(uint16_t groundId) const {
 	return nullptr;
 }
 
+void DecorationPreset::getMatchingRules(uint16_t groundId, std::vector<const FloorRule*>& outRules) const {
+	outRules.clear();
+	for (const auto& rule : floorRules) {
+		if (rule.enabled && rule.matchesFloor(groundId)) {
+			outRules.push_back(&rule);
+		}
+	}
+}
+
 bool DecorationPreset::validate(std::string& errorOut) const {
 	if (floorRules.empty()) {
 		errorOut = "No floor rules defined";
@@ -118,6 +127,10 @@ bool DecorationPreset::validate(std::string& errorOut) const {
 		}
 		if (rule.friendStrength < 0 || rule.friendStrength > 100) {
 			errorOut = "Friend strength must be between 0 and 100";
+			return false;
+		}
+		if (rule.isFriendRange() && rule.friendFromFloorId > rule.friendToFloorId) {
+			errorOut = "Invalid friend floor range: fromFloorId > toFloorId";
 			return false;
 		}
 
@@ -620,18 +633,39 @@ bool DecorationEngine::checkClusterCenterSpacing(const Position& pos, int minDis
 
 void DecorationEngine::buildFriendDistanceCache(const std::vector<std::pair<Position, uint16_t>>& tiles) {
 	m_friendDistanceCache.clear();
+	struct FriendRange {
+		uint16_t from = 0;
+		uint16_t to = 0;
+		uint32_t key = 0;
+	};
 
-	std::unordered_set<uint16_t> friendIds;
-	friendIds.reserve(m_preset.floorRules.size());
+	auto makeFriendKey = [](uint16_t from, uint16_t to) -> uint32_t {
+		return (static_cast<uint32_t>(from) << 16) | static_cast<uint32_t>(to);
+	};
+
+	std::unordered_set<uint32_t> friendKeys;
+	std::vector<FriendRange> friendRanges;
+	friendRanges.reserve(m_preset.floorRules.size());
+
 	for (const auto& rule : m_preset.floorRules) {
-		if (!rule.enabled) {
+		if (!rule.enabled || rule.friendChance <= 0 || !rule.hasFriendFloor()) {
 			continue;
 		}
-		if (rule.friendFloorId > 0 && rule.friendChance > 0) {
-			friendIds.insert(rule.friendFloorId);
+		uint16_t from = rule.isFriendRange() ? rule.friendFromFloorId : rule.friendFloorId;
+		uint16_t to = rule.isFriendRange() ? rule.friendToFloorId : rule.friendFloorId;
+		if (from == 0 || to == 0) {
+			continue;
+		}
+		if (from > to) {
+			std::swap(from, to);
+		}
+		uint32_t key = makeFriendKey(from, to);
+		if (friendKeys.insert(key).second) {
+			friendRanges.push_back({from, to, key});
 		}
 	}
-	if (friendIds.empty()) {
+
+	if (friendRanges.empty()) {
 		return;
 	}
 
@@ -663,7 +697,7 @@ void DecorationEngine::buildFriendDistanceCache(const std::vector<std::pair<Posi
 		}
 	}
 
-	std::unordered_map<uint16_t, std::unordered_map<int, std::vector<Position>>> friendPositions;
+	std::unordered_map<uint32_t, std::unordered_map<int, std::vector<Position>>> friendPositions;
 	if (m_editor && !m_virtualPreview) {
 		Map& map = m_editor->getMap();
 		const int kFriendPadding = 2;
@@ -685,25 +719,27 @@ void DecorationEngine::buildFriendDistanceCache(const std::vector<std::pair<Posi
 						continue;
 					}
 					uint16_t groundId = tile->ground->getID();
-					if (friendIds.find(groundId) == friendIds.end()) {
-						continue;
+					for (const auto& range : friendRanges) {
+						if (groundId >= range.from && groundId <= range.to) {
+							friendPositions[range.key][z].push_back(Position(x, y, z));
+						}
 					}
-					friendPositions[groundId][z].push_back(Position(x, y, z));
 				}
 			}
 		}
 	} else {
 		for (const auto& tile : tiles) {
 			uint16_t groundId = tile.second;
-			if (friendIds.find(groundId) == friendIds.end()) {
-				continue;
+			for (const auto& range : friendRanges) {
+				if (groundId >= range.from && groundId <= range.to) {
+					friendPositions[range.key][tile.first.z].push_back(tile.first);
+				}
 			}
-			friendPositions[groundId][tile.first.z].push_back(tile.first);
 		}
 	}
 
-	for (uint16_t friendId : friendIds) {
-		auto positionsIt = friendPositions.find(friendId);
+	for (const auto& range : friendRanges) {
+		auto positionsIt = friendPositions.find(range.key);
 		if (positionsIt == friendPositions.end()) {
 			continue;
 		}
@@ -778,13 +814,13 @@ void DecorationEngine::buildFriendDistanceCache(const std::vector<std::pair<Posi
 				}
 			}
 
-			m_friendDistanceCache[friendId][z] = std::move(layer);
+			m_friendDistanceCache[range.key][z] = std::move(layer);
 		}
 	}
 }
 
-int DecorationEngine::getFriendDistance(uint16_t friendFloorId, const Position& pos) const {
-	auto friendIt = m_friendDistanceCache.find(friendFloorId);
+int DecorationEngine::getFriendDistance(uint32_t friendKey, const Position& pos) const {
+	auto friendIt = m_friendDistanceCache.find(friendKey);
 	if (friendIt == m_friendDistanceCache.end()) {
 		return -1;
 	}
@@ -806,10 +842,19 @@ int DecorationEngine::getFriendDistance(uint16_t friendFloorId, const Position& 
 }
 
 float DecorationEngine::applyFriendBias(const FloorRule* rule, const Position& pos, float baseDensity) const {
-	if (!rule || rule->friendFloorId == 0 || rule->friendChance <= 0) {
+	if (!rule || rule->friendChance <= 0 || !rule->hasFriendFloor()) {
 		return baseDensity;
 	}
-	int distance = getFriendDistance(rule->friendFloorId, pos);
+	uint16_t from = rule->isFriendRange() ? rule->friendFromFloorId : rule->friendFloorId;
+	uint16_t to = rule->isFriendRange() ? rule->friendToFloorId : rule->friendFloorId;
+	if (from == 0 || to == 0) {
+		return baseDensity;
+	}
+	if (from > to) {
+		std::swap(from, to);
+	}
+	uint32_t key = (static_cast<uint32_t>(from) << 16) | static_cast<uint32_t>(to);
+	int distance = getFriendDistance(key, pos);
 	if (distance < 0) {
 		return baseDensity;
 	}
@@ -836,15 +881,21 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 	Map& map = m_editor->getMap();
 	std::vector<Position> positions = m_area.getAllPositions(map);
 
-	std::unordered_set<uint16_t> friendIds;
-	friendIds.reserve(m_preset.floorRules.size());
+	std::vector<std::pair<uint16_t, uint16_t>> friendRanges;
+	friendRanges.reserve(m_preset.floorRules.size());
 	for (const auto& rule : m_preset.floorRules) {
-		if (!rule.enabled) {
+		if (!rule.enabled || rule.friendChance <= 0 || !rule.hasFriendFloor()) {
 			continue;
 		}
-		if (rule.friendFloorId > 0 && rule.friendChance > 0) {
-			friendIds.insert(rule.friendFloorId);
+		uint16_t from = rule.isFriendRange() ? rule.friendFromFloorId : rule.friendFloorId;
+		uint16_t to = rule.isFriendRange() ? rule.friendToFloorId : rule.friendFloorId;
+		if (from == 0 || to == 0) {
+			continue;
 		}
+		if (from > to) {
+			std::swap(from, to);
+		}
+		friendRanges.emplace_back(from, to);
 	}
 
 	outTiles.reserve(positions.size());
@@ -858,8 +909,17 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 
 		uint16_t groundId = ground->getID();
 
-		if (m_preset.skipBlockedTiles && tile->isBlocking() &&
-		    friendIds.find(groundId) == friendIds.end()) {
+		bool isFriendGround = false;
+		if (!friendRanges.empty()) {
+			for (const auto& range : friendRanges) {
+				if (groundId >= range.first && groundId <= range.second) {
+					isFriendGround = true;
+					break;
+				}
+			}
+		}
+
+		if (m_preset.skipBlockedTiles && tile->isBlocking() && !isFriendGround) {
 			continue;
 		}
 
@@ -1099,6 +1159,7 @@ const ItemEntry* DecorationEngine::selectItemFromRule(const FloorRule* rule) {
 
 void DecorationEngine::generatePureRandom(const std::vector<std::pair<Position, uint16_t>>& tiles) {
 	std::unordered_map<const FloorRule*, int> rulePlacements;
+	std::vector<const FloorRule*> matchingRules;
 
 	std::vector<size_t> indices(tiles.size());
 	std::iota(indices.begin(), indices.end(), 0);
@@ -1114,203 +1175,15 @@ void DecorationEngine::generatePureRandom(const std::vector<std::pair<Position, 
 		const Position& pos = tiles[idx].first;
 		uint16_t groundId = tiles[idx].second;
 
-		const FloorRule* rule = m_preset.findRule(groundId);
-		if (!rule) continue;
+		m_preset.getMatchingRules(groundId, matchingRules);
+		if (matchingRules.empty()) continue;
 
-		if (rule->maxPlacements >= 0 &&
-		    rulePlacements[rule] >= rule->maxPlacements) {
-			continue;
-		}
-
-		float adjustedDensity = applyFriendBias(rule, pos, rule->density);
-		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
-		if (densityDist(m_rng) > adjustedDensity) {
-			continue;
-		}
-
-		const ItemEntry* selected = selectItemFromRule(rule);
-		if (!selected) continue;
-
-		bool isClusterEntry = selected->isClusterEntry();
-		if (isClusterEntry) {
-			int radius = std::max(0, selected->clusterRadius);
-			int minDist = std::max(0, selected->clusterMinDistance);
-			int centerMinDist = radius + minDist;
-			if (!checkClusterCenterSpacing(pos, centerMinDist)) {
-				continue;
-			}
-		}
-
-		std::vector<PreviewItem> placementItems;
-		if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
-			continue;
-		}
-
-		if (m_preset.maxItemsTotal >= 0 &&
-		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
-			continue;
-		}
-
-		if (!checkSpacingForPlacement(placementItems)) {
-			continue;
-		}
-
-		commitPlacement(placementItems);
-		if (isClusterEntry) {
-			m_clusterCenters.push_back(pos);
-		}
-		rulePlacements[rule]++;
-	}
-}
-
-void DecorationEngine::generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles) {
-	if (tiles.empty()) return;
-
-	const DistributionConfig& distConfig = m_preset.distribution;
-
-	std::vector<Position> clusterCenters;
-	int numClusters = std::min(distConfig.clusterCount, static_cast<int>(tiles.size()));
-
-	std::uniform_int_distribution<size_t> centerDist(0, tiles.size() - 1);
-	for (int i = 0; i < numClusters; ++i) {
-		clusterCenters.push_back(tiles[centerDist(m_rng)].first);
-	}
-
-	std::vector<std::pair<float, size_t>> tileScores;
-	for (size_t i = 0; i < tiles.size(); ++i) {
-		float minDist = std::numeric_limits<float>::max();
-		for (const auto& center : clusterCenters) {
-			float dx = static_cast<float>(tiles[i].first.x - center.x);
-			float dy = static_cast<float>(tiles[i].first.y - center.y);
-			float dist = std::sqrt(dx * dx + dy * dy);
-			minDist = std::min(minDist, dist);
-		}
-		tileScores.push_back({minDist, i});
-	}
-
-	std::sort(tileScores.begin(), tileScores.end());
-
-	std::unordered_map<const FloorRule*, int> rulePlacements;
-
-	for (const auto& scorePair : tileScores) {
-		if (m_preset.maxItemsTotal >= 0 &&
-		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
-			m_previewWasCapped = true;
-			break;
-		}
-
-		size_t idx = scorePair.second;
-		float distanceScore = scorePair.first;
-
-		const Position& pos = tiles[idx].first;
-		uint16_t groundId = tiles[idx].second;
-
-		const FloorRule* rule = m_preset.findRule(groundId);
-		if (!rule) continue;
-
-		if (rule->maxPlacements >= 0 &&
-		    rulePlacements[rule] >= rule->maxPlacements) {
-			continue;
-		}
-
-		float adjustedDensity = rule->density;
-		if (distanceScore > 0) {
-			float falloff = std::exp(-distanceScore * distConfig.clusterStrength * 0.1f);
-			adjustedDensity *= falloff;
-		}
-		adjustedDensity = applyFriendBias(rule, pos, adjustedDensity);
-
-		std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
-		if (densityDist(m_rng) > adjustedDensity) {
-			continue;
-		}
-
-		const ItemEntry* selected = selectItemFromRule(rule);
-		if (!selected) continue;
-
-		bool isClusterEntry = selected->isClusterEntry();
-		if (isClusterEntry) {
-			int radius = std::max(0, selected->clusterRadius);
-			int minDist = std::max(0, selected->clusterMinDistance);
-			int centerMinDist = radius + minDist;
-			if (!checkClusterCenterSpacing(pos, centerMinDist)) {
-				continue;
-			}
-		}
-
-		std::vector<PreviewItem> placementItems;
-		if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
-			continue;
-		}
-
-		if (m_preset.maxItemsTotal >= 0 &&
-		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
-			continue;
-		}
-
-		if (!checkSpacingForPlacement(placementItems)) {
-			continue;
-		}
-
-		commitPlacement(placementItems);
-		if (isClusterEntry) {
-			m_clusterCenters.push_back(pos);
-		}
-		rulePlacements[rule]++;
-	}
-}
-
-void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, uint16_t>>& tiles) {
-	if (tiles.empty()) return;
-
-	const SpacingConfig& spacing = m_preset.spacing;
-	const DistributionConfig& distConfig = m_preset.distribution;
-
-	std::unordered_map<uint64_t, std::pair<Position, uint16_t>> tileMap;
-	Position minPos = tiles[0].first;
-	Position maxPos = tiles[0].first;
-
-	for (const auto& tile : tiles) {
-		uint64_t hash = (static_cast<uint64_t>(tile.first.x & 0xFFFF) << 32) |
-		                (static_cast<uint64_t>(tile.first.y & 0xFFFF) << 16) |
-		                static_cast<uint64_t>(tile.first.z & 0xFFFF);
-		tileMap[hash] = tile;
-
-		minPos.x = std::min(minPos.x, tile.first.x);
-		minPos.y = std::min(minPos.y, tile.first.y);
-		maxPos.x = std::max(maxPos.x, tile.first.x);
-		maxPos.y = std::max(maxPos.y, tile.first.y);
-	}
-
-	std::unordered_map<const FloorRule*, int> rulePlacements;
-
-	std::uniform_int_distribution<int> jitterDistX(-distConfig.gridJitter, distConfig.gridJitter);
-	std::uniform_int_distribution<int> jitterDistY(-distConfig.gridJitter, distConfig.gridJitter);
-
-	for (int gx = minPos.x; gx <= maxPos.x; gx += distConfig.gridSpacingX) {
-		for (int gy = minPos.y; gy <= maxPos.y; gy += distConfig.gridSpacingY) {
+		for (const FloorRule* rule : matchingRules) {
 			if (m_preset.maxItemsTotal >= 0 &&
 			    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
 				m_previewWasCapped = true;
 				return;
 			}
-
-			int px = gx + jitterDistX(m_rng);
-			int py = gy + jitterDistY(m_rng);
-			int pz = minPos.z;
-
-			uint64_t hash = (static_cast<uint64_t>(px & 0xFFFF) << 32) |
-			                (static_cast<uint64_t>(py & 0xFFFF) << 16) |
-			                static_cast<uint64_t>(pz & 0xFFFF);
-
-			auto it = tileMap.find(hash);
-			if (it == tileMap.end()) continue;
-
-			const Position& pos = it->second.first;
-			uint16_t groundId = it->second.second;
-
-			const FloorRule* rule = m_preset.findRule(groundId);
-			if (!rule) continue;
 
 			if (rule->maxPlacements >= 0 &&
 			    rulePlacements[rule] >= rule->maxPlacements) {
@@ -1355,6 +1228,220 @@ void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, u
 				m_clusterCenters.push_back(pos);
 			}
 			rulePlacements[rule]++;
+		}
+	}
+}
+
+void DecorationEngine::generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	if (tiles.empty()) return;
+
+	const DistributionConfig& distConfig = m_preset.distribution;
+
+	std::vector<Position> clusterCenters;
+	int numClusters = std::min(distConfig.clusterCount, static_cast<int>(tiles.size()));
+
+	std::uniform_int_distribution<size_t> centerDist(0, tiles.size() - 1);
+	for (int i = 0; i < numClusters; ++i) {
+		clusterCenters.push_back(tiles[centerDist(m_rng)].first);
+	}
+
+	std::vector<std::pair<float, size_t>> tileScores;
+	for (size_t i = 0; i < tiles.size(); ++i) {
+		float minDist = std::numeric_limits<float>::max();
+		for (const auto& center : clusterCenters) {
+			float dx = static_cast<float>(tiles[i].first.x - center.x);
+			float dy = static_cast<float>(tiles[i].first.y - center.y);
+			float dist = std::sqrt(dx * dx + dy * dy);
+			minDist = std::min(minDist, dist);
+		}
+		tileScores.push_back({minDist, i});
+	}
+
+	std::sort(tileScores.begin(), tileScores.end());
+
+	std::unordered_map<const FloorRule*, int> rulePlacements;
+	std::vector<const FloorRule*> matchingRules;
+
+	for (const auto& scorePair : tileScores) {
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+			m_previewWasCapped = true;
+			break;
+		}
+
+		size_t idx = scorePair.second;
+		float distanceScore = scorePair.first;
+
+		const Position& pos = tiles[idx].first;
+		uint16_t groundId = tiles[idx].second;
+
+		m_preset.getMatchingRules(groundId, matchingRules);
+		if (matchingRules.empty()) continue;
+
+		for (const FloorRule* rule : matchingRules) {
+			if (m_preset.maxItemsTotal >= 0 &&
+			    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+				m_previewWasCapped = true;
+				return;
+			}
+
+			if (rule->maxPlacements >= 0 &&
+			    rulePlacements[rule] >= rule->maxPlacements) {
+				continue;
+			}
+
+			float adjustedDensity = rule->density;
+			if (distanceScore > 0) {
+				float falloff = std::exp(-distanceScore * distConfig.clusterStrength * 0.1f);
+				adjustedDensity *= falloff;
+			}
+			adjustedDensity = applyFriendBias(rule, pos, adjustedDensity);
+
+			std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+			if (densityDist(m_rng) > adjustedDensity) {
+				continue;
+			}
+
+			const ItemEntry* selected = selectItemFromRule(rule);
+			if (!selected) continue;
+
+			bool isClusterEntry = selected->isClusterEntry();
+			if (isClusterEntry) {
+				int radius = std::max(0, selected->clusterRadius);
+				int minDist = std::max(0, selected->clusterMinDistance);
+				int centerMinDist = radius + minDist;
+				if (!checkClusterCenterSpacing(pos, centerMinDist)) {
+					continue;
+				}
+			}
+
+			std::vector<PreviewItem> placementItems;
+			if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
+				continue;
+			}
+
+			if (m_preset.maxItemsTotal >= 0 &&
+			    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+				continue;
+			}
+
+			if (!checkSpacingForPlacement(placementItems)) {
+				continue;
+			}
+
+			commitPlacement(placementItems);
+			if (isClusterEntry) {
+				m_clusterCenters.push_back(pos);
+			}
+			rulePlacements[rule]++;
+		}
+	}
+}
+
+void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, uint16_t>>& tiles) {
+	if (tiles.empty()) return;
+
+	const SpacingConfig& spacing = m_preset.spacing;
+	const DistributionConfig& distConfig = m_preset.distribution;
+
+	std::unordered_map<uint64_t, std::pair<Position, uint16_t>> tileMap;
+	Position minPos = tiles[0].first;
+	Position maxPos = tiles[0].first;
+
+	for (const auto& tile : tiles) {
+		uint64_t hash = (static_cast<uint64_t>(tile.first.x & 0xFFFF) << 32) |
+		                (static_cast<uint64_t>(tile.first.y & 0xFFFF) << 16) |
+		                static_cast<uint64_t>(tile.first.z & 0xFFFF);
+		tileMap[hash] = tile;
+
+		minPos.x = std::min(minPos.x, tile.first.x);
+		minPos.y = std::min(minPos.y, tile.first.y);
+		maxPos.x = std::max(maxPos.x, tile.first.x);
+		maxPos.y = std::max(maxPos.y, tile.first.y);
+	}
+
+	std::unordered_map<const FloorRule*, int> rulePlacements;
+	std::vector<const FloorRule*> matchingRules;
+
+	std::uniform_int_distribution<int> jitterDistX(-distConfig.gridJitter, distConfig.gridJitter);
+	std::uniform_int_distribution<int> jitterDistY(-distConfig.gridJitter, distConfig.gridJitter);
+
+	for (int gx = minPos.x; gx <= maxPos.x; gx += distConfig.gridSpacingX) {
+		for (int gy = minPos.y; gy <= maxPos.y; gy += distConfig.gridSpacingY) {
+			if (m_preset.maxItemsTotal >= 0 &&
+			    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+				m_previewWasCapped = true;
+				return;
+			}
+
+			int px = gx + jitterDistX(m_rng);
+			int py = gy + jitterDistY(m_rng);
+			int pz = minPos.z;
+
+			uint64_t hash = (static_cast<uint64_t>(px & 0xFFFF) << 32) |
+			                (static_cast<uint64_t>(py & 0xFFFF) << 16) |
+			                static_cast<uint64_t>(pz & 0xFFFF);
+
+			auto it = tileMap.find(hash);
+			if (it == tileMap.end()) continue;
+
+			const Position& pos = it->second.first;
+			uint16_t groundId = it->second.second;
+
+			m_preset.getMatchingRules(groundId, matchingRules);
+			if (matchingRules.empty()) continue;
+
+			for (const FloorRule* rule : matchingRules) {
+				if (m_preset.maxItemsTotal >= 0 &&
+				    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+					m_previewWasCapped = true;
+					return;
+				}
+
+				if (rule->maxPlacements >= 0 &&
+				    rulePlacements[rule] >= rule->maxPlacements) {
+					continue;
+				}
+
+				float adjustedDensity = applyFriendBias(rule, pos, rule->density);
+				std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+				if (densityDist(m_rng) > adjustedDensity) {
+					continue;
+				}
+
+				const ItemEntry* selected = selectItemFromRule(rule);
+				if (!selected) continue;
+
+				bool isClusterEntry = selected->isClusterEntry();
+				if (isClusterEntry) {
+					int radius = std::max(0, selected->clusterRadius);
+					int minDist = std::max(0, selected->clusterMinDistance);
+					int centerMinDist = radius + minDist;
+					if (!checkClusterCenterSpacing(pos, centerMinDist)) {
+						continue;
+					}
+				}
+
+				std::vector<PreviewItem> placementItems;
+				if (!buildPlacementItems(pos, *selected, rule, placementItems)) {
+					continue;
+				}
+
+				if (m_preset.maxItemsTotal >= 0 &&
+				    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+					continue;
+				}
+
+				if (!checkSpacingForPlacement(placementItems)) {
+					continue;
+				}
+
+				commitPlacement(placementItems);
+				if (isClusterEntry) {
+					m_clusterCenters.push_back(pos);
+				}
+				rulePlacements[rule]++;
+			}
 		}
 	}
 }
@@ -1556,6 +1643,21 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 	settingsNode.append_attribute("skip_blocked") = skipBlockedTiles;
 	settingsNode.append_attribute("default_seed") = std::to_string(defaultSeed).c_str();
 
+	if (hasArea) {
+		pugi::xml_node areaNode = root.append_child("area");
+		areaNode.append_attribute("type") = static_cast<int>(area.type);
+		areaNode.append_attribute("rect_min_x") = area.rectMin.x;
+		areaNode.append_attribute("rect_min_y") = area.rectMin.y;
+		areaNode.append_attribute("rect_min_z") = area.rectMin.z;
+		areaNode.append_attribute("rect_max_x") = area.rectMax.x;
+		areaNode.append_attribute("rect_max_y") = area.rectMax.y;
+		areaNode.append_attribute("rect_max_z") = area.rectMax.z;
+		areaNode.append_attribute("flood_origin_x") = area.floodOrigin.x;
+		areaNode.append_attribute("flood_origin_y") = area.floodOrigin.y;
+		areaNode.append_attribute("flood_origin_z") = area.floodOrigin.z;
+		areaNode.append_attribute("flood_target_ground") = area.floodTargetGround;
+		areaNode.append_attribute("flood_max_radius") = area.floodMaxRadius;
+	}
 	// Floor rules
 	pugi::xml_node rulesNode = root.append_child("floor_rules");
 	for (const auto& rule : floorRules) {
@@ -1569,7 +1671,15 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 		ruleNode.append_attribute("priority") = rule.priority;
 		ruleNode.append_attribute("enabled") = rule.enabled;
 		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
-		ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+		if (rule.isFriendRange()) {
+			ruleNode.append_attribute("friend_floor_id") = 0;
+			ruleNode.append_attribute("friend_from_floor_id") = rule.friendFromFloorId;
+			ruleNode.append_attribute("friend_to_floor_id") = rule.friendToFloorId;
+		} else {
+			ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+			ruleNode.append_attribute("friend_from_floor_id") = 0;
+			ruleNode.append_attribute("friend_to_floor_id") = 0;
+		}
 		ruleNode.append_attribute("friend_chance") = rule.friendChance;
 		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
 
@@ -1647,6 +1757,25 @@ bool DecorationPreset::loadFromFile(const std::string& filepath) {
 		defaultSeed = std::strtoull(seedStr, nullptr, 10);
 	}
 
+	// Area settings
+	hasArea = false;
+	pugi::xml_node areaNode = root.child("area");
+	if (areaNode) {
+		hasArea = true;
+		area.type = static_cast<AreaDefinition::Type>(areaNode.attribute("type").as_int(0));
+		area.rectMin = Position(areaNode.attribute("rect_min_x").as_int(0),
+		                        areaNode.attribute("rect_min_y").as_int(0),
+		                        areaNode.attribute("rect_min_z").as_int(0));
+		area.rectMax = Position(areaNode.attribute("rect_max_x").as_int(0),
+		                        areaNode.attribute("rect_max_y").as_int(0),
+		                        areaNode.attribute("rect_max_z").as_int(0));
+		area.floodOrigin = Position(areaNode.attribute("flood_origin_x").as_int(0),
+		                            areaNode.attribute("flood_origin_y").as_int(0),
+		                            areaNode.attribute("flood_origin_z").as_int(0));
+		area.floodTargetGround = areaNode.attribute("flood_target_ground").as_uint(0);
+		area.floodMaxRadius = areaNode.attribute("flood_max_radius").as_int(100);
+	}
+
 	// Floor rules
 	floorRules.clear();
 	pugi::xml_node rulesNode = root.child("floor_rules");
@@ -1661,7 +1790,17 @@ bool DecorationPreset::loadFromFile(const std::string& filepath) {
 		rule.priority = ruleNode.attribute("priority").as_int(0);
 		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
 		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
-		rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+		uint16_t friendFrom = ruleNode.attribute("friend_from_floor_id").as_uint(0);
+		uint16_t friendTo = ruleNode.attribute("friend_to_floor_id").as_uint(0);
+		if (friendFrom > 0 && friendTo > 0) {
+			rule.friendFloorId = 0;
+			rule.friendFromFloorId = friendFrom;
+			rule.friendToFloorId = friendTo;
+		} else {
+			rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+			rule.friendFromFloorId = 0;
+			rule.friendToFloorId = 0;
+		}
 		rule.friendChance = ruleNode.attribute("friend_chance").as_int(0);
 		rule.friendStrength = ruleNode.attribute("friend_strength").as_int(0);
 
@@ -1740,6 +1879,23 @@ std::string DecorationPreset::toXmlString() const {
 	pugi::xml_node settingsNode = root.append_child("settings");
 	settingsNode.append_attribute("max_items_total") = maxItemsTotal;
 	settingsNode.append_attribute("skip_blocked") = skipBlockedTiles;
+	settingsNode.append_attribute("default_seed") = std::to_string(defaultSeed).c_str();
+
+	if (hasArea) {
+		pugi::xml_node areaNode = root.append_child("area");
+		areaNode.append_attribute("type") = static_cast<int>(area.type);
+		areaNode.append_attribute("rect_min_x") = area.rectMin.x;
+		areaNode.append_attribute("rect_min_y") = area.rectMin.y;
+		areaNode.append_attribute("rect_min_z") = area.rectMin.z;
+		areaNode.append_attribute("rect_max_x") = area.rectMax.x;
+		areaNode.append_attribute("rect_max_y") = area.rectMax.y;
+		areaNode.append_attribute("rect_max_z") = area.rectMax.z;
+		areaNode.append_attribute("flood_origin_x") = area.floodOrigin.x;
+		areaNode.append_attribute("flood_origin_y") = area.floodOrigin.y;
+		areaNode.append_attribute("flood_origin_z") = area.floodOrigin.z;
+		areaNode.append_attribute("flood_target_ground") = area.floodTargetGround;
+		areaNode.append_attribute("flood_max_radius") = area.floodMaxRadius;
+	}
 
 	pugi::xml_node rulesNode = root.append_child("floor_rules");
 	for (const auto& rule : floorRules) {
@@ -1751,8 +1907,17 @@ std::string DecorationPreset::toXmlString() const {
 		ruleNode.append_attribute("density") = rule.density;
 		ruleNode.append_attribute("max_placements") = rule.maxPlacements;
 		ruleNode.append_attribute("priority") = rule.priority;
+		ruleNode.append_attribute("enabled") = rule.enabled;
 		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
-		ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+		if (rule.isFriendRange()) {
+			ruleNode.append_attribute("friend_floor_id") = 0;
+			ruleNode.append_attribute("friend_from_floor_id") = rule.friendFromFloorId;
+			ruleNode.append_attribute("friend_to_floor_id") = rule.friendToFloorId;
+		} else {
+			ruleNode.append_attribute("friend_floor_id") = rule.friendFloorId;
+			ruleNode.append_attribute("friend_from_floor_id") = 0;
+			ruleNode.append_attribute("friend_to_floor_id") = 0;
+		}
 		ruleNode.append_attribute("friend_chance") = rule.friendChance;
 		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
 
@@ -1824,6 +1989,26 @@ bool DecorationPreset::fromXmlString(const std::string& xml) {
 	if (settingsNode) {
 		maxItemsTotal = settingsNode.attribute("max_items_total").as_int(-1);
 		skipBlockedTiles = settingsNode.attribute("skip_blocked").as_bool(true);
+		const char* seedStr = settingsNode.attribute("default_seed").as_string("0");
+		defaultSeed = std::strtoull(seedStr, nullptr, 10);
+	}
+
+	hasArea = false;
+	pugi::xml_node areaNode = root.child("area");
+	if (areaNode) {
+		hasArea = true;
+		area.type = static_cast<AreaDefinition::Type>(areaNode.attribute("type").as_int(0));
+		area.rectMin = Position(areaNode.attribute("rect_min_x").as_int(0),
+		                        areaNode.attribute("rect_min_y").as_int(0),
+		                        areaNode.attribute("rect_min_z").as_int(0));
+		area.rectMax = Position(areaNode.attribute("rect_max_x").as_int(0),
+		                        areaNode.attribute("rect_max_y").as_int(0),
+		                        areaNode.attribute("rect_max_z").as_int(0));
+		area.floodOrigin = Position(areaNode.attribute("flood_origin_x").as_int(0),
+		                            areaNode.attribute("flood_origin_y").as_int(0),
+		                            areaNode.attribute("flood_origin_z").as_int(0));
+		area.floodTargetGround = areaNode.attribute("flood_target_ground").as_uint(0);
+		area.floodMaxRadius = areaNode.attribute("flood_max_radius").as_int(100);
 	}
 
 	floorRules.clear();
@@ -1837,8 +2022,19 @@ bool DecorationPreset::fromXmlString(const std::string& xml) {
 		rule.density = ruleNode.attribute("density").as_float(0.3f);
 		rule.maxPlacements = ruleNode.attribute("max_placements").as_int(-1);
 		rule.priority = ruleNode.attribute("priority").as_int(0);
+		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
 		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
-		rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+		uint16_t friendFrom = ruleNode.attribute("friend_from_floor_id").as_uint(0);
+		uint16_t friendTo = ruleNode.attribute("friend_to_floor_id").as_uint(0);
+		if (friendFrom > 0 && friendTo > 0) {
+			rule.friendFloorId = 0;
+			rule.friendFromFloorId = friendFrom;
+			rule.friendToFloorId = friendTo;
+		} else {
+			rule.friendFloorId = ruleNode.attribute("friend_floor_id").as_uint(0);
+			rule.friendFromFloorId = 0;
+			rule.friendToFloorId = 0;
+		}
 		rule.friendChance = ruleNode.attribute("friend_chance").as_int(0);
 		rule.friendStrength = ruleNode.attribute("friend_strength").as_int(0);
 
