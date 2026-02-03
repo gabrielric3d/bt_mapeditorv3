@@ -1794,7 +1794,12 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 	boundbox_select_creatures = false;
 
 	const int raw_palette_modifier = g_settings.getInteger(Config::RAW_PALETTE_SELECT_MODIFIER);
-	if(g_gui.IsSelectionMode() && raw_palette_modifier != 0 && GetModifierMask(event) == raw_palette_modifier) {
+	const bool raw_pick_modifier = (raw_palette_modifier != 0) && (GetModifierMask(event) == raw_palette_modifier);
+	const bool allow_raw_pick = raw_pick_modifier && (
+		g_gui.IsSelectionMode() ||
+		(g_gui.IsDrawingMode() && raw_palette_modifier != wxACCEL_ALT)
+	);
+	if(allow_raw_pick) {
 		Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 		if(tile && tile->size() > 0) {
 			Item* item = tile->getTopItem();

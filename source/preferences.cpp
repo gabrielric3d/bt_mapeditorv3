@@ -645,7 +645,7 @@ wxNotebookPage* PreferencesWindow::CreateUIPage()
 	raw_palette_select_modifier_choice = newd wxChoice(ui_page, wxID_ANY, wxDefaultPosition, wxDefaultSize, raw_select_modifier_labels);
 	raw_palette_select_modifier_choice->SetSelection(FindModifierChoiceIndex(g_settings.getInteger(Config::RAW_PALETTE_SELECT_MODIFIER)));
 	SetWindowToolTip(raw_select_modifier_label, raw_palette_select_modifier_choice,
-		"Modifier used with the primary mouse click in Selection mode to pick the top item into the RAW palette.");
+		"Modifier used with the primary mouse click to pick the top item into the RAW palette.");
 	wxBoxSizer* raw_select_modifier_sizer = newd wxBoxSizer(wxHORIZONTAL);
 	raw_select_modifier_sizer->Add(raw_select_modifier_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
 	raw_select_modifier_sizer->Add(raw_palette_select_modifier_choice, 0, wxEXPAND);
