@@ -34,6 +34,7 @@
 #include "graphics.h"
 #include "complexitem.h"
 #include "camera_path.h"
+#include "structure_manager_window.h"
 
 #include "doodad_brush.h"
 #include "creature_brush.h"
@@ -532,6 +533,7 @@ void MapDrawer::DrawMap()
 
 		// Draws the doodad preview or the paste preview (or import preview)
 		DrawSecondaryMap(map_z);
+		DrawFixedSavePreview(map_z);
 
 		--start_x;
 		--start_y;
@@ -1431,6 +1433,49 @@ void MapDrawer::DrawBrush()
 			}
 		}
 	}
+}
+
+void MapDrawer::DrawFixedSavePreview(int map_z)
+{
+	if(canvas && canvas->IsPreviewMode()) {
+		return;
+	}
+	if(options.ingame) {
+		return;
+	}
+
+	int width = 0;
+	int height = 0;
+	int zFrom = 0;
+	int zTo = 0;
+	if(!StructureManagerDialog::GetFixedSavePreview(width, height, zFrom, zTo)) {
+		return;
+	}
+
+	if(!canvas || !canvas->cursor_in_window) {
+		return;
+	}
+
+	const int minZ = std::min(zFrom, zTo);
+	const int maxZ = std::max(zFrom, zTo);
+	if(map_z < minZ || map_z > maxZ) {
+		return;
+	}
+
+	const int minX = mouse_map_x - (width / 2);
+	const int minY = mouse_map_y - (height / 2);
+	const int rectWidth = width * rme::TileSize;
+	const int rectHeight = height * rme::TileSize;
+
+	Position topLeft(minX, minY, map_z);
+	int drawX = 0;
+	int drawY = 0;
+	getDrawPosition(topLeft, drawX, drawY);
+
+	glDisable(GL_TEXTURE_2D);
+	drawFilledRect(drawX, drawY, rectWidth, rectHeight, wxColour(255, 165, 0, 40));
+	drawRect(drawX, drawY, rectWidth, rectHeight, wxColour(255, 165, 0, 200), 2);
+	glEnable(GL_TEXTURE_2D);
 }
 
 void MapDrawer::DrawCursorTile()

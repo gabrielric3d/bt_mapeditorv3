@@ -27,7 +27,10 @@
 #include <wx/dcbuffer.h>
 #include <wx/msgdlg.h>
 #include <wx/popupwin.h>
+#include <wx/choice.h>
 #include <wx/sizer.h>
+#include <wx/spinctrl.h>
+#include <wx/textfile.h>
 #include <wx/tokenzr.h>
 #include <wx/textdlg.h>
 #include <wx/treectrl.h>
@@ -37,7 +40,9 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
+#include "artprovider.h"
 #include "copybuffer.h"
 #include "client_version.h"
 #include "editor.h"
@@ -48,6 +53,7 @@
 #include "map_display.h"
 #include "map_window.h"
 #include "settings.h"
+#include "theme.h"
 
 namespace
 {
@@ -55,7 +61,11 @@ namespace
 		ID_STRUCTURE_LIST = wxID_HIGHEST + 370,
 		ID_SAVE_STRUCTURE,
 		ID_PASTE_STRUCTURE,
+		ID_PASTE_ROTATION,
 		ID_DELETE_STRUCTURE,
+		ID_RENAME_STRUCTURE,
+		ID_MOVE_STRUCTURE_UP,
+		ID_MOVE_STRUCTURE_DOWN,
 		ID_RENAME_CATEGORY,
 		ID_ADD_CATEGORY,
 		ID_ADD_SUBCATEGORY,
@@ -707,14 +717,29 @@ StructureManagerDialog::~StructureManagerDialog()
 	}
 }
 
+bool StructureManagerDialog::GetFixedSavePreview(int& width, int& height, int& zFrom, int& zTo)
+{
+	if(!s_active || !s_active->IsShown()) {
+		return false;
+	}
+	if(s_active->m_tutorialActive) {
+		return false;
+	}
+	if(!s_active->m_fixedSizeCheck || !s_active->m_fixedSizeCheck->GetValue()) {
+		return false;
+	}
+	width = s_active->m_fixedWidthSpin ? s_active->m_fixedWidthSpin->GetValue() : 0;
+	height = s_active->m_fixedHeightSpin ? s_active->m_fixedHeightSpin->GetValue() : 0;
+	zFrom = s_active->m_fixedZFromSpin ? s_active->m_fixedZFromSpin->GetValue() : 0;
+	zTo = s_active->m_fixedZToSpin ? s_active->m_fixedZToSpin->GetValue() : 0;
+	return width > 0 && height > 0;
+}
+
 void StructureManagerDialog::CreateControls()
 {
 	wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
 
 	wxBoxSizer* topSizer = new wxBoxSizer(wxHORIZONTAL);
-	m_saveButton = newd wxButton(this, ID_SAVE_STRUCTURE, "Save Current Selection...");
-	topSizer->Add(m_saveButton, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 8);
-
 	m_statusText = newd wxStaticText(this, wxID_ANY, "Select a structure to paste.");
 	topSizer->Add(m_statusText, 1, wxALIGN_CENTER_VERTICAL);
 
@@ -754,6 +779,10 @@ void StructureManagerDialog::CreateControls()
 	m_removeSubcategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRemoveSubcategory, this);
 	leftSizer->Add(m_removeSubcategoryButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
 
+	m_renameCategoryButton = newd wxButton(leftPanel, ID_RENAME_CATEGORY, "Rename Category...");
+	m_renameCategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRenameCategory, this);
+	leftSizer->Add(m_renameCategoryButton, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
+
 	leftPanel->SetSizer(leftSizer);
 	contentSizer->Add(leftPanel, 0, wxEXPAND | wxALL, 8);
 
@@ -762,8 +791,37 @@ void StructureManagerDialog::CreateControls()
 	m_list = newd wxListBox(centerPanel, ID_STRUCTURE_LIST, wxDefaultPosition, wxSize(320, -1));
 	m_list->Bind(wxEVT_LISTBOX, &StructureManagerDialog::OnSelectionChanged, this);
 	m_list->Bind(wxEVT_KEY_DOWN, &StructureManagerDialog::OnListKeyDown, this);
+	m_list->Bind(wxEVT_LEFT_DOWN, &StructureManagerDialog::OnListLeftDown, this);
+	m_list->Bind(wxEVT_LEFT_UP, &StructureManagerDialog::OnListLeftUp, this);
+	m_list->Bind(wxEVT_MOTION, &StructureManagerDialog::OnListMouseMove, this);
 	centerSizer->Add(m_list, 1, wxEXPAND | wxALL, 4);
+	m_renameStructureButton = newd wxButton(centerPanel, ID_RENAME_STRUCTURE, "Rename...");
+	m_renameStructureButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRenameStructure, this);
+	m_moveStructureUpButton = newd wxButton(centerPanel, ID_MOVE_STRUCTURE_UP, "Move Up");
+	m_moveStructureUpButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnMoveStructureUp, this);
+	m_moveStructureDownButton = newd wxButton(centerPanel, ID_MOVE_STRUCTURE_DOWN, "Move Down");
+	m_moveStructureDownButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnMoveStructureDown, this);
+
+	wxBoxSizer* moveSizer = new wxBoxSizer(wxVERTICAL);
+	moveSizer->Add(m_moveStructureUpButton, 0, wxBOTTOM | wxEXPAND, 4);
+	moveSizer->Add(m_moveStructureDownButton, 0, wxEXPAND, 0);
+
+	wxBoxSizer* listActionRow = new wxBoxSizer(wxHORIZONTAL);
+	listActionRow->Add(m_renameStructureButton, 1, wxRIGHT | wxEXPAND, 6);
+	listActionRow->Add(moveSizer, 0, wxEXPAND, 0);
+
+	wxStaticBoxSizer* listActions = newd wxStaticBoxSizer(wxVERTICAL, centerPanel, "Structure Actions");
+	listActions->Add(listActionRow, 1, wxEXPAND | wxALL, 4);
+	centerSizer->Add(listActions, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+
+	wxStaticText* rotateHint = newd wxStaticText(centerPanel, wxID_ANY, "Z: rotate paste (works with map focus)");
+	rotateHint->SetForegroundColour(wxColour(255, 165, 0));
+	centerSizer->Add(rotateHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 2);
+	wxStaticText* reorderHint = newd wxStaticText(centerPanel, wxID_ANY, "Drag to reorder (or use Move Up/Down)");
+	reorderHint->SetForegroundColour(wxColour(255, 165, 0));
+	centerSizer->Add(reorderHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 2);
 	wxStaticText* navHint = newd wxStaticText(centerPanel, wxID_ANY, "PgUp/PgDn: previous/next item (works with map focus)");
+	navHint->SetForegroundColour(wxColour(255, 165, 0));
 	centerSizer->Add(navHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 4);
 	centerPanel->SetSizer(centerSizer);
 	centerPanel->SetMinSize(wxSize(260, -1));
@@ -772,31 +830,166 @@ void StructureManagerDialog::CreateControls()
 	wxPanel* rightPanel = newd wxPanel(this);
 	wxBoxSizer* rightSizer = new wxBoxSizer(wxVERTICAL);
 
+	m_saveButton = newd wxButton(rightPanel, ID_SAVE_STRUCTURE, "Save Current Selection...");
+	{
+		const ThemeColors& theme = Theme::Dark();
+		wxFont font = m_saveButton->GetFont();
+		font.SetWeight(wxFONTWEIGHT_BOLD);
+		m_saveButton->SetFont(font);
+		m_saveButton->SetBackgroundColour(theme.accent);
+		m_saveButton->SetForegroundColour(theme.text);
+	}
+
 	m_detailsText = newd wxStaticText(rightPanel, wxID_ANY, "Details: Select item...");
-	rightSizer->Add(m_detailsText, 0, wxBOTTOM, 8);
+	wxStaticBoxSizer* detailsSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Selection");
+	detailsSizer->Add(m_saveButton, 0, wxBOTTOM | wxEXPAND, 6);
+	detailsSizer->Add(m_detailsText, 0, wxBOTTOM | wxEXPAND, 4);
+	rightSizer->Add(detailsSizer, 0, wxEXPAND | wxBOTTOM, 10);
+
+	m_fixedSizeCheck = newd wxCheckBox(rightPanel, wxID_ANY, "Fixed size (centered on mouse)");
+	m_fixedSizeCheck->Bind(wxEVT_CHECKBOX, &StructureManagerDialog::OnFixedSizeToggle, this);
+
+	m_fixedWidthSpin = newd wxSpinCtrl(rightPanel, wxID_ANY, "5", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 1, rme::MapMaxWidth, 5);
+	m_fixedHeightSpin = newd wxSpinCtrl(rightPanel, wxID_ANY, "5", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 1, rme::MapMaxHeight, 5);
+
+	int defaultZ = rme::MapGroundLayer;
+	if(g_gui.IsEditorOpen()) {
+		defaultZ = g_gui.GetCurrentFloor();
+	}
+	m_fixedZFromSpin = newd wxSpinCtrl(rightPanel, wxID_ANY, i2ws(defaultZ), wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, rme::MapMinLayer, rme::MapMaxLayer, defaultZ);
+	m_fixedZToSpin = newd wxSpinCtrl(rightPanel, wxID_ANY, i2ws(defaultZ), wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, rme::MapMinLayer, rme::MapMaxLayer, defaultZ);
+
+	wxBoxSizer* sizeRow = new wxBoxSizer(wxHORIZONTAL);
+	sizeRow->Add(newd wxStaticText(rightPanel, wxID_ANY, "W"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+	sizeRow->Add(m_fixedWidthSpin, 0, wxRIGHT, 10);
+	sizeRow->Add(newd wxStaticText(rightPanel, wxID_ANY, "H"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+	sizeRow->Add(m_fixedHeightSpin, 0);
+
+	wxBoxSizer* zRow = new wxBoxSizer(wxHORIZONTAL);
+	zRow->Add(newd wxStaticText(rightPanel, wxID_ANY, "Z from"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	zRow->Add(m_fixedZFromSpin, 0, wxRIGHT, 8);
+	zRow->Add(newd wxStaticText(rightPanel, wxID_ANY, "to"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	zRow->Add(m_fixedZToSpin, 0);
+
+	m_autoNameCheck = newd wxCheckBox(rightPanel, wxID_ANY, "Auto name");
+	m_autoNameCheck->Bind(wxEVT_CHECKBOX, &StructureManagerDialog::OnAutoNameToggle, this);
+
+	m_autoNameBaseCtrl = newd wxTextCtrl(rightPanel, wxID_ANY, "structure");
+	m_autoNameBaseCtrl->Bind(wxEVT_TEXT, &StructureManagerDialog::OnAutoNameBaseChanged, this);
+	m_autoNamePreview = newd wxStaticText(rightPanel, wxID_ANY, "Next: -");
+
+	wxBoxSizer* autoRow = new wxBoxSizer(wxHORIZONTAL);
+	autoRow->Add(newd wxStaticText(rightPanel, wxID_ANY, "Base"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+	autoRow->Add(m_autoNameBaseCtrl, 1, wxEXPAND);
+
+	wxStaticBoxSizer* saveOptionsSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Save Options");
+	saveOptionsSizer->Add(m_fixedSizeCheck, 0, wxBOTTOM, 6);
+	saveOptionsSizer->Add(sizeRow, 0, wxBOTTOM, 4);
+	saveOptionsSizer->Add(zRow, 0, wxBOTTOM, 8);
+	saveOptionsSizer->Add(m_autoNameCheck, 0, wxBOTTOM, 6);
+	saveOptionsSizer->Add(autoRow, 0, wxBOTTOM | wxEXPAND, 4);
+	saveOptionsSizer->Add(m_autoNamePreview, 0);
+	rightSizer->Add(saveOptionsSizer, 0, wxEXPAND | wxBOTTOM, 10);
 
 	m_pasteButton = newd wxButton(rightPanel, ID_PASTE_STRUCTURE, "Paste");
-	rightSizer->Add(m_pasteButton, 0, wxBOTTOM, 6);
 
-	m_deleteButton = newd wxButton(rightPanel, ID_DELETE_STRUCTURE, "Delete");
-	rightSizer->Add(m_deleteButton, 0, wxBOTTOM, 6);
+	wxStaticText* rotationLabel = newd wxStaticText(rightPanel, wxID_ANY, "Paste rotation");
+
+	wxArrayString rotationChoices;
+	rotationChoices.Add("0 deg");
+	rotationChoices.Add("90 deg clockwise");
+	rotationChoices.Add("180 deg");
+	rotationChoices.Add("90 deg counterclockwise");
+	m_pasteRotationChoice = newd wxChoice(rightPanel, ID_PASTE_ROTATION, wxDefaultPosition, wxDefaultSize, rotationChoices);
+	m_pasteRotationChoice->SetSelection(0);
+	m_pasteRotationChoice->Bind(wxEVT_CHOICE, &StructureManagerDialog::OnPasteRotationChanged, this);
 
 	m_keepPasteCheck = newd wxCheckBox(rightPanel, wxID_ANY, "Keep paste active");
-	rightSizer->Add(m_keepPasteCheck, 0);
 
-	m_renameCategoryButton = newd wxButton(rightPanel, ID_RENAME_CATEGORY, "Rename Category...");
-	rightSizer->Add(m_renameCategoryButton, 0, wxTOP, 6);
-	m_renameCategoryButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnRenameCategory, this);
+	wxStaticBoxSizer* pasteSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Paste");
+	pasteSizer->Add(m_pasteButton, 0, wxBOTTOM | wxEXPAND, 6);
+	pasteSizer->Add(rotationLabel, 0, wxBOTTOM, 3);
+	pasteSizer->Add(m_pasteRotationChoice, 0, wxBOTTOM | wxEXPAND, 6);
+	pasteSizer->Add(m_keepPasteCheck, 0);
+	rightSizer->Add(pasteSizer, 0, wxEXPAND | wxBOTTOM, 10);
+
+	m_deleteButton = newd wxButton(rightPanel, ID_DELETE_STRUCTURE, "Delete");
+
+	wxStaticBoxSizer* manageSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Manage");
+	manageSizer->Add(m_deleteButton, 0, wxBOTTOM | wxEXPAND, 6);
+	rightSizer->Add(manageSizer, 0, wxEXPAND | wxBOTTOM, 10);
 
 	m_helpButton = newd wxButton(rightPanel, ID_TUTORIAL_HELP, "How to Use");
-	rightSizer->Add(m_helpButton, 0, wxTOP, 6);
 	m_helpButton->Bind(wxEVT_BUTTON, &StructureManagerDialog::OnHowToUse, this);
+	{
+		const wxSize iconSize(16, 16);
+		m_saveButton->SetBitmap(wxArtProvider::GetBitmap(wxART_FILE_SAVE, wxART_LIST, iconSize));
+		m_pasteButton->SetBitmap(wxArtProvider::GetBitmap(ART_PASTE, wxART_LIST, iconSize));
+		m_deleteButton->SetBitmap(wxArtProvider::GetBitmap(ART_DELETE, wxART_LIST, iconSize));
+		if(m_renameCategoryButton) {
+			m_renameCategoryButton->SetBitmap(wxArtProvider::GetBitmap(ART_CHANGE, wxART_LIST, iconSize));
+		}
+		if(m_renameStructureButton) {
+			m_renameStructureButton->SetBitmap(wxArtProvider::GetBitmap(ART_CHANGE, wxART_LIST, iconSize));
+		}
+		if(m_moveStructureUpButton) {
+			m_moveStructureUpButton->SetBitmap(wxArtProvider::GetBitmap(wxART_GO_UP, wxART_LIST, iconSize));
+		}
+		if(m_moveStructureDownButton) {
+			m_moveStructureDownButton->SetBitmap(wxArtProvider::GetBitmap(wxART_GO_DOWN, wxART_LIST, iconSize));
+		}
+		m_helpButton->SetBitmap(wxArtProvider::GetBitmap(wxART_HELP, wxART_LIST, iconSize));
+	}
+
+	{
+		int buttonWidth = 0;
+		wxButton* buttons[] = {m_saveButton, m_pasteButton, m_deleteButton, m_helpButton};
+		for(wxButton* button : buttons) {
+			if(!button) {
+				continue;
+			}
+			buttonWidth = std::max(buttonWidth, button->GetBestSize().GetWidth());
+		}
+		if(buttonWidth > 0) {
+			for(wxButton* button : buttons) {
+				if(!button) {
+					continue;
+				}
+				wxSize size = button->GetBestSize();
+				button->SetMinSize(wxSize(buttonWidth, size.GetHeight()));
+			}
+		}
+	}
+
+	{
+		int moveWidth = 0;
+		wxButton* moveButtons[] = {m_moveStructureUpButton, m_moveStructureDownButton};
+		for(wxButton* button : moveButtons) {
+			if(!button) {
+				continue;
+			}
+			moveWidth = std::max(moveWidth, button->GetBestSize().GetWidth());
+		}
+		if(moveWidth > 0) {
+			for(wxButton* button : moveButtons) {
+				if(!button) {
+					continue;
+				}
+				wxSize size = button->GetBestSize();
+				button->SetMinSize(wxSize(moveWidth, size.GetHeight()));
+			}
+		}
+	}
+
+	wxStaticBoxSizer* helpSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Help");
+	helpSizer->Add(m_helpButton, 0, wxEXPAND, 0);
+	rightSizer->Add(helpSizer, 0, wxEXPAND | wxBOTTOM, 10);
 
 	wxStaticBoxSizer* previewSizer = newd wxStaticBoxSizer(wxVERTICAL, rightPanel, "Preview");
 	m_previewPanel = newd StructurePreviewPanel(rightPanel);
 	m_previewPanel->Clear("Select a structure to preview.");
 	previewSizer->Add(m_previewPanel, 1, wxEXPAND | wxALL, 4);
-	rightSizer->Add(previewSizer, 1, wxEXPAND | wxTOP, 12);
+	rightSizer->Add(previewSizer, 1, wxEXPAND);
 
 	rightPanel->SetSizer(rightSizer);
 	rightPanel->SetMinSize(wxSize(360, -1));
@@ -806,6 +999,8 @@ void StructureManagerDialog::CreateControls()
 
 	SetSizerAndFit(mainSizer);
 	SetMinSize(wxSize(960, 540));
+
+	UpdateSaveOptionsUi();
 }
 
 void StructureManagerDialog::LoadStructures()
@@ -934,19 +1129,20 @@ void StructureManagerDialog::RefreshItemList()
 	wxString filter = m_searchCtrl ? m_searchCtrl->GetValue() : wxString();
 	filter.MakeLower();
 
-	for(const auto& entry : m_entries) {
-		if(entry.category != m_currentCategoryPath) {
+	const auto orderedEntries = GetOrderedEntriesForCategory(m_currentCategoryPath);
+	for(const auto* entry : orderedEntries) {
+		if(!entry) {
 			continue;
 		}
 		if(!filter.empty()) {
-			wxString lowered = entry.name;
+			wxString lowered = entry->name;
 			lowered.MakeLower();
 			if(lowered.Find(filter) == wxNOT_FOUND) {
 				continue;
 			}
 		}
-		m_list->Append(entry.name);
-		m_listEntries.push_back(&entry);
+		m_list->Append(entry->name);
+		m_listEntries.push_back(entry);
 	}
 	UpdateSelectionUi();
 }
@@ -965,14 +1161,30 @@ void StructureManagerDialog::UpdateSelectionUi()
 	const int selection = m_list ? m_list->GetSelection() : wxNOT_FOUND;
 	const bool hasSelection = selection != wxNOT_FOUND &&
 		selection >= 0 && selection < static_cast<int>(m_listEntries.size());
+	const bool canReorder = CanReorderCurrentList();
 	if(m_saveButton) {
 		m_saveButton->Enable(!m_tutorialActive && hasAnyCategory);
 	}
 	if(m_pasteButton) {
 		m_pasteButton->Enable(!m_tutorialActive && hasSelection);
 	}
+	if(m_pasteRotationChoice) {
+		m_pasteRotationChoice->Enable(!m_tutorialActive && hasSelection);
+	}
 	if(m_deleteButton) {
 		m_deleteButton->Enable(!m_tutorialActive && hasSelection);
+	}
+	if(m_renameStructureButton) {
+		m_renameStructureButton->Enable(!m_tutorialActive && hasSelection);
+	}
+	if(m_moveStructureUpButton) {
+		bool canMoveUp = canReorder && hasSelection && selection > 0;
+		m_moveStructureUpButton->Enable(!m_tutorialActive && canMoveUp);
+	}
+	if(m_moveStructureDownButton) {
+		bool canMoveDown = canReorder && hasSelection &&
+			selection < static_cast<int>(m_listEntries.size()) - 1;
+		m_moveStructureDownButton->Enable(!m_tutorialActive && canMoveDown);
 	}
 	if(m_detailsText) {
 		if(hasSelection) {
@@ -1002,6 +1214,7 @@ void StructureManagerDialog::UpdateSelectionUi()
 	}
 
 	UpdatePreview(GetSelectedEntry(nullptr));
+	UpdateSaveOptionsUi();
 }
 
 void StructureManagerDialog::SetStatusText(const wxString& text)
@@ -1061,6 +1274,288 @@ wxString StructureManagerDialog::GetSelectedCategoryPath() const
 	}
 
 	return path;
+}
+
+bool StructureManagerDialog::CanReorderCurrentList() const
+{
+	if(!m_searchCtrl) {
+		return true;
+	}
+	wxString filter = m_searchCtrl->GetValue();
+	filter.Trim(true).Trim(false);
+	return filter.empty();
+}
+
+wxString StructureManagerDialog::GetOrderFilePath(const wxString& category) const
+{
+	wxString dir = m_baseDir;
+	if(!category.empty()) {
+		dir = wxFileName(m_baseDir, category).GetFullPath();
+	}
+	return wxFileName(dir, ".order.txt").GetFullPath();
+}
+
+bool StructureManagerDialog::ReadOrderFile(const wxString& category, std::vector<std::string>& out) const
+{
+	out.clear();
+	wxString path = GetOrderFilePath(category);
+	if(!wxFileExists(path)) {
+		return false;
+	}
+
+	wxTextFile file;
+	if(!file.Open(path)) {
+		return false;
+	}
+
+	std::unordered_set<std::string> seen;
+	for(size_t i = 0; i < file.GetLineCount(); ++i) {
+		wxString line = file.GetLine(i);
+		line.Trim(true).Trim(false);
+		if(line.empty()) {
+			continue;
+		}
+		std::string key = nstr(line);
+		std::string lower = as_lower_str(key);
+		if(seen.insert(lower).second) {
+			out.push_back(key);
+		}
+	}
+
+	file.Close();
+	return true;
+}
+
+void StructureManagerDialog::WriteOrderFile(const wxString& category, const std::vector<std::string>& names) const
+{
+	wxString path = GetOrderFilePath(category);
+	wxTextFile file;
+	if(wxFileExists(path)) {
+		if(!file.Open(path)) {
+			return;
+		}
+		file.Clear();
+	} else {
+		if(!file.Create(path)) {
+			return;
+		}
+	}
+
+	for(const auto& name : names) {
+		if(name.empty()) {
+			continue;
+		}
+		file.AddLine(wxstr(name));
+	}
+
+	file.Write();
+	file.Close();
+}
+
+void StructureManagerDialog::WriteOrderFile(const wxString& category, const std::vector<const StructureEntry*>& entries) const
+{
+	std::vector<std::string> names;
+	names.reserve(entries.size());
+	for(const auto* entry : entries) {
+		if(!entry) {
+			continue;
+		}
+		names.push_back(nstr(entry->name));
+	}
+	WriteOrderFile(category, names);
+}
+
+std::vector<const StructureManagerDialog::StructureEntry*> StructureManagerDialog::GetOrderedEntriesForCategory(const wxString& category) const
+{
+	std::vector<const StructureEntry*> entries;
+	for(const auto& entry : m_entries) {
+		if(entry.category == category) {
+			entries.push_back(&entry);
+		}
+	}
+
+	if(entries.size() <= 1) {
+		return entries;
+	}
+
+	std::vector<std::string> order;
+	ReadOrderFile(category, order);
+	if(order.empty()) {
+		std::sort(entries.begin(), entries.end(), [](const StructureEntry* a, const StructureEntry* b) {
+			return a->name.CmpNoCase(b->name) < 0;
+		});
+		return entries;
+	}
+
+	std::unordered_map<std::string, const StructureEntry*> byName;
+	byName.reserve(entries.size());
+	for(const auto* entry : entries) {
+		byName.emplace(as_lower_str(nstr(entry->name)), entry);
+	}
+
+	std::vector<const StructureEntry*> ordered;
+	ordered.reserve(entries.size());
+	std::unordered_set<std::string> used;
+	for(const auto& name : order) {
+		std::string lower = as_lower_str(name);
+		auto it = byName.find(lower);
+		if(it != byName.end() && used.insert(lower).second) {
+			ordered.push_back(it->second);
+		}
+	}
+
+	std::vector<const StructureEntry*> remaining;
+	for(const auto* entry : entries) {
+		std::string lower = as_lower_str(nstr(entry->name));
+		if(used.find(lower) == used.end()) {
+			remaining.push_back(entry);
+		}
+	}
+	std::sort(remaining.begin(), remaining.end(), [](const StructureEntry* a, const StructureEntry* b) {
+		return a->name.CmpNoCase(b->name) < 0;
+	});
+	ordered.insert(ordered.end(), remaining.begin(), remaining.end());
+	return ordered;
+}
+
+void StructureManagerDialog::UpdateSaveOptionsUi()
+{
+	if(m_tutorialActive) {
+		return;
+	}
+
+	const bool fixed = m_fixedSizeCheck && m_fixedSizeCheck->GetValue();
+	if(m_fixedWidthSpin) {
+		m_fixedWidthSpin->Enable(fixed);
+	}
+	if(m_fixedHeightSpin) {
+		m_fixedHeightSpin->Enable(fixed);
+	}
+	if(m_fixedZFromSpin) {
+		m_fixedZFromSpin->Enable(fixed);
+	}
+	if(m_fixedZToSpin) {
+		m_fixedZToSpin->Enable(fixed);
+	}
+
+	const bool autoName = m_autoNameCheck && m_autoNameCheck->GetValue();
+	if(m_autoNameBaseCtrl) {
+		m_autoNameBaseCtrl->Enable(autoName);
+	}
+	if(m_autoNamePreview) {
+		if(!autoName) {
+			m_autoNamePreview->SetLabel("Next: -");
+		} else {
+			wxString base = GetAutoNameBase();
+			if(base.empty()) {
+				m_autoNamePreview->SetLabel("Next: -");
+			} else {
+				const wxString categoryPath = GetSelectedCategoryPath();
+				const wxString safeBase = wxstr(SanitizeFilename(nstr(base)));
+				int next = GetNextAutoNameIndex(safeBase, categoryPath);
+				m_autoNamePreview->SetLabel("Next: " + safeBase + i2ws(next));
+			}
+		}
+	}
+}
+
+wxString StructureManagerDialog::GetAutoNameBase() const
+{
+	if(!m_autoNameBaseCtrl) {
+		return wxString();
+	}
+	wxString base = m_autoNameBaseCtrl->GetValue();
+	base.Trim(true).Trim(false);
+	return base;
+}
+
+int StructureManagerDialog::GetNextAutoNameIndex(const wxString& base, const wxString& categoryPath) const
+{
+	if(base.empty()) {
+		return 1;
+	}
+
+	wxString baseLower = base;
+	baseLower.MakeLower();
+	int maxIndex = 0;
+
+	for(const auto& entry : m_entries) {
+		if(entry.category != categoryPath) {
+			continue;
+		}
+		wxString nameLower = entry.name;
+		nameLower.MakeLower();
+		if(!nameLower.StartsWith(baseLower)) {
+			continue;
+		}
+		wxString suffix = entry.name.Mid(base.length());
+		if(suffix.empty()) {
+			continue;
+		}
+		bool allDigits = true;
+		for(size_t i = 0; i < suffix.length(); ++i) {
+			if(!wxIsdigit(suffix[i])) {
+				allDigits = false;
+				break;
+			}
+		}
+		if(!allDigits) {
+			continue;
+		}
+		long value = 0;
+		if(suffix.ToLong(&value) && value > maxIndex) {
+			maxIndex = static_cast<int>(value);
+		}
+	}
+
+	return maxIndex + 1;
+}
+
+bool StructureManagerDialog::BuildFixedAreaBuffer(Editor& editor, const Position& center, int width, int height, int zFrom, int zTo,
+	BaseMap& outMap, Position& outMinPos, Position& outMaxPos, int& outTiles, int& outItems) const
+{
+	if(width <= 0 || height <= 0) {
+		return false;
+	}
+
+	outMap.clear(true);
+	outTiles = 0;
+	outItems = 0;
+
+	const int minZ = std::min(zFrom, zTo);
+	const int maxZ = std::max(zFrom, zTo);
+	const int minX = center.x - (width / 2);
+	const int minY = center.y - (height / 2);
+	const int maxX = minX + width - 1;
+	const int maxY = minY + height - 1;
+
+	outMinPos = Position(minX, minY, minZ);
+	outMaxPos = Position(maxX, maxY, maxZ);
+
+	Map& map = editor.getMap();
+	bool hasTile = false;
+
+	for(int z = minZ; z <= maxZ; ++z) {
+		for(int y = minY; y <= maxY; ++y) {
+			for(int x = minX; x <= maxX; ++x) {
+				Tile* tile = map.getTile(x, y, z);
+				if(!tile || tile->size() == 0) {
+					continue;
+				}
+
+				TileLocation* location = outMap.createTileL(tile->getPosition());
+				Tile* copiedTile = tile->deepCopy(outMap);
+				copiedTile->setLocation(location);
+				outMap.setTile(copiedTile);
+
+				++outTiles;
+				outItems += tile->size();
+				hasTile = true;
+			}
+		}
+	}
+
+	return hasTile;
 }
 
 void StructureManagerDialog::SelectCategoryByPath(const wxString& path)
@@ -1160,11 +1655,92 @@ void StructureManagerDialog::StartPasteFromEntry(const StructureEntry& entry)
 	}
 
 	editor->copybuffer.setBuffer(buffer, copyPos);
+	m_currentPasteRotationTurns = 0;
+	if(m_pasteRotationChoice) {
+		int desired = m_pasteRotationChoice->GetSelection();
+		if(desired == wxNOT_FOUND) {
+			desired = 0;
+		}
+		if(desired != 0) {
+			editor->copybuffer.rotate(desired);
+			m_currentPasteRotationTurns = desired;
+		}
+	}
 	bool keepPaste = m_keepPasteCheck && m_keepPasteCheck->GetValue();
 	g_gui.PreparePaste(keepPaste);
 	wxString status = "Paste: Click map to place '" + entry.name + "'. Right-click cancel.";
 	SetStatusText(status);
 	g_gui.SetStatusText(status);
+}
+
+void StructureManagerDialog::RenameSelectedStructure()
+{
+	int selection = wxNOT_FOUND;
+	const StructureEntry* entry = GetSelectedEntry(&selection);
+	if(!entry) {
+		return;
+	}
+
+	wxTextEntryDialog dialog(this, "New name:", "Rename Structure", entry->name);
+	if(dialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	wxString name = dialog.GetValue();
+	name.Trim(true).Trim(false);
+	if(name.empty()) {
+		wxMessageBox("Structure name cannot be empty.", "Structure Manager", wxOK | wxICON_WARNING, this);
+		return;
+	}
+
+	std::string sanitized = SanitizeFilename(nstr(name));
+	wxString safeName = wxstr(sanitized);
+	wxString dir = m_baseDir;
+	if(!entry->category.empty()) {
+		dir = wxFileName(m_baseDir, entry->category).GetFullPath();
+	}
+	wxString newPath = wxFileName(dir, safeName + ".otbm").GetFullPath();
+	if(wxFileExists(newPath)) {
+		int ret = wxMessageBox("A structure with this name already exists. Overwrite?", "Structure Manager",
+			wxYES_NO | wxICON_WARNING, this);
+		if(ret != wxYES) {
+			return;
+		}
+	}
+
+	if(!wxRenameFile(entry->path, newPath, true)) {
+		wxMessageBox("Failed to rename structure.", "Structure Manager", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	std::vector<std::string> order;
+	if(ReadOrderFile(entry->category, order)) {
+		const std::string oldLower = as_lower_str(nstr(entry->name));
+		const std::string newLower = as_lower_str(nstr(safeName));
+		bool updated = false;
+		for(auto& item : order) {
+			if(as_lower_str(item) == oldLower) {
+				item = nstr(safeName);
+				updated = true;
+			}
+		}
+		if(!updated) {
+			order.push_back(nstr(safeName));
+		}
+		std::unordered_set<std::string> seen;
+		std::vector<std::string> cleaned;
+		for(const auto& item : order) {
+			std::string lower = as_lower_str(item);
+			if(seen.insert(lower).second) {
+				cleaned.push_back(item);
+			}
+		}
+		WriteOrderFile(entry->category, cleaned);
+	}
+
+	LoadStructures();
+	SelectCategoryByPath(entry->category);
+	SelectEntryByName(safeName);
 }
 
 void StructureManagerDialog::RenameSelectedCategory()
@@ -1259,25 +1835,6 @@ void StructureManagerDialog::OnSaveSelection(wxCommandEvent& WXUNUSED(event))
 	}
 
 	Editor* editor = g_gui.GetCurrentEditor();
-	if(!editor || !editor->hasSelection()) {
-		wxMessageBox("Select tiles before saving a structure.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
-		return;
-	}
-
-	wxTextEntryDialog nameDialog(this, "Structure name:", "Save Structure");
-	if(nameDialog.ShowModal() != wxID_OK) {
-		return;
-	}
-
-	wxString name = nameDialog.GetValue();
-	name.Trim(true).Trim(false);
-	if(name.empty()) {
-		wxMessageBox("Structure name cannot be empty.", "Structure Manager", wxOK | wxICON_WARNING, this);
-		return;
-	}
-
-	std::string sanitized = SanitizeFilename(nstr(name));
-	wxString safeName = wxstr(sanitized);
 	const wxString categoryPath = GetSelectedCategoryPath();
 	wxString dir = BuildCategoryDirectory(m_baseDir, categoryPath);
 	wxFileName dirName(dir, "");
@@ -1287,24 +1844,87 @@ void StructureManagerDialog::OnSaveSelection(wxCommandEvent& WXUNUSED(event))
 			return;
 		}
 	}
-	wxString path = wxFileName(dir, safeName + ".otbm").GetFullPath();
 
-	if(wxFileExists(path)) {
-		int ret = wxMessageBox("A structure with this name already exists. Overwrite?", "Structure Manager",
-			wxYES_NO | wxICON_WARNING, this);
-		if(ret != wxYES) {
-			return;
-		}
+	if(!editor) {
+		return;
 	}
 
+	const bool useFixed = m_fixedSizeCheck && m_fixedSizeCheck->GetValue();
 	BaseMap buffer;
 	Position minPos;
 	Position maxPos;
 	int tileCount = 0;
 	int itemCount = 0;
-	if(!BuildSelectionBuffer(*editor, buffer, minPos, maxPos, tileCount, itemCount)) {
-		wxMessageBox("Failed to build structure from selection.", "Structure Manager", wxOK | wxICON_ERROR, this);
-		return;
+	if(useFixed) {
+		MapTab* mapTab = g_gui.GetCurrentMapTab();
+		MapCanvas* canvas = mapTab ? mapTab->GetCanvas() : nullptr;
+		if(!canvas) {
+			wxMessageBox("Move the mouse over the map before saving.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+			return;
+		}
+		const int width = m_fixedWidthSpin ? m_fixedWidthSpin->GetValue() : 0;
+		const int height = m_fixedHeightSpin ? m_fixedHeightSpin->GetValue() : 0;
+		const int zFrom = m_fixedZFromSpin ? m_fixedZFromSpin->GetValue() : g_gui.GetCurrentFloor();
+		const int zTo = m_fixedZToSpin ? m_fixedZToSpin->GetValue() : g_gui.GetCurrentFloor();
+		const Position center = canvas->GetCursorPosition();
+		if(!BuildFixedAreaBuffer(*editor, center, width, height, zFrom, zTo, buffer, minPos, maxPos, tileCount, itemCount)) {
+			wxMessageBox("No tiles found in the fixed area.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+			return;
+		}
+	} else {
+		if(!editor->hasSelection()) {
+			wxMessageBox("Select tiles before saving a structure.", "Structure Manager", wxOK | wxICON_INFORMATION, this);
+			return;
+		}
+		if(!BuildSelectionBuffer(*editor, buffer, minPos, maxPos, tileCount, itemCount)) {
+			wxMessageBox("Failed to build structure from selection.", "Structure Manager", wxOK | wxICON_ERROR, this);
+			return;
+		}
+	}
+
+	wxString safeName;
+	wxString path;
+	const bool autoName = m_autoNameCheck && m_autoNameCheck->GetValue();
+	if(autoName) {
+		wxString base = GetAutoNameBase();
+		if(base.empty()) {
+			wxMessageBox("Auto name base cannot be empty.", "Structure Manager", wxOK | wxICON_WARNING, this);
+			return;
+		}
+		std::string sanitizedBase = SanitizeFilename(nstr(base));
+		wxString safeBase = wxstr(sanitizedBase);
+		int index = GetNextAutoNameIndex(safeBase, categoryPath);
+		for(;; ++index) {
+			safeName = safeBase + i2ws(index);
+			path = wxFileName(dir, safeName + ".otbm").GetFullPath();
+			if(!wxFileExists(path)) {
+				break;
+			}
+		}
+	} else {
+		wxTextEntryDialog nameDialog(this, "Structure name:", "Save Structure");
+		if(nameDialog.ShowModal() != wxID_OK) {
+			return;
+		}
+
+		wxString name = nameDialog.GetValue();
+		name.Trim(true).Trim(false);
+		if(name.empty()) {
+			wxMessageBox("Structure name cannot be empty.", "Structure Manager", wxOK | wxICON_WARNING, this);
+			return;
+		}
+
+		std::string sanitized = SanitizeFilename(nstr(name));
+		safeName = wxstr(sanitized);
+		path = wxFileName(dir, safeName + ".otbm").GetFullPath();
+
+		if(wxFileExists(path)) {
+			int ret = wxMessageBox("A structure with this name already exists. Overwrite?", "Structure Manager",
+				wxYES_NO | wxICON_WARNING, this);
+			if(ret != wxYES) {
+				return;
+			}
+		}
 	}
 
 	wxString error;
@@ -1316,11 +1936,24 @@ void StructureManagerDialog::OnSaveSelection(wxCommandEvent& WXUNUSED(event))
 	LoadStructures();
 	SelectCategoryByPath(categoryPath);
 	SelectEntryByName(safeName);
-	SetStatusText(wxString::Format("Saved '%s' (%d tile%s, %d item%s).",
-		safeName,
-		tileCount, tileCount == 1 ? "" : "s",
-		itemCount, itemCount == 1 ? "" : "s"));
+	if(useFixed) {
+		int zFrom = m_fixedZFromSpin ? m_fixedZFromSpin->GetValue() : minPos.z;
+		int zTo = m_fixedZToSpin ? m_fixedZToSpin->GetValue() : maxPos.z;
+		SetStatusText(wxString::Format("Saved '%s' (%d x %d, Z %d-%d, %d tile%s).",
+			safeName,
+			(maxPos.x - minPos.x + 1),
+			(maxPos.y - minPos.y + 1),
+			std::min(zFrom, zTo),
+			std::max(zFrom, zTo),
+			tileCount, tileCount == 1 ? "" : "s"));
+	} else {
+		SetStatusText(wxString::Format("Saved '%s' (%d tile%s, %d item%s).",
+			safeName,
+			tileCount, tileCount == 1 ? "" : "s",
+			itemCount, itemCount == 1 ? "" : "s"));
+	}
 	g_gui.SetStatusText("Structure saved.");
+	UpdateSaveOptionsUi();
 }
 
 void StructureManagerDialog::OnPaste(wxCommandEvent& WXUNUSED(event))
@@ -1330,6 +1963,35 @@ void StructureManagerDialog::OnPaste(wxCommandEvent& WXUNUSED(event))
 		return;
 	}
 	StartPasteFromEntry(*entry);
+}
+
+void StructureManagerDialog::OnPasteRotationChanged(wxCommandEvent& WXUNUSED(event))
+{
+	if(!m_pasteRotationChoice) {
+		return;
+	}
+
+	int desired = m_pasteRotationChoice->GetSelection();
+	if(desired == wxNOT_FOUND) {
+		desired = 0;
+	}
+
+	int delta = (desired - m_currentPasteRotationTurns) % 4;
+	if(delta < 0) {
+		delta += 4;
+	}
+	if(delta == 0) {
+		return;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->copybuffer.canPaste()) {
+		return;
+	}
+
+	editor->copybuffer.rotate(delta);
+	m_currentPasteRotationTurns = desired;
+	g_gui.RefreshView();
 }
 
 void StructureManagerDialog::OnDelete(wxCommandEvent& WXUNUSED(event))
@@ -1348,6 +2010,19 @@ void StructureManagerDialog::OnDelete(wxCommandEvent& WXUNUSED(event))
 
 	if(wxFileExists(entry->path)) {
 		wxRemoveFile(entry->path);
+	}
+
+	std::vector<std::string> order;
+	if(ReadOrderFile(entry->category, order)) {
+		const std::string targetLower = as_lower_str(nstr(entry->name));
+		std::vector<std::string> cleaned;
+		cleaned.reserve(order.size());
+		for(const auto& name : order) {
+			if(as_lower_str(name) != targetLower) {
+				cleaned.push_back(name);
+			}
+		}
+		WriteOrderFile(entry->category, cleaned);
 	}
 
 	LoadStructures();
@@ -1374,47 +2049,7 @@ void StructureManagerDialog::OnListKeyDown(wxKeyEvent& event)
 {
 	const int key = event.GetKeyCode();
 	if(key == WXK_F2) {
-		int selection = wxNOT_FOUND;
-		const StructureEntry* entry = GetSelectedEntry(&selection);
-		if(!entry) {
-			return;
-		}
-
-		wxTextEntryDialog dialog(this, "New name:", "Rename Structure", entry->name);
-		if(dialog.ShowModal() != wxID_OK) {
-			return;
-		}
-
-		wxString name = dialog.GetValue();
-		name.Trim(true).Trim(false);
-		if(name.empty()) {
-			wxMessageBox("Structure name cannot be empty.", "Structure Manager", wxOK | wxICON_WARNING, this);
-			return;
-		}
-
-		std::string sanitized = SanitizeFilename(nstr(name));
-		wxString safeName = wxstr(sanitized);
-		wxString dir = m_baseDir;
-		if(!entry->category.empty()) {
-			dir = wxFileName(m_baseDir, entry->category).GetFullPath();
-		}
-		wxString newPath = wxFileName(dir, safeName + ".otbm").GetFullPath();
-		if(wxFileExists(newPath)) {
-			int ret = wxMessageBox("A structure with this name already exists. Overwrite?", "Structure Manager",
-				wxYES_NO | wxICON_WARNING, this);
-			if(ret != wxYES) {
-				return;
-			}
-		}
-
-		if(!wxRenameFile(entry->path, newPath, true)) {
-			wxMessageBox("Failed to rename structure.", "Structure Manager", wxOK | wxICON_ERROR, this);
-			return;
-		}
-
-		LoadStructures();
-		SelectCategoryByPath(entry->category);
-		SelectEntryByName(safeName);
+		RenameSelectedStructure();
 		return;
 	}
 
@@ -1434,6 +2069,154 @@ void StructureManagerDialog::OnListKeyDown(wxKeyEvent& event)
 	}
 
 	event.Skip();
+}
+
+void StructureManagerDialog::OnRenameStructure(wxCommandEvent& WXUNUSED(event))
+{
+	RenameSelectedStructure();
+}
+
+void StructureManagerDialog::OnMoveStructureUp(wxCommandEvent& WXUNUSED(event))
+{
+	MoveSelectedStructure(-1);
+}
+
+void StructureManagerDialog::OnMoveStructureDown(wxCommandEvent& WXUNUSED(event))
+{
+	MoveSelectedStructure(1);
+}
+
+void StructureManagerDialog::OnListLeftDown(wxMouseEvent& event)
+{
+	m_listDragActive = false;
+	m_listDragStart = wxNOT_FOUND;
+	if(m_tutorialActive || !CanReorderCurrentList()) {
+		event.Skip();
+		return;
+	}
+
+	int index = wxNOT_FOUND;
+	if(m_list) {
+		index = m_list->HitTest(event.GetPosition());
+	}
+	if(index != wxNOT_FOUND) {
+		m_listDragActive = true;
+		m_listDragStart = index;
+	}
+	event.Skip();
+}
+
+void StructureManagerDialog::OnListLeftUp(wxMouseEvent& event)
+{
+	if(!m_listDragActive) {
+		event.Skip();
+		return;
+	}
+
+	int target = wxNOT_FOUND;
+	if(m_list) {
+		target = m_list->HitTest(event.GetPosition());
+	}
+	if(target != wxNOT_FOUND && m_listDragStart != wxNOT_FOUND && target != m_listDragStart) {
+		MoveEntryToIndex(m_listDragStart, target);
+	}
+
+	m_listDragActive = false;
+	m_listDragStart = wxNOT_FOUND;
+	event.Skip();
+}
+
+void StructureManagerDialog::OnListMouseMove(wxMouseEvent& event)
+{
+	if(!m_listDragActive || !event.Dragging() || !event.LeftIsDown()) {
+		event.Skip();
+		return;
+	}
+
+	if(!m_list) {
+		event.Skip();
+		return;
+	}
+
+	int index = m_list->HitTest(event.GetPosition());
+	if(index != wxNOT_FOUND && index != m_list->GetSelection()) {
+		m_list->SetSelection(index);
+	}
+	event.Skip();
+}
+
+void StructureManagerDialog::OnAutoNameToggle(wxCommandEvent& WXUNUSED(event))
+{
+	UpdateSaveOptionsUi();
+}
+
+void StructureManagerDialog::OnAutoNameBaseChanged(wxCommandEvent& WXUNUSED(event))
+{
+	UpdateSaveOptionsUi();
+}
+
+void StructureManagerDialog::OnFixedSizeToggle(wxCommandEvent& WXUNUSED(event))
+{
+	UpdateSaveOptionsUi();
+}
+
+void StructureManagerDialog::MoveSelectedStructure(int delta)
+{
+	if(m_tutorialActive) {
+		return;
+	}
+	if(!m_list) {
+		return;
+	}
+	if(!CanReorderCurrentList()) {
+		wxString message = "Clear search to reorder structures.";
+		SetStatusText(message);
+		g_gui.SetStatusText(message);
+		return;
+	}
+
+	int selection = m_list->GetSelection();
+	if(selection == wxNOT_FOUND) {
+		return;
+	}
+	int target = selection + delta;
+	if(target < 0 || target >= static_cast<int>(m_listEntries.size())) {
+		return;
+	}
+	MoveEntryToIndex(selection, target);
+}
+
+void StructureManagerDialog::MoveEntryToIndex(int fromIndex, int toIndex)
+{
+	if(m_tutorialActive) {
+		return;
+	}
+	if(!m_list) {
+		return;
+	}
+	if(!CanReorderCurrentList()) {
+		return;
+	}
+	if(fromIndex == toIndex) {
+		return;
+	}
+	if(fromIndex < 0 || toIndex < 0 ||
+		fromIndex >= static_cast<int>(m_listEntries.size()) ||
+		toIndex >= static_cast<int>(m_listEntries.size())) {
+		return;
+	}
+
+	std::vector<const StructureEntry*> ordered = m_listEntries;
+	const StructureEntry* moved = ordered[static_cast<size_t>(fromIndex)];
+	ordered.erase(ordered.begin() + fromIndex);
+	ordered.insert(ordered.begin() + toIndex, moved);
+	WriteOrderFile(m_currentCategoryPath, ordered);
+
+	RefreshItemList();
+	if(m_list) {
+		m_list->SetSelection(toIndex);
+	}
+	UpdateSelectionUi();
 }
 
 void StructureManagerDialog::OnRenameCategory(wxCommandEvent& WXUNUSED(event))
@@ -1911,8 +2694,38 @@ void StructureManagerDialog::SetTutorialUiEnabled(bool enabled)
 	if(m_renameCategoryButton) {
 		m_renameCategoryButton->Enable(enabled);
 	}
+	if(m_renameStructureButton) {
+		m_renameStructureButton->Enable(enabled);
+	}
+	if(m_moveStructureUpButton) {
+		m_moveStructureUpButton->Enable(enabled);
+	}
+	if(m_moveStructureDownButton) {
+		m_moveStructureDownButton->Enable(enabled);
+	}
 	if(m_saveButton) {
 		m_saveButton->Enable(enabled);
+	}
+	if(m_fixedSizeCheck) {
+		m_fixedSizeCheck->Enable(enabled);
+	}
+	if(m_fixedWidthSpin) {
+		m_fixedWidthSpin->Enable(enabled);
+	}
+	if(m_fixedHeightSpin) {
+		m_fixedHeightSpin->Enable(enabled);
+	}
+	if(m_fixedZFromSpin) {
+		m_fixedZFromSpin->Enable(enabled);
+	}
+	if(m_fixedZToSpin) {
+		m_fixedZToSpin->Enable(enabled);
+	}
+	if(m_autoNameCheck) {
+		m_autoNameCheck->Enable(enabled);
+	}
+	if(m_autoNameBaseCtrl) {
+		m_autoNameBaseCtrl->Enable(enabled);
 	}
 	if(m_pasteButton) {
 		m_pasteButton->Enable(enabled);
@@ -1995,6 +2808,13 @@ void StructureManagerDialog::OnCharHook(wxKeyEvent& event)
 			return;
 		}
 	}
+	if(event.ControlDown() && event.ShiftDown()) {
+		if(key == 'S' || key == 's') {
+			wxCommandEvent dummy;
+			OnSaveSelection(dummy);
+			return;
+		}
+	}
 
 	event.Skip();
 }
@@ -2019,6 +2839,13 @@ bool StructureManagerDialog::HandleGlobalHotkeyInternal(wxKeyEvent& event)
 		return false;
 	}
 	const int key = event.GetKeyCode();
+	if(event.ControlDown() && event.ShiftDown()) {
+		if(key == 'S' || key == 's') {
+			wxCommandEvent dummy;
+			OnSaveSelection(dummy);
+			return true;
+		}
+	}
 	if(key == WXK_PAGEUP || key == WXK_PAGEDOWN) {
 		SelectAdjacentEntry(key == WXK_PAGEUP ? -1 : 1);
 		return true;
@@ -2032,6 +2859,25 @@ bool StructureManagerDialog::HandleGlobalHotkeyInternal(wxKeyEvent& event)
 			SelectAdjacentEntry(1);
 			return true;
 		}
+	}
+	if(key == 'Z' || key == 'z') {
+		Editor* editor = g_gui.GetCurrentEditor();
+		if(!editor || !editor->copybuffer.canPaste() || !m_pasteRotationChoice) {
+			return false;
+		}
+		const int count = static_cast<int>(m_pasteRotationChoice->GetCount());
+		if(count <= 0) {
+			return false;
+		}
+		int desired = m_pasteRotationChoice->GetSelection();
+		if(desired == wxNOT_FOUND) {
+			desired = 0;
+		}
+		desired = (desired + 1) % count;
+		m_pasteRotationChoice->SetSelection(desired);
+		wxCommandEvent dummy;
+		OnPasteRotationChanged(dummy);
+		return true;
 	}
 	return false;
 }

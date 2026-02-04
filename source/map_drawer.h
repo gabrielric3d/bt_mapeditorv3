@@ -162,6 +162,7 @@ public:
 	void DrawShade(int mapz);
 	void DrawMap();
 	void DrawSecondaryMap(int mapz);
+	void DrawFixedSavePreview(int mapz);
 	void DrawDraggingShadow();
 	void DrawHigherFloors();
 	void DrawSelectionBox();

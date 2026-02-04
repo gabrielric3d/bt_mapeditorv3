@@ -31,6 +31,11 @@
 #include <vector>
 
 class wxPopupWindow;
+class wxChoice;
+class wxSpinCtrl;
+class BaseMap;
+class Editor;
+class Position;
 
 class StructureManagerDialog : public wxDialog
 {
@@ -38,6 +43,7 @@ public:
 	explicit StructureManagerDialog(wxWindow* parent);
 	~StructureManagerDialog() override;
 	static bool HandleGlobalHotkey(wxKeyEvent& event);
+	static bool GetFixedSavePreview(int& width, int& height, int& zFrom, int& zTo);
 
 private:
 	class StructurePreviewPanel;
@@ -63,6 +69,7 @@ private:
 	void SelectEntryByName(const wxString& name);
 	void StartPasteFromEntry(const StructureEntry& entry);
 	void RenameSelectedCategory();
+	void RenameSelectedStructure();
 	void SelectAdjacentEntry(int delta);
 	wxString GetSelectedCategoryPath() const;
 	bool HandleGlobalHotkeyInternal(wxKeyEvent& event);
@@ -78,6 +85,28 @@ private:
 	TutorialStepInfo GetTutorialStepInfo(int step) const;
 	int GetTutorialStepCount() const;
 	void SetTutorialUiEnabled(bool enabled);
+	bool CanReorderCurrentList() const;
+	wxString GetOrderFilePath(const wxString& category) const;
+	bool ReadOrderFile(const wxString& category, std::vector<std::string>& out) const;
+	void WriteOrderFile(const wxString& category, const std::vector<std::string>& names) const;
+	void WriteOrderFile(const wxString& category, const std::vector<const StructureEntry*>& entries) const;
+	std::vector<const StructureEntry*> GetOrderedEntriesForCategory(const wxString& category) const;
+	void MoveSelectedStructure(int delta);
+	void MoveEntryToIndex(int fromIndex, int toIndex);
+	void UpdateSaveOptionsUi();
+	wxString GetAutoNameBase() const;
+	int GetNextAutoNameIndex(const wxString& base, const wxString& categoryPath) const;
+	bool BuildFixedAreaBuffer(Editor& editor, const Position& center, int width, int height, int zFrom, int zTo,
+		BaseMap& outMap, Position& outMinPos, Position& outMaxPos, int& outTiles, int& outItems) const;
+	void OnRenameStructure(wxCommandEvent& event);
+	void OnMoveStructureUp(wxCommandEvent& event);
+	void OnMoveStructureDown(wxCommandEvent& event);
+	void OnListLeftDown(wxMouseEvent& event);
+	void OnListLeftUp(wxMouseEvent& event);
+	void OnListMouseMove(wxMouseEvent& event);
+	void OnAutoNameToggle(wxCommandEvent& event);
+	void OnAutoNameBaseChanged(wxCommandEvent& event);
+	void OnFixedSizeToggle(wxCommandEvent& event);
 
 	void OnSaveSelection(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
@@ -100,6 +129,7 @@ private:
 	void OnMove(wxMoveEvent& event);
 	void OnCharHook(wxKeyEvent& event);
 	void OnClose(wxCloseEvent& event);
+	void OnPasteRotationChanged(wxCommandEvent& event);
 
 	std::vector<StructureEntry> m_entries;
 	std::vector<const StructureEntry*> m_listEntries;
@@ -115,19 +145,34 @@ private:
 	wxButton* m_addSubcategoryButton = nullptr;
 	wxButton* m_removeCategoryButton = nullptr;
 	wxButton* m_removeSubcategoryButton = nullptr;
+	wxButton* m_renameStructureButton = nullptr;
+	wxButton* m_moveStructureUpButton = nullptr;
+	wxButton* m_moveStructureDownButton = nullptr;
 	wxButton* m_helpButton = nullptr;
 	wxButton* m_saveButton = nullptr;
 	wxButton* m_pasteButton = nullptr;
 	wxButton* m_deleteButton = nullptr;
+	wxChoice* m_pasteRotationChoice = nullptr;
 	wxStaticText* m_detailsText = nullptr;
 	wxStaticText* m_statusText = nullptr;
+	wxCheckBox* m_fixedSizeCheck = nullptr;
+	wxSpinCtrl* m_fixedWidthSpin = nullptr;
+	wxSpinCtrl* m_fixedHeightSpin = nullptr;
+	wxSpinCtrl* m_fixedZFromSpin = nullptr;
+	wxSpinCtrl* m_fixedZToSpin = nullptr;
+	wxCheckBox* m_autoNameCheck = nullptr;
+	wxTextCtrl* m_autoNameBaseCtrl = nullptr;
+	wxStaticText* m_autoNamePreview = nullptr;
 	StructurePreviewPanel* m_previewPanel = nullptr;
 	wxString m_previewPath;
+	int m_currentPasteRotationTurns = 0;
 	bool m_suppressAutoPaste = false;
 	bool m_tutorialActive = false;
 	int m_tutorialStep = 0;
 	bool m_tutorialLockMove = false;
 	bool m_tutorialMoveGuard = false;
+	bool m_listDragActive = false;
+	int m_listDragStart = wxNOT_FOUND;
 	wxPoint m_tutorialLockPos;
 	wxOverlay m_tutorialOverlay;
 	wxPopupWindow* m_tutorialPopup = nullptr;
