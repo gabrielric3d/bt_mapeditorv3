@@ -22,19 +22,51 @@
 #include "common_windows.h"
 #include "editor.h"
 #include <wx/dnd.h>
+#include "ground_brush.h"
 
 struct ReplacingItem
 {
+	enum class Kind {
+		ItemId,
+		GroundBrush,
+	};
+
 	ReplacingItem() :
-		replaceId(0), withId(0), total(0), complete(false) { }
+		kind(Kind::ItemId), replaceId(0), withId(0), fromBrush(nullptr), toBrush(nullptr), total(0), complete(false) { }
+
+	static ReplacingItem FromIds(uint16_t replaceId, uint16_t withId)
+	{
+		ReplacingItem item;
+		item.kind = Kind::ItemId;
+		item.replaceId = replaceId;
+		item.withId = withId;
+		return item;
+	}
+
+	static ReplacingItem FromBrushes(GroundBrush* from, GroundBrush* to)
+	{
+		ReplacingItem item;
+		item.kind = Kind::GroundBrush;
+		item.fromBrush = from;
+		item.toBrush = to;
+		return item;
+	}
 
 	bool operator==(const ReplacingItem& other) const
 	{
+		if(kind != other.kind)
+			return false;
+		if(kind == Kind::GroundBrush) {
+			return fromBrush == other.fromBrush && toBrush == other.toBrush;
+		}
 		return replaceId == other.replaceId && withId == other.withId;
 	}
 
+	Kind kind;
 	uint16_t replaceId;
 	uint16_t withId;
+	GroundBrush* fromBrush;
+	GroundBrush* toBrush;
 	uint32_t total;
 	bool complete;
 };
@@ -132,10 +164,13 @@ public:
 	void OnReplaceItemClicked(wxMouseEvent& event);
 	void OnWithItemClicked(wxMouseEvent& event);
 	void OnAddButtonClicked(wxCommandEvent& event);
+	void OnAddRangeButtonClicked(wxCommandEvent& event);
+	void OnAddGroundBrushButtonClicked(wxCommandEvent& event);
 	void OnRemoveButtonClicked(wxCommandEvent& event);
 	void OnExecuteButtonClicked(wxCommandEvent& event);
 	void OnCancelButtonClicked(wxCommandEvent& event);
 	void OnItemDropped(wxCommandEvent& event);
+	void OnLockSelectionToggled(wxCommandEvent& event);
 
 	void UpdateWidgets();
 
@@ -149,14 +184,20 @@ private:
 	wxGauge* progress;
 	wxStaticBitmap* arrow_bitmap;
 	wxButton* add_button;
+	wxButton* add_range_button;
+	wxButton* add_ground_brush_button;
 	wxButton* remove_button;
 	wxButton* execute_button;
 	wxButton* close_button;
 	wxCheckBox* auto_add_checkbox;
+	wxCheckBox* lock_selection_checkbox;
 	bool selectionOnly;
+	std::vector<Position> selectionSnapshot;
 
 	// Try to auto-add when both boxes are filled
 	void TryAutoAdd();
+	Editor* GetParentEditor() const;
+	void CaptureSelectionSnapshot(Editor* editor);
 };
 
 #endif
