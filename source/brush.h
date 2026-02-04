@@ -76,6 +76,10 @@ public:
 
 	const BrushMap& getMap() const noexcept { return brushes; }
 
+	// Border helpers
+	const AutoBorder* getAutoBorder(uint32_t id) const;
+	const AutoBorder* findAutoBorderByBorderItem(uint16_t itemId, BorderType alignmentHint = BORDER_NONE) const;
+
 protected:
 	typedef std::map<uint32_t, AutoBorder*> BorderMap;
 	BrushMap brushes;

@@ -107,6 +107,8 @@ const wxBitmap& HistoryListBox::getIconBitmap(ActionIdentifier identifier) const
 			return switch_bitmap;
 		case ACTION_ROTATE_ITEM:
 			return rotate_bitmap;
+		case ACTION_ROTATE_SELECTION:
+			return rotate_bitmap;
 		case ACTION_REPLACE_ITEMS:
 			return replace_bitmap;
 		case ACTION_CHANGE_PROPERTIES:

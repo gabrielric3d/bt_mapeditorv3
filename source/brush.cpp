@@ -206,6 +206,46 @@ Brush* Brushes::getBrush(const std::string& name) const
 	return nullptr;
 }
 
+const AutoBorder* Brushes::getAutoBorder(uint32_t id) const
+{
+	auto it = borders.find(id);
+	if(it != borders.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
+const AutoBorder* Brushes::findAutoBorderByBorderItem(uint16_t itemId, BorderType alignmentHint) const
+{
+	if(itemId == 0) {
+		return nullptr;
+	}
+
+	const int hint = static_cast<int>(alignmentHint);
+	if(hint >= 1 && hint <= 12) {
+		for(const auto& entry : borders) {
+			const AutoBorder* border = entry.second;
+			if(border && border->tiles[hint] == itemId) {
+				return border;
+			}
+		}
+	}
+
+	for(const auto& entry : borders) {
+		const AutoBorder* border = entry.second;
+		if(!border) {
+			continue;
+		}
+		for(int i = 1; i <= 12; ++i) {
+			if(border->tiles[i] == itemId) {
+				return border;
+			}
+		}
+	}
+
+	return nullptr;
+}
+
 // Brush
 uint32_t Brush::id_counter = 0;
 Brush::Brush() :

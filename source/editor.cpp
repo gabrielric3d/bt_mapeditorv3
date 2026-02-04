@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "editor.h"
+#include <unordered_map>
 #include "materials.h"
 #include "map.h"
 #include "complexitem.h"
@@ -1247,6 +1248,513 @@ void Editor::moveSelection(const Position& offset)
 				}
 				action->addChange(new Change(new_tile));
 			}
+		}
+		batch_action->addAndCommitAction(action);
+	}
+
+	// Store the action for undo
+	addBatch(batch_action);
+	updateActions();
+	selection.updateSelectionCount();
+}
+
+void Editor::rotateSelection(int quarterTurns)
+{
+	if(!CanEdit() || !hasSelection()) {
+		return;
+	}
+
+	int turns = quarterTurns % 4;
+	if(turns < 0) {
+		turns += 4;
+	}
+	if(turns == 0) {
+		return;
+	}
+
+	Selection& selection = getSelection();
+	Position min_pos = selection.minPosition();
+	Position max_pos = selection.maxPosition();
+
+	if(min_pos.z != max_pos.z) {
+		g_gui.SetStatusText("Cannot rotate selection across multiple floors.");
+		return;
+	}
+
+	const int width = max_pos.x - min_pos.x + 1;
+	const int height = max_pos.y - min_pos.y + 1;
+
+	// Border items are position-dependent within their border group. They do not necessarily
+	// follow rotateTo chains, so we remap the border alignment instead.
+	const auto rotate_border_type_cw_once = [](BorderType type) -> BorderType {
+		switch(type) {
+			case NORTH_HORIZONTAL: return EAST_HORIZONTAL;
+			case EAST_HORIZONTAL: return SOUTH_HORIZONTAL;
+			case SOUTH_HORIZONTAL: return WEST_HORIZONTAL;
+			case WEST_HORIZONTAL: return NORTH_HORIZONTAL;
+
+			// NOTE: enum order is NW(5), NE(6), SW(7), SE(8) (not clockwise)
+			case NORTHWEST_CORNER: return NORTHEAST_CORNER;
+			case NORTHEAST_CORNER: return SOUTHEAST_CORNER;
+			case SOUTHEAST_CORNER: return SOUTHWEST_CORNER;
+			case SOUTHWEST_CORNER: return NORTHWEST_CORNER;
+
+			case NORTHWEST_DIAGONAL: return NORTHEAST_DIAGONAL;
+			case NORTHEAST_DIAGONAL: return SOUTHEAST_DIAGONAL;
+			case SOUTHEAST_DIAGONAL: return SOUTHWEST_DIAGONAL;
+			case SOUTHWEST_DIAGONAL: return NORTHWEST_DIAGONAL;
+
+			default:
+				return type;
+		}
+	};
+
+	const auto rotate_border_type = [&](BorderType type, int cwTurns) -> BorderType {
+		int t = cwTurns % 4;
+		if(t < 0) {
+			t += 4;
+		}
+		BorderType out = type;
+		for(int i = 0; i < t; ++i) {
+			out = rotate_border_type_cw_once(out);
+		}
+		return out;
+	};
+
+	// Cache: itemId -> AutoBorder* (found by scanning loaded borders once per unique itemId).
+	std::unordered_map<uint16_t, const AutoBorder*> border_for_item_id;
+	border_for_item_id.reserve(128);
+
+	const auto get_border_for_item = [&](uint16_t itemId, BorderType alignmentHint) -> const AutoBorder* {
+		auto it = border_for_item_id.find(itemId);
+		if(it != border_for_item_id.end()) {
+			return it->second;
+		}
+
+		const AutoBorder* border = g_brushes.findAutoBorderByBorderItem(itemId, alignmentHint);
+		border_for_item_id.emplace(itemId, border);
+		return border;
+	};
+
+	// Wall items are defined by wall brushes and use a different alignment enum section.
+	// They don't have rotateTo chains; rotate the wall alignment and swap the ID within the same wall brush.
+	const auto rotate_wall_alignment_cw_once = [](BorderType type) -> BorderType {
+		switch(type) {
+			case WALL_POLE: return WALL_POLE;
+
+			case WALL_VERTICAL: return WALL_HORIZONTAL;
+			case WALL_HORIZONTAL: return WALL_VERTICAL;
+
+			case WALL_NORTH_END: return WALL_EAST_END;
+			case WALL_EAST_END: return WALL_SOUTH_END;
+			case WALL_SOUTH_END: return WALL_WEST_END;
+			case WALL_WEST_END: return WALL_NORTH_END;
+
+			case WALL_NORTH_T: return WALL_EAST_T;
+			case WALL_EAST_T: return WALL_SOUTH_T;
+			case WALL_SOUTH_T: return WALL_WEST_T;
+			case WALL_WEST_T: return WALL_NORTH_T;
+
+			case WALL_NORTHWEST_DIAGONAL: return WALL_NORTHEAST_DIAGONAL;
+			case WALL_NORTHEAST_DIAGONAL: return WALL_SOUTHEAST_DIAGONAL;
+			case WALL_SOUTHEAST_DIAGONAL: return WALL_SOUTHWEST_DIAGONAL;
+			case WALL_SOUTHWEST_DIAGONAL: return WALL_NORTHWEST_DIAGONAL;
+
+			case WALL_INTERSECTION: return WALL_INTERSECTION;
+			case WALL_UNTOUCHABLE: return WALL_UNTOUCHABLE;
+
+			default:
+				return type;
+		}
+	};
+
+	const auto rotate_wall_alignment = [&](BorderType type, int cwTurns) -> BorderType {
+		int t = cwTurns % 4;
+		if(t < 0) {
+			t += 4;
+		}
+		BorderType out = type;
+		for(int i = 0; i < t; ++i) {
+			out = rotate_wall_alignment_cw_once(out);
+		}
+		return out;
+	};
+
+	struct WallBrushCatalog {
+		std::vector<uint16_t> byAlignment[17];
+		std::unordered_map<uint32_t, std::vector<uint16_t>> doorsByKey;
+	};
+
+	bool wall_catalog_built = false;
+	std::unordered_map<const WallBrush*, WallBrushCatalog> wall_catalog_by_brush;
+
+	const auto build_door_key = [](BorderType alignment, ::DoorType doorType, bool open) -> uint32_t {
+		return (static_cast<uint32_t>(static_cast<uint8_t>(alignment)) & 0xFFu) |
+			((static_cast<uint32_t>(static_cast<uint8_t>(doorType)) & 0xFFu) << 8) |
+			((open ? 1u : 0u) << 16);
+	};
+
+	const auto ensure_wall_catalogs = [&]() {
+		if(wall_catalog_built) {
+			return;
+		}
+
+		for(uint16_t id = g_items.getMinID(); id <= g_items.getMaxID(); ++id) {
+			if(!g_items.isValidID(id)) {
+				continue;
+			}
+			const ItemType& type = g_items.getItemType(id);
+			if(!type.isWall || !type.brush || !type.brush->isWall()) {
+				continue;
+			}
+
+			const WallBrush* brush = type.brush->asWall();
+			if(!brush) {
+				continue;
+			}
+
+			const int alignmentIndex = static_cast<int>(type.border_alignment);
+			if(alignmentIndex < 0 || alignmentIndex >= 17) {
+				continue;
+			}
+
+			WallBrushCatalog& catalog = wall_catalog_by_brush[brush];
+			if(type.isBrushDoor) {
+				const ::DoorType doorType = const_cast<WallBrush*>(brush)->getDoorTypeFromID(id);
+				const uint32_t key = build_door_key(type.border_alignment, doorType, type.isOpen);
+				catalog.doorsByKey[key].push_back(id);
+			} else {
+				catalog.byAlignment[alignmentIndex].push_back(id);
+			}
+		}
+
+		for(auto& pair : wall_catalog_by_brush) {
+			WallBrushCatalog& catalog = pair.second;
+			for(int i = 0; i < 17; ++i) {
+				std::sort(catalog.byAlignment[i].begin(), catalog.byAlignment[i].end());
+			}
+			for(auto& doorPair : catalog.doorsByKey) {
+				std::vector<uint16_t>& ids = doorPair.second;
+				std::sort(ids.begin(), ids.end());
+			}
+		}
+
+		wall_catalog_built = true;
+	};
+
+	auto rotate_position = [&](const Position& pos) -> Position {
+		const int rx = pos.x - min_pos.x;
+		const int ry = pos.y - min_pos.y;
+		switch(turns) {
+			case 1: // 90 CW
+				return Position(min_pos.x + (height - 1 - ry), min_pos.y + rx, pos.z);
+			case 2: // 180
+				return Position(min_pos.x + (width - 1 - rx), min_pos.y + (height - 1 - ry), pos.z);
+			case 3: // 90 CCW
+				return Position(min_pos.x + ry, min_pos.y + (width - 1 - rx), pos.z);
+			default:
+				return pos;
+		}
+	};
+
+	auto rotate_item = [&](Item* item) {
+		if(!item) {
+			return;
+		}
+
+		// Rotate borders via border group/alignment remap.
+		// This is required so internal borders stay correct when rotating mixed ground types.
+		if(item->isBorder() || item->isOptionalBorder()) {
+			const BorderType current = item->getBorderAlignment();
+			const BorderType rotated = rotate_border_type(current, turns);
+
+			if(rotated != BORDER_NONE) {
+				const AutoBorder* border = get_border_for_item(item->getID(), current);
+				if(border && border->tiles[rotated] != 0) {
+					const uint16_t newId = static_cast<uint16_t>(border->tiles[rotated]);
+					if(newId != item->getID()) {
+						item->setID(newId);
+					}
+					return;
+				}
+			}
+			// Fall back to rotateTo (some border items may still use it, or borders not found in borders.xml)
+		}
+
+		// Rotate wall items by remapping their wall alignment within the same wall brush.
+		// This ensures rotated wall clusters preserve structure even when automagic is disabled.
+		if(item->isWall()) {
+			WallBrush* brush = item->getWallBrush();
+			if(brush) {
+				ensure_wall_catalogs();
+
+				const BorderType current = item->getWallAlignment();
+				const BorderType rotated = rotate_wall_alignment(current, turns);
+				if(rotated != current) {
+					auto catalogIt = wall_catalog_by_brush.find(brush);
+					if(catalogIt != wall_catalog_by_brush.end()) {
+						WallBrushCatalog& catalog = catalogIt->second;
+						const int currentIndex = static_cast<int>(current);
+						const int rotatedIndex = static_cast<int>(rotated);
+
+						if(item->isBrushDoor()) {
+							const ::DoorType doorType = brush->getDoorTypeFromID(item->getID());
+							const bool open = item->isOpen();
+
+							const uint32_t oldKey = build_door_key(current, doorType, open);
+							const uint32_t newKey = build_door_key(rotated, doorType, open);
+							auto oldIt = catalog.doorsByKey.find(oldKey);
+							auto newIt = catalog.doorsByKey.find(newKey);
+
+							if(newIt != catalog.doorsByKey.end() && !newIt->second.empty()) {
+								size_t idx = 0;
+								if(oldIt != catalog.doorsByKey.end()) {
+									const auto& oldIds = oldIt->second;
+									auto findIt = std::find(oldIds.begin(), oldIds.end(), item->getID());
+									if(findIt != oldIds.end()) {
+										idx = static_cast<size_t>(findIt - oldIds.begin());
+									}
+								}
+								const auto& newIds = newIt->second;
+								const uint16_t newId = newIds[idx % newIds.size()];
+								if(newId != 0 && newId != item->getID()) {
+									item->setID(newId);
+								}
+								return;
+							}
+						} else if(currentIndex >= 0 && currentIndex < 17 && rotatedIndex >= 0 && rotatedIndex < 17) {
+							const auto& oldIds = catalog.byAlignment[currentIndex];
+							const auto& newIds = catalog.byAlignment[rotatedIndex];
+							if(!newIds.empty()) {
+								size_t idx = 0;
+								auto findIt = std::find(oldIds.begin(), oldIds.end(), item->getID());
+								if(findIt != oldIds.end()) {
+									idx = static_cast<size_t>(findIt - oldIds.begin());
+								}
+								const uint16_t newId = newIds[idx % newIds.size()];
+								if(newId != 0 && newId != item->getID()) {
+									item->setID(newId);
+								}
+								return;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for(int i = 0; i < turns; ++i) {
+			item->doRotate();
+		}
+	};
+
+	auto rotate_tile_items = [&](Tile* tile) {
+		if(!tile) {
+			return;
+		}
+		rotate_item(tile->ground);
+		for(Item* item : tile->items) {
+			rotate_item(item);
+		}
+	};
+
+	for(Tile* tile : selection) {
+		const Position new_pos = rotate_position(tile->getPosition());
+		if(!new_pos.isValid()) {
+			g_gui.SetStatusText("Rotation would move selection out of bounds.");
+			return;
+		}
+	}
+
+	bool borderize = false;
+	int drag_threshold = g_settings.getInteger(Config::BORDERIZE_DRAG_THRESHOLD);
+	bool create_borders = g_settings.getInteger(Config::USE_AUTOMAGIC)
+		&& g_settings.getInteger(Config::BORDERIZE_DRAG);
+
+	TileSet storage;
+	BatchAction* batch_action = actionQueue->createBatch(ACTION_ROTATE_SELECTION);
+	Action* action = actionQueue->createAction(batch_action);
+
+	// Remove selected items from the original tiles and store them
+	for(Tile* tile : selection) {
+		Tile* new_tile = tile->deepCopy(map);
+		Tile* storage_tile = map.allocator(tile->getLocation());
+
+		ItemVector selected_items = new_tile->popSelectedItems();
+		for(Item* item : selected_items) {
+			storage_tile->addItem(item);
+		}
+
+		if(new_tile->spawn && new_tile->spawn->isSelected()) {
+			storage_tile->spawn = new_tile->spawn;
+			new_tile->spawn = nullptr;
+		}
+
+		if(new_tile->creature && new_tile->creature->isSelected()) {
+			storage_tile->creature = new_tile->creature;
+			new_tile->creature = nullptr;
+		}
+
+		if(storage_tile->ground) {
+			storage_tile->house_id = new_tile->house_id;
+			new_tile->house_id = 0;
+			storage_tile->setMapFlags(new_tile->getMapFlags());
+			new_tile->setMapFlags(TILESTATE_NONE);
+			borderize = true;
+		}
+
+		storage.insert(storage_tile);
+		action->addChange(new Change(new_tile));
+	}
+	batch_action->addAndCommitAction(action);
+
+	// Remove old borders (and create some new?)
+	if(create_borders && selection.size() < static_cast<size_t>(drag_threshold)) {
+		action = actionQueue->createAction(batch_action);
+		TileList borderize_tiles;
+		// Go through all modified (selected) tiles (might be slow)
+		for(const Tile* tile : storage) {
+			const Position& pos = tile->getPosition();
+			// Go through all neighbours
+			Tile* t;
+			t = map.getTile(pos.x  , pos.y  , pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x-1, pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x  , pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x+1, pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x-1, pos.y  , pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x+1, pos.y  , pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x-1, pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x  , pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+			t = map.getTile(pos.x+1, pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); }
+		}
+
+		// Remove duplicates
+		borderize_tiles.sort();
+		borderize_tiles.unique();
+
+		// Create borders
+		for(const Tile* tile : borderize_tiles) {
+			Tile* new_tile = tile->deepCopy(map);
+			if(borderize) {
+				new_tile->borderize(&map);
+			}
+			new_tile->wallize(&map);
+			new_tile->tableize(&map);
+			new_tile->carpetize(&map);
+			if(tile->ground && tile->ground->isSelected()) {
+				new_tile->selectGround();
+			}
+			action->addChange(new Change(new_tile));
+		}
+		batch_action->addAndCommitAction(action);
+	}
+
+	// New action for adding the rotated tiles
+	action = actionQueue->createAction(batch_action);
+	for(Tile* tile : storage) {
+		const Position& old_pos = tile->getPosition();
+		Position new_pos = rotate_position(old_pos);
+		if(!new_pos.isValid()) {
+			delete tile;
+			continue;
+		}
+
+		TileLocation* location = map.createTileL(new_pos);
+		Tile* old_dest_tile = location->get();
+		Tile* new_dest_tile = nullptr;
+
+		rotate_tile_items(tile);
+
+		if(!tile->ground || g_settings.getInteger(Config::MERGE_MOVE)) {
+			// Move items
+			if(old_dest_tile) {
+				new_dest_tile = old_dest_tile->deepCopy(map);
+			} else {
+				new_dest_tile = map.allocator(location);
+			}
+			new_dest_tile->merge(tile);
+			delete tile;
+		} else {
+			// Replace tile instead of just merge
+			tile->setLocation(location);
+			new_dest_tile = tile;
+		}
+		action->addChange(new Change(new_dest_tile));
+	}
+	batch_action->addAndCommitAction(action);
+
+	if(create_borders && selection.size() < static_cast<size_t>(drag_threshold)) {
+		action = actionQueue->createAction(batch_action);
+		TileList borderize_tiles;
+		// Go through all modified (selected) tiles (might be slow)
+		for(Tile* tile : selection) {
+			bool add_me = false; // If this tile is touched
+			const Position& pos = tile->getPosition();
+			// Go through all neighbours
+			Tile* t;
+			t = map.getTile(pos.x-1, pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x-1, pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x  , pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x+1, pos.y-1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x-1, pos.y  , pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x+1, pos.y  , pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x-1, pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x  , pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			t = map.getTile(pos.x+1, pos.y+1, pos.z); if(t && !t->isSelected()) { borderize_tiles.push_back(t); add_me = true; }
+			if(add_me) {
+				borderize_tiles.push_back(tile);
+			}
+		}
+
+		// Remove duplicates
+		borderize_tiles.sort();
+		borderize_tiles.unique();
+
+		// Create borders
+		for(const Tile* tile : borderize_tiles) {
+			if(!tile || !tile->ground) {
+				continue;
+			}
+			if(tile->ground->getGroundBrush()) {
+				Tile* new_tile = tile->deepCopy(map);
+				if(borderize) {
+					new_tile->borderize(&map);
+				}
+				new_tile->wallize(&map);
+				new_tile->tableize(&map);
+				new_tile->carpetize(&map);
+				if(tile->ground->isSelected()) {
+					new_tile->selectGround();
+				}
+				action->addChange(new Change(new_tile));
+			}
+		}
+		batch_action->addAndCommitAction(action);
+	}
+
+	// Unlike moving, rotation changes internal border orientations for mixed ground types.
+	// Rebuild borders/walls/etc on the rotated tiles themselves.
+	if(create_borders && borderize) {
+		action = actionQueue->createAction(batch_action);
+		for(Tile* tile : selection) {
+			if(!tile) {
+				continue;
+			}
+
+			Tile* map_tile = map.getTile(tile->getPosition());
+			if(!map_tile || !map_tile->ground || !map_tile->ground->getGroundBrush()) {
+				continue;
+			}
+
+			Tile* new_tile = map_tile->deepCopy(map);
+			new_tile->borderize(&map);
+			new_tile->wallize(&map);
+			new_tile->tableize(&map);
+			new_tile->carpetize(&map);
+			if(map_tile->ground && map_tile->ground->isSelected()) {
+				new_tile->selectGround();
+			}
+			action->addChange(new Change(new_tile));
 		}
 		batch_action->addAndCommitAction(action);
 	}

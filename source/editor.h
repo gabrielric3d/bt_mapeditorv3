@@ -108,6 +108,8 @@ public: // Functions
 	// Some simple actions that work on the map (these will work through the undo queue)
 	// Moves the selected area by the offset
 	void moveSelection(const Position& offset);
+	// Rotates the selected area by quarter turns (1 = 90 CW, 2 = 180, 3 = 90 CCW)
+	void rotateSelection(int quarterTurns);
 	// Deletes all selected items
 	void destroySelection();
 	// Borderizes the selected region

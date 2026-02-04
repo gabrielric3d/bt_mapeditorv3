@@ -169,6 +169,9 @@ BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_MENU(MAP_POPUP_MENU_APPLY_REPLACE_BOX2, MapCanvas::OnApplyReplaceBox2)
 	// ----
 	EVT_MENU(MAP_POPUP_MENU_ROTATE, MapCanvas::OnRotateItem)
+	EVT_MENU(MAP_POPUP_MENU_ROTATE_SELECTION_CW, MapCanvas::OnRotateSelectionCW)
+	EVT_MENU(MAP_POPUP_MENU_ROTATE_SELECTION_CCW, MapCanvas::OnRotateSelectionCCW)
+	EVT_MENU(MAP_POPUP_MENU_ROTATE_SELECTION_180, MapCanvas::OnRotateSelection180)
 	EVT_MENU(MAP_POPUP_MENU_GOTO, MapCanvas::OnGotoDestination)
 	EVT_MENU(MAP_POPUP_MENU_COPY_DESTINATION, MapCanvas::OnCopyDestination)
 	EVT_MENU(MAP_POPUP_MENU_SWITCH_DOOR, MapCanvas::OnSwitchDoor)
@@ -3366,6 +3369,24 @@ void MapCanvas::OnRotateItem(wxCommandEvent& WXUNUSED(event))
 	g_gui.RefreshView();
 }
 
+void MapCanvas::OnRotateSelectionCW(wxCommandEvent& WXUNUSED(event))
+{
+	editor.rotateSelection(1);
+	g_gui.RefreshView();
+}
+
+void MapCanvas::OnRotateSelectionCCW(wxCommandEvent& WXUNUSED(event))
+{
+	editor.rotateSelection(3);
+	g_gui.RefreshView();
+}
+
+void MapCanvas::OnRotateSelection180(wxCommandEvent& WXUNUSED(event))
+{
+	editor.rotateSelection(2);
+	g_gui.RefreshView();
+}
+
 void MapCanvas::OnGotoDestination(wxCommandEvent& WXUNUSED(event))
 {
 	Tile* tile = editor.getSelection().getSelectedTile();
@@ -3846,6 +3867,13 @@ void MapPopupMenu::Update()
 
 			wxMenuItem* browseTile = Append(MAP_POPUP_MENU_BROWSE_TILE, "Browse Field", "Navigate from tile items");
 			browseTile->Enable(anything_selected);
+		} else {
+			AppendSeparator();
+			wxMenu* rotate_menu = new wxMenu();
+			rotate_menu->Append(MAP_POPUP_MENU_ROTATE_SELECTION_CW, "Rotate selection clockwise", "Rotate the selection 90 degrees clockwise");
+			rotate_menu->Append(MAP_POPUP_MENU_ROTATE_SELECTION_CCW, "Rotate selection counterclockwise", "Rotate the selection 90 degrees counterclockwise");
+			rotate_menu->Append(MAP_POPUP_MENU_ROTATE_SELECTION_180, "Rotate selection 180", "Rotate the selection 180 degrees");
+			AppendSubMenu(rotate_menu, "Rotate selection");
 		}
 	}
 

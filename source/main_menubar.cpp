@@ -236,6 +236,9 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(CUT, wxITEM_NORMAL, OnCut);
 	MAKE_ACTION(COPY, wxITEM_NORMAL, OnCopy);
 	MAKE_ACTION(PASTE, wxITEM_NORMAL, OnPaste);
+	MAKE_ACTION(ROTATE_SELECTION_CW, wxITEM_NORMAL, OnRotateSelectionCW);
+	MAKE_ACTION(ROTATE_SELECTION_CCW, wxITEM_NORMAL, OnRotateSelectionCCW);
+	MAKE_ACTION(ROTATE_SELECTION_180, wxITEM_NORMAL, OnRotateSelection180);
 
 	MAKE_ACTION(EDIT_TOWNS, wxITEM_NORMAL, OnMapEditTowns);
 	MAKE_ACTION(EDIT_ITEMS, wxITEM_NORMAL, OnMapEditItems);
@@ -505,6 +508,9 @@ void MainMenuBar::Update()
 
 	EnableItem(CUT, has_map);
 	EnableItem(COPY, has_map);
+	EnableItem(ROTATE_SELECTION_CW, has_map && has_selection && editor->getSelection().size() >= 2);
+	EnableItem(ROTATE_SELECTION_CCW, has_map && has_selection && editor->getSelection().size() >= 2);
+	EnableItem(ROTATE_SELECTION_180, has_map && has_selection && editor->getSelection().size() >= 2);
 
 	EnableItem(BORDERIZE_SELECTION, has_map && has_selection);
 	EnableItem(BORDERIZE_MAP, is_local);
@@ -1701,6 +1707,51 @@ void MainMenuBar::OnPaste(wxCommandEvent& WXUNUSED(event))
 	g_gui.PreparePaste();
 }
 
+void MainMenuBar::OnRotateSelectionCW(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->hasSelection() || editor->getSelection().size() < 2) {
+		return;
+	}
+
+	editor->rotateSelection(1);
+	g_gui.RefreshView();
+}
+
+void MainMenuBar::OnRotateSelectionCCW(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->hasSelection() || editor->getSelection().size() < 2) {
+		return;
+	}
+
+	editor->rotateSelection(3);
+	g_gui.RefreshView();
+}
+
+void MainMenuBar::OnRotateSelection180(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->hasSelection() || editor->getSelection().size() < 2) {
+		return;
+	}
+
+	editor->rotateSelection(2);
+	g_gui.RefreshView();
+}
+
 void MainMenuBar::OnToggleAutomagic(wxCommandEvent& WXUNUSED(event))
 {
 	g_settings.setInteger(Config::USE_AUTOMAGIC, IsItemChecked(MenuBar::AUTOMAGIC));
@@ -2674,12 +2725,7 @@ void MainMenuBar::OnBrushTipsWindow(wxCommandEvent& WXUNUSED(event))
 
 void MainMenuBar::OnAreaDecoration(wxCommandEvent& WXUNUSED(event))
 {
-	if(!g_gui.IsEditorOpen()) {
-		return;
-	}
-
-	AreaDecorationDialog* dialog = newd AreaDecorationDialog(frame);
-	dialog->Show();
+	g_gui.ShowAreaDecorationDialog();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

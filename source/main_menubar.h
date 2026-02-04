@@ -83,6 +83,9 @@ namespace MenuBar
 		CUT,
 		COPY,
 		PASTE,
+		ROTATE_SELECTION_CW,
+		ROTATE_SELECTION_CCW,
+		ROTATE_SELECTION_180,
 		EDIT_TOWNS,
 		EDIT_ITEMS,
 		EDIT_MONSTERS,
@@ -272,6 +275,9 @@ public:
 	void OnCut(wxCommandEvent& event);
 	void OnCopy(wxCommandEvent& event);
 	void OnPaste(wxCommandEvent& event);
+	void OnRotateSelectionCW(wxCommandEvent& event);
+	void OnRotateSelectionCCW(wxCommandEvent& event);
+	void OnRotateSelection180(wxCommandEvent& event);
 	void OnSearchForItem(wxCommandEvent& event);
 	void OnReplaceItems(wxCommandEvent& event);
 	void OnSearchForStuffOnMap(wxCommandEvent& event);

@@ -714,6 +714,7 @@ wxString ActionQueue::createLabel(ActionIdentifier type)
 		case ACTION_ERASE: return "Erase";
 		case ACTION_SWITCHDOOR: return "Switch Door";
 		case ACTION_ROTATE_ITEM: return "Rotate Item";
+		case ACTION_ROTATE_SELECTION: return "Rotate Selection";
 		case ACTION_REPLACE_ITEMS: return "Replace";
 		case ACTION_CHANGE_PROPERTIES: return "Change Properties";
 		default: return wxEmptyString;

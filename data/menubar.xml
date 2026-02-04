@@ -70,6 +70,12 @@
         <item name="$Cut" hotkey="Ctrl+X" action="CUT" help="Cut a part of the map."/>
         <item name="C$opy" hotkey="Ctrl+C" action="COPY" help="Copy a part of the map."/>
         <item name="$Paste" hotkey="Ctrl+V" action="PASTE" help="Paste a part of the map."/>
+        <separator/>
+        <menu name="Rotate $Selection">
+            <item name="Rotate $Clockwise" hotkey="Ctrl+Alt+Right" action="ROTATE_SELECTION_CW" help="Rotate the selection 90 degrees clockwise."/>
+            <item name="Rotate Counter$clockwise" hotkey="Ctrl+Alt+Left" action="ROTATE_SELECTION_CCW" help="Rotate the selection 90 degrees counterclockwise."/>
+            <item name="Rotate $180" hotkey="Ctrl+Alt+Down" action="ROTATE_SELECTION_180" help="Rotate the selection 180 degrees."/>
+        </menu>
     </menu>
     <menu name="$Map">
         <item name="Edit $Towns" hotkey="Ctrl+T" action="EDIT_TOWNS" help="Edit towns."/>
