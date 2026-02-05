@@ -2701,13 +2701,7 @@ void MainMenuBar::OnBrowseFieldWindow(wxCommandEvent& WXUNUSED(event))
 
 void MainMenuBar::OnBrushManager(wxCommandEvent& WXUNUSED(event))
 {
-	if(!g_gui.IsVersionLoaded()) {
-		wxMessageBox("You need to load a client version before accessing brush files.", "Brush Manager", wxOK | wxICON_INFORMATION, frame);
-		return;
-	}
-
-	BrushManagerDialog dialog(frame);
-	dialog.ShowModal();
+	g_gui.ShowBrushManager();
 }
 
 void MainMenuBar::OnStructureManager(wxCommandEvent& WXUNUSED(event))

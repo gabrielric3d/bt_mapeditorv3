@@ -1278,8 +1278,22 @@ void GameSprite::Image::createGLTexture(GLuint textureId)
 	ASSERT(!isGLLoaded);
 
 	uint8_t* rgba = getRGBAData();
+
 	if(!rgba) {
-		return;
+		// Create a checkerboard placeholder texture instead of failing silently
+		// This prevents white squares and makes missing sprites visible
+		const int size = rme::SpritePixelsSize * 4;
+		rgba = new uint8_t[size];
+		for(int y = 0; y < rme::SpritePixels; y++) {
+			for(int x = 0; x < rme::SpritePixels; x++) {
+				int i = (y * rme::SpritePixels + x) * 4;
+				bool dark = ((x / 4) + (y / 4)) % 2 == 0;
+				rgba[i + 0] = dark ? 0x80 : 0xC0; // Red
+				rgba[i + 1] = dark ? 0x00 : 0x00; // Green
+				rgba[i + 2] = dark ? 0x80 : 0xC0; // Blue (purple checkerboard)
+				rgba[i + 3] = 0x80; // Semi-transparent
+			}
+		}
 	}
 
 	isGLLoaded = true;
@@ -1514,7 +1528,7 @@ void GameSprite::NormalImage::unloadGLTexture(GLuint textureId)
 {
 	if(gl_texture_id != 0) {
 		Image::unloadGLTexture(gl_texture_id);
-		gl_texture_id = 0;  // Reset after deletion
+		gl_texture_id = 0; // Reset after deletion
 	}
 }
 
@@ -1601,9 +1615,8 @@ GameSprite::TemplateImage::TemplateImage(GameSprite* parent, int v, const Outfit
 
 GameSprite::TemplateImage::~TemplateImage()
 {
-	if(isGLLoaded) {
+	if(isGLLoaded && gl_tid != 0) {
 		unloadGLTexture(gl_tid);
-		gl_tid = 0;
 	}
 }
 
@@ -1938,7 +1951,7 @@ void Animator::calculateSynchronous()
 
 void GameSprite::NormalImage::unload()
 {
-	// Unload GL texture first to keep state synchronized
+	// Also unload GL texture to keep state synchronized
 	if(isGLLoaded) {
 		unloadGLTexture(gl_texture_id);
 	}

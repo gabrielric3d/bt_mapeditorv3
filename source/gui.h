@@ -67,6 +67,7 @@ class EditTownsDialog;
 class ItemButton;
 class BrowseTilePanel;
 class BrowseFieldNotebook;
+class BrushManagerPanel;
 
 class LiveSocket;
 class AreaDecorationDialog;
@@ -246,6 +247,8 @@ public:
 	void HideRecentBrushesWindow();
 	BrowseTilePanel* ShowBrowseFieldPanel();
 	void HideBrowseFieldPanel();
+	BrushManagerPanel* ShowBrushManager();
+	void HideBrushManager();
 
 	// Minimap
 	void CreateMinimap();
@@ -296,6 +299,13 @@ public:
 	int GetBrushSize() const;
 	int GetBrushVariation() const;
 	int GetSpawnTime() const;
+
+	// Camera path keyframe properties from palette
+	double GetKeyframeDuration() const;
+	double GetKeyframeSpeed() const;
+	double GetKeyframeZoom() const;
+	int GetKeyframeZ() const;
+	int GetKeyframeEasing() const;
 
 	struct SpawnCreatureEntry {
 		std::string name;
@@ -455,6 +465,7 @@ public:
 	ActionsHistoryWindow* actions_history_window;
 	RecentBrushesWindow* recent_brushes_window;
 	BrowseFieldNotebook* browse_field_notebook;
+	BrushManagerPanel* brush_manager_panel;
 	RecentBrushMap recent_brushes;
 	GraphicManager gfx;
 

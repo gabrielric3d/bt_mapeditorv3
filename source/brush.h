@@ -71,10 +71,15 @@ public:
 
 	void addBrush(Brush* brush);
 
-	bool unserializeBorder(pugi::xml_node node, wxArrayString& warnings);
-	bool unserializeBrush(pugi::xml_node node, wxArrayString& warnings);
+	bool unserializeBorder(pugi::xml_node node, wxArrayString& warnings, const std::string& sourceFile = "");
+	bool unserializeBrush(pugi::xml_node node, wxArrayString& warnings, const std::string& sourceFile = "");
 
 	const BrushMap& getMap() const noexcept { return brushes; }
+
+	// Brush enumeration API
+	std::vector<Brush*> getAllBrushes() const;
+	std::vector<Brush*> getBrushesByType(BrushType type) const;
+	std::vector<Brush*> getDeactivatedBrushes() const;
 
 	// Border helpers
 	const AutoBorder* getAutoBorder(uint32_t id) const;
@@ -101,6 +106,11 @@ public:
 	virtual ~Brush();
 
 	virtual bool load(pugi::xml_node node, wxArrayString& warnings) {
+		// Read activated attribute from XML and set runtime state
+		pugi::xml_attribute activatedAttr = node.attribute("activated");
+		if(activatedAttr) {
+			runtime_activated = activatedAttr.as_bool(true);
+		}
 		return true;
 	}
 
@@ -146,6 +156,9 @@ public:
 	virtual bool isFlag() const { return false; }
 	virtual bool isEraser() const { return false; }
 
+	// Get brush type for enumeration filtering
+	virtual BrushType getBrushType() const;
+
 	virtual RAWBrush* asRaw() { return nullptr; }
 	virtual DoodadBrush* asDoodad() { return nullptr; }
 	virtual TerrainBrush* asTerrain() { return nullptr; }
@@ -168,10 +181,24 @@ public:
 	bool visibleInPalette() const { return visible; }
 	void flagAsVisible() { visible = true; }
 
+	// Runtime activation tracking (separate from XML persistence)
+	bool isActivated() const { return runtime_activated; }
+	void setActivated(bool activated) { runtime_activated = activated; }
+
+	// Source file tracking for XML editing
+	void setSourceFile(const std::string& path) { source_file = path; }
+	const std::string& getSourceFile() const { return source_file; }
+	bool hasSourceFile() const { return !source_file.empty(); }
+
+	// Toggle activated status in source XML file
+	bool toggleActivatedInXML();
+
 protected:
 	static uint32_t id_counter;
 	uint32_t id;
 	bool visible; // Visible in any palette?
+	bool runtime_activated; // Runtime activation status (separate from XML)
+	std::string source_file; // Path to XML file where this brush is defined
 };
 
 //=============================================================================

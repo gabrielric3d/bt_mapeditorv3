@@ -381,6 +381,9 @@ void Settings::IO(IOMode mode)
 	Int(FIND_ITEM_MODE, 0);
 	Int(JUMP_TO_ITEM_MODE, 0);
 
+	section("BrushManager");
+	Int(BRUSH_MANAGER_AUTO_RELOAD, 1);
+
 #undef section
 #undef Int
 #undef IntToSave

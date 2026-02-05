@@ -12,6 +12,7 @@ ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.h
 ${CMAKE_CURRENT_LIST_DIR}/camera_path.h
 ${CMAKE_CURRENT_LIST_DIR}/camera_path_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.h
+${CMAKE_CURRENT_LIST_DIR}/brush_manager_panel.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.h
 ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
@@ -98,6 +99,7 @@ ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/recent_brushes_window.h
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.h
+${CMAKE_CURRENT_LIST_DIR}/advanced_replace_window.h
 ${CMAKE_CURRENT_LIST_DIR}/result_window.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_forward_declarations.h
 ${CMAKE_CURRENT_LIST_DIR}/rme_net.h
@@ -137,6 +139,7 @@ ${CMAKE_CURRENT_LIST_DIR}/browse_tile_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/camera_path.cpp
 ${CMAKE_CURRENT_LIST_DIR}/camera_path_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/brush_manager_panel.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
@@ -214,6 +217,7 @@ ${CMAKE_CURRENT_LIST_DIR}/properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/recent_brushes_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/replace_items_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/advanced_replace_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/result_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/rme_net.cpp
 ${CMAKE_CURRENT_LIST_DIR}/selection.cpp

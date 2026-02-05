@@ -137,9 +137,9 @@ protected:
 		NormalImage();
 		virtual ~NormalImage();
 
-		// Sprite metadata ID (NOT the GL texture handle)
+		// Sprite index in the .spr file (used for loading sprite data)
 		uint32_t id;
-		// Actual OpenGL texture handle (allocated via glGenTextures)
+		// Actual OpenGL texture handle (0 = not allocated)
 		GLuint gl_texture_id;
 		uint32_t fileOffset; // For lazy loading
 
@@ -309,8 +309,7 @@ public:
 	uint16_t getItemSpriteMaxID() const noexcept { return item_count; }
 	uint16_t getCreatureSpriteMaxID() const noexcept { return creature_count; }
 
-	// DEPRECATED: Use glGenTextures() instead. This function returns arbitrary IDs
-	// that are not valid OpenGL texture handles.
+	// Get an unused texture id (this is acquired by simply increasing a value starting from 0x10000000)
 	GLuint getFreeTextureID();
 
 	// This is part of the binary

@@ -39,6 +39,7 @@
 #include "duplicated_items_window.h"
 #include "minimap_window.h"
 #include "palette_window.h"
+#include "palette_camera_paths.h"
 #include "browse_tile_window.h"
 #include "map_display.h"
 #include "application.h"
@@ -53,6 +54,7 @@
 #include "filehandle.h"
 #include "camera_path.h"
 #include "area_decoration_dialog.h"
+#include "brush_manager_panel.h"
 
 #include <algorithm>
 
@@ -108,6 +110,7 @@ GUI::GUI() :
 	actions_history_window(nullptr),
 	recent_brushes_window(nullptr),
 	browse_field_notebook(nullptr),
+	brush_manager_panel(nullptr),
 	secondary_map(nullptr),
 	doodad_buffer_map(nullptr),
 
@@ -1672,6 +1675,40 @@ void GUI::HideBrowseFieldPanel()
 	}
 }
 
+BrushManagerPanel* GUI::ShowBrushManager()
+{
+	if(!IsVersionLoaded()) {
+		return nullptr;
+	}
+
+	if(!brush_manager_panel) {
+		brush_manager_panel = newd BrushManagerPanel(root);
+		Theme::ApplyText(brush_manager_panel, true);
+		aui_manager->AddPane(brush_manager_panel,
+			wxAuiPaneInfo().Caption("Brush Manager").Right().BestSize(350, 500));
+	} else {
+		// Toggle visibility - if already shown, hide it
+		wxAuiPaneInfo& pane = aui_manager->GetPane(brush_manager_panel);
+		if(pane.IsShown()) {
+			pane.Show(false);
+		} else {
+			pane.Show(true);
+			brush_manager_panel->RefreshBrushList();
+		}
+	}
+
+	aui_manager->Update();
+	return brush_manager_panel;
+}
+
+void GUI::HideBrushManager()
+{
+	if(brush_manager_panel) {
+		aui_manager->GetPane(brush_manager_panel).Show(false);
+		aui_manager->Update();
+	}
+}
+
 //=============================================================================
 // Area Decoration Dialog management
 
@@ -1938,9 +1975,11 @@ void GUI::AddCameraPathKeyframeAtCursor()
 
 	CameraKeyframe key;
 	key.pos = pos;
-	key.duration = 1.0;
-	key.speed = 0.0;
-	key.zoom = GetCurrentZoom();
+	key.pos.z = GetKeyframeZ();
+	key.duration = GetKeyframeDuration();
+	key.speed = GetKeyframeSpeed();
+	key.zoom = GetKeyframeZoom();
+	key.easing = static_cast<CameraEasing>(GetKeyframeEasing());
 
 	int insertIndex = static_cast<int>(path->keyframes.size());
 	int activeIndex = temp.getActiveKeyframe();
@@ -2682,6 +2721,61 @@ int GUI::GetBrushVariation() const
 int GUI::GetSpawnTime() const
 {
 	return creature_spawntime;
+}
+
+double GUI::GetKeyframeDuration() const
+{
+	if(!palettes.empty()) {
+		PaletteWindow* palette = palettes.front();
+		if(palette && palette->GetCameraPathPalette()) {
+			return palette->GetCameraPathPalette()->GetKeyframeDuration();
+		}
+	}
+	return 1.0;
+}
+
+double GUI::GetKeyframeSpeed() const
+{
+	if(!palettes.empty()) {
+		PaletteWindow* palette = palettes.front();
+		if(palette && palette->GetCameraPathPalette()) {
+			return palette->GetCameraPathPalette()->GetKeyframeSpeed();
+		}
+	}
+	return 0.0;
+}
+
+double GUI::GetKeyframeZoom() const
+{
+	if(!palettes.empty()) {
+		PaletteWindow* palette = palettes.front();
+		if(palette && palette->GetCameraPathPalette()) {
+			return palette->GetCameraPathPalette()->GetKeyframeZoom();
+		}
+	}
+	return 1.0;
+}
+
+int GUI::GetKeyframeZ() const
+{
+	if(!palettes.empty()) {
+		PaletteWindow* palette = palettes.front();
+		if(palette && palette->GetCameraPathPalette()) {
+			return palette->GetCameraPathPalette()->GetKeyframeZ();
+		}
+	}
+	return rme::MapGroundLayer;
+}
+
+int GUI::GetKeyframeEasing() const
+{
+	if(!palettes.empty()) {
+		PaletteWindow* palette = palettes.front();
+		if(palette && palette->GetCameraPathPalette()) {
+			return palette->GetCameraPathPalette()->GetKeyframeEasing();
+		}
+	}
+	return 1; // Default to EaseInOut
 }
 
 void GUI::SelectBrush()

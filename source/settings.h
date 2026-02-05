@@ -214,6 +214,8 @@ namespace Config {
 		GRID_CHUNK_SIZE,
 		GRID_VISIBLE_ROWS_MARGIN,
 
+		BRUSH_MANAGER_AUTO_RELOAD,
+
 		LAST,
 	};
 }

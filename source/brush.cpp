@@ -96,7 +96,7 @@ void Brushes::init()
 	CarpetBrush::init();
 }
 
-bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings)
+bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings, const std::string& sourceFile)
 {
 	pugi::xml_attribute attribute;
 	if(!(attribute = node.attribute("name"))) {
@@ -108,6 +108,14 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings)
 	if(brushName == "all" || brushName == "none") {
 		warnings.push_back(wxString("Using reserved brushname \"") << wxstr(brushName) << "\".");
 		return false;
+	}
+
+	// Check if brush is deactivated
+	if((attribute = node.attribute("activated"))) {
+		if(!attribute.as_bool(true)) {
+			// Brush is deactivated, skip loading it
+			return true;
+		}
 	}
 
 	Brush* brush = getBrush(brushName);
@@ -137,6 +145,11 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings)
 
 		ASSERT(brush);
 		brush->setName(brushName);
+	}
+
+	// Store the source file path for XML editing
+	if(!sourceFile.empty()) {
+		brush->setSourceFile(sourceFile);
 	}
 
 	if(!node.first_child()) {
@@ -172,9 +185,19 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings)
 	return true;
 }
 
-bool Brushes::unserializeBorder(pugi::xml_node node, wxArrayString& warnings)
+bool Brushes::unserializeBorder(pugi::xml_node node, wxArrayString& warnings, const std::string& sourceFile)
 {
-	pugi::xml_attribute attribute = node.attribute("id");
+	pugi::xml_attribute attribute;
+
+	// Check if border is deactivated
+	if((attribute = node.attribute("activated"))) {
+		if(!attribute.as_bool(true)) {
+			// Border is deactivated, skip loading it
+			return true;
+		}
+	}
+
+	attribute = node.attribute("id");
 	if(!attribute) {
 		warnings.push_back("Couldn't read border id node");
 		return false;
@@ -246,10 +269,44 @@ const AutoBorder* Brushes::findAutoBorderByBorderItem(uint16_t itemId, BorderTyp
 	return nullptr;
 }
 
+std::vector<Brush*> Brushes::getAllBrushes() const
+{
+	std::vector<Brush*> result;
+	result.reserve(brushes.size());
+	for(const auto& entry : brushes) {
+		result.push_back(entry.second);
+	}
+	return result;
+}
+
+std::vector<Brush*> Brushes::getBrushesByType(BrushType type) const
+{
+	std::vector<Brush*> result;
+	for(const auto& entry : brushes) {
+		Brush* brush = entry.second;
+		if(brush && brush->getBrushType() == type) {
+			result.push_back(brush);
+		}
+	}
+	return result;
+}
+
+std::vector<Brush*> Brushes::getDeactivatedBrushes() const
+{
+	std::vector<Brush*> result;
+	for(const auto& entry : brushes) {
+		Brush* brush = entry.second;
+		if(brush && !brush->isActivated()) {
+			result.push_back(brush);
+		}
+	}
+	return result;
+}
+
 // Brush
 uint32_t Brush::id_counter = 0;
 Brush::Brush() :
-	id(++id_counter), visible(false)
+	id(++id_counter), visible(false), runtime_activated(true)
 {
 	////
 }
@@ -257,6 +314,75 @@ Brush::Brush() :
 Brush::~Brush()
 {
 	////
+}
+
+bool Brush::toggleActivatedInXML()
+{
+	if(source_file.empty()) {
+		return false;
+	}
+
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(source_file.c_str());
+	if(!result) {
+		return false;
+	}
+
+	// Find the brush node with matching name
+	std::string brushName = getName();
+	pugi::xml_node materialsNode = doc.child("materials");
+	if(!materialsNode) {
+		return false;
+	}
+
+	bool found = false;
+	for(pugi::xml_node brushNode = materialsNode.child("brush"); brushNode; brushNode = brushNode.next_sibling("brush")) {
+		pugi::xml_attribute nameAttr = brushNode.attribute("name");
+		if(nameAttr && nameAttr.as_string() == brushName) {
+			// Found the brush, toggle activated attribute
+			pugi::xml_attribute activatedAttr = brushNode.attribute("activated");
+			if(activatedAttr) {
+				// Toggle existing value
+				bool currentValue = activatedAttr.as_bool(true);
+				activatedAttr.set_value(!currentValue);
+			} else {
+				// Add activated="false" (since it defaults to true when absent)
+				brushNode.append_attribute("activated").set_value(false);
+			}
+			found = true;
+			break;
+		}
+	}
+
+	if(!found) {
+		return false;
+	}
+
+	// Save the modified XML back to file
+	return doc.save_file(source_file.c_str(), "\t", pugi::format_default | pugi::format_indent, pugi::encoding_utf8);
+}
+
+BrushType Brush::getBrushType() const
+{
+	if(isRaw()) return BRUSH_TYPE_RAW;
+	if(isDoodad()) return BRUSH_TYPE_DOODAD;
+	if(isGround()) return BRUSH_TYPE_GROUND;
+	if(isTerrain()) return BRUSH_TYPE_TERRAIN;  // Check after isGround since GroundBrush is a TerrainBrush
+	if(isWallDecoration()) return BRUSH_TYPE_WALL_DECORATION;  // Check before isWall
+	if(isWall()) return BRUSH_TYPE_WALL;
+	if(isTable()) return BRUSH_TYPE_TABLE;
+	if(isCarpet()) return BRUSH_TYPE_CARPET;
+	if(isDoor()) return BRUSH_TYPE_DOOR;
+	if(isOptionalBorder()) return BRUSH_TYPE_OPTIONAL_BORDER;
+	if(isCreature()) return BRUSH_TYPE_CREATURE;
+	if(isSpawn()) return BRUSH_TYPE_SPAWN;
+	if(isHouseExit()) return BRUSH_TYPE_HOUSE_EXIT;  // Check before isHouse
+	if(isHouse()) return BRUSH_TYPE_HOUSE;
+	if(isWaypoint()) return BRUSH_TYPE_WAYPOINT;
+	if(isCameraPath()) return BRUSH_TYPE_CAMERA_PATH;
+	if(isFlag()) return BRUSH_TYPE_FLAG;
+	if(isEraser()) return BRUSH_TYPE_ERASER;
+	return BRUSH_TYPE_UNKNOWN;
 }
 
 // TerrainBrush
