@@ -37,6 +37,8 @@
 #include "spawn_brush.h"
 #include "creature.h"
 #include "creatures.h"
+#include "camera_path.h"
+#include "npc_path.h"
 
 #include "live_server.h"
 #include "live_client.h"
@@ -1929,6 +1931,19 @@ void Editor::ApplyCameraPathsSnapshot(const CameraPathsSnapshot& snapshot, Actio
 	addBatch(batch, 2);
 }
 
+void Editor::ApplyNPCPathsSnapshot(const NPCPathsSnapshot& snapshot, ActionIdentifier actionType)
+{
+	if(!CanEdit()) {
+		return;
+	}
+
+	BatchAction* batch = actionQueue->createBatch(actionType);
+	Action* action = actionQueue->createAction(batch);
+	action->addChange(Change::Create(snapshot));
+	batch->addAndCommitAction(action);
+	addBatch(batch, 2);
+}
+
 void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 {
 	if(!CanEdit()) {
@@ -2096,9 +2111,11 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw)
 
 		CameraKeyframe key;
 		key.pos = offset;
-		key.zoom = g_gui.GetCurrentZoom();
-		key.duration = 1.0;
-		key.speed = 0.0;
+		key.pos.z = g_gui.GetKeyframeZ();
+		key.zoom = g_gui.GetKeyframeZoom();
+		key.duration = g_gui.GetKeyframeDuration();
+		key.speed = g_gui.GetKeyframeSpeed();
+		key.easing = static_cast<CameraEasing>(g_gui.GetKeyframeEasing());
 
 		int insertIndex = static_cast<int>(path->keyframes.size());
 		if(canMove) {

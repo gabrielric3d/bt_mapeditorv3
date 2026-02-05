@@ -25,11 +25,20 @@
 #include <string>
 #include <vector>
 
+enum class CameraEasing {
+	Linear = 0,
+	EaseInOut,    // Smooth start and end (default, most natural)
+	EaseIn,       // Slow start, fast end
+	EaseOut,      // Fast start, slow end
+	EaseInOutCubic,  // More pronounced ease in/out
+};
+
 struct CameraKeyframe {
 	Position pos;
 	double duration = 1.0;
 	double speed = 0.0;
 	double zoom = 1.0;
+	CameraEasing easing = CameraEasing::EaseInOut;
 };
 
 struct CameraPathColor {

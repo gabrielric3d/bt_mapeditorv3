@@ -23,6 +23,7 @@
 #include "map.h"
 #include "map_display.h"
 #include "camera_path_brush.h"
+#include "settings.h"
 
 #include <algorithm>
 
@@ -36,12 +37,14 @@ BEGIN_EVENT_TABLE(CameraPathPalettePanel, PalettePanel)
 	EVT_BUTTON(PALETTE_CAMERA_PATH_PLAY, CameraPathPalettePanel::OnPlayPause)
 
 	EVT_LIST_ITEM_SELECTED(PALETTE_CAMERA_KEYFRAME_LISTBOX, CameraPathPalettePanel::OnClickKeyframe)
+	EVT_LIST_ITEM_DESELECTED(PALETTE_CAMERA_KEYFRAME_LISTBOX, CameraPathPalettePanel::OnDeselectKeyframe)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_ADD, CameraPathPalettePanel::OnAddKeyframe)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_REMOVE, CameraPathPalettePanel::OnRemoveKeyframe)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_CLEAR, CameraPathPalettePanel::OnClearKeyframes)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_UP, CameraPathPalettePanel::OnKeyframeUp)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_DOWN, CameraPathPalettePanel::OnKeyframeDown)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_APPLY, CameraPathPalettePanel::OnApplyKeyframeProps)
+	EVT_CHECKBOX(PALETTE_CAMERA_SHOW_PATHS, CameraPathPalettePanel::OnToggleShowPaths)
 END_EVENT_TABLE()
 
 CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) :
@@ -71,12 +74,16 @@ CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) 
 	play_pause_button = newd wxButton(this, PALETTE_CAMERA_PATH_PLAY, "Play/Pause");
 	pathSizer->Add(play_pause_button, 0, wxEXPAND | wxTOP, 4);
 
+	show_paths_checkbox = newd wxCheckBox(this, PALETTE_CAMERA_SHOW_PATHS, "Show Camera Paths");
+	show_paths_checkbox->SetValue(g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
+	pathSizer->Add(show_paths_checkbox, 0, wxTOP, 4);
+
 	root->Add(pathSizer, 1, wxEXPAND | wxBOTTOM, 6);
 
 	wxStaticBoxSizer* keySizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Keyframes");
 	keyframe_list = newd wxListCtrl(this, PALETTE_CAMERA_KEYFRAME_LISTBOX,
 		wxDefaultPosition, wxDefaultSize,
-		wxLC_REPORT | wxLC_SINGLE_SEL);
+		wxLC_REPORT);
 	keyframe_list->InsertColumn(0, "#", wxLIST_FORMAT_LEFT, 30);
 	keyframe_list->InsertColumn(1, "X", wxLIST_FORMAT_LEFT, 50);
 	keyframe_list->InsertColumn(2, "Y", wxLIST_FORMAT_LEFT, 50);
@@ -122,8 +129,19 @@ CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) 
 	z_ctrl = newd wxTextCtrl(this, wxID_ANY, "7");
 	grid->Add(z_ctrl, 1, wxEXPAND);
 
+	grid->Add(newd wxStaticText(this, wxID_ANY, "Easing"), 0, wxALIGN_CENTER_VERTICAL);
+	wxArrayString easingChoices;
+	easingChoices.Add("Linear");
+	easingChoices.Add("Ease In/Out");
+	easingChoices.Add("Ease In");
+	easingChoices.Add("Ease Out");
+	easingChoices.Add("Ease In/Out Cubic");
+	easing_ctrl = newd wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, easingChoices);
+	easing_ctrl->SetSelection(1); // Default to EaseInOut
+	grid->Add(easing_ctrl, 1, wxEXPAND);
+
 	propsSizer->Add(grid, 0, wxEXPAND | wxBOTTOM, 4);
-	apply_props_button = newd wxButton(this, PALETTE_CAMERA_KEYFRAME_APPLY, "Apply");
+	apply_props_button = newd wxButton(this, PALETTE_CAMERA_KEYFRAME_APPLY, "Apply to Selected");
 	propsSizer->Add(apply_props_button, 0, wxEXPAND);
 
 	keySizer->Add(propsSizer, 0, wxEXPAND);
@@ -174,6 +192,7 @@ void CameraPathPalettePanel::OnSwitchIn()
 {
 	PalettePanel::OnSwitchIn();
 	g_gui.ActivatePalette(GetParentPalette());
+	show_paths_checkbox->SetValue(g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
 }
 
 void CameraPathPalettePanel::OnSwitchOut()
@@ -185,6 +204,39 @@ void CameraPathPalettePanel::SetMap(Map* m)
 {
 	map = m;
 	OnUpdate();
+}
+
+double CameraPathPalettePanel::GetKeyframeDuration() const
+{
+	double value = 1.0;
+	duration_ctrl->GetValue().ToDouble(&value);
+	return std::max(0.0, value);
+}
+
+double CameraPathPalettePanel::GetKeyframeSpeed() const
+{
+	double value = 0.0;
+	speed_ctrl->GetValue().ToDouble(&value);
+	return std::max(0.0, value);
+}
+
+double CameraPathPalettePanel::GetKeyframeZoom() const
+{
+	double value = 1.0;
+	zoom_ctrl->GetValue().ToDouble(&value);
+	return std::max(0.1, value);
+}
+
+int CameraPathPalettePanel::GetKeyframeZ() const
+{
+	long value = rme::MapGroundLayer;
+	z_ctrl->GetValue().ToLong(&value);
+	return static_cast<int>(std::max(0L, std::min<long>(rme::MapMaxLayer, value)));
+}
+
+int CameraPathPalettePanel::GetKeyframeEasing() const
+{
+	return easing_ctrl->GetSelection();
 }
 
 void CameraPathPalettePanel::RefreshPathList()
@@ -292,7 +344,19 @@ void CameraPathPalettePanel::UpdateKeyframeControls()
 		return;
 	}
 
-	int index = GetSelectedKeyframeIndex();
+	std::vector<int> indices = GetSelectedKeyframeIndices();
+	if(indices.empty()) {
+		pos_label->SetLabel("Pos: - , -");
+		return;
+	}
+
+	if(indices.size() > 1) {
+		pos_label->SetLabel(wxString::Format("Selected: %zu keyframes", indices.size()));
+		// Don't update field values when multiple selected - user sets new values to apply
+		return;
+	}
+
+	int index = indices[0];
 	if(index < 0 || index >= static_cast<int>(path->keyframes.size())) {
 		pos_label->SetLabel("Pos: - , -");
 		return;
@@ -304,6 +368,7 @@ void CameraPathPalettePanel::UpdateKeyframeControls()
 	speed_ctrl->ChangeValue(wxString::Format("%.2f", key.speed));
 	zoom_ctrl->ChangeValue(wxString::Format("%.2f", key.zoom));
 	z_ctrl->ChangeValue(wxString::Format("%d", key.pos.z));
+	easing_ctrl->SetSelection(static_cast<int>(key.easing));
 }
 
 CameraPath* CameraPathPalettePanel::GetActivePath() const
@@ -321,6 +386,16 @@ int CameraPathPalettePanel::GetSelectedKeyframeIndex() const
 		return static_cast<int>(item);
 	}
 	return map ? map->camera_paths.getActiveKeyframe() : -1;
+}
+
+std::vector<int> CameraPathPalettePanel::GetSelectedKeyframeIndices() const
+{
+	std::vector<int> indices;
+	long item = -1;
+	while((item = keyframe_list->GetNextItem(item, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED)) != -1) {
+		indices.push_back(static_cast<int>(item));
+	}
+	return indices;
 }
 
 Position CameraPathPalettePanel::GetCursorPosition() const
@@ -483,11 +558,22 @@ void CameraPathPalettePanel::OnClickKeyframe(wxListEvent& event)
 	int index = static_cast<int>(event.GetIndex());
 	map->camera_paths.setActiveKeyframe(index);
 	UpdateKeyframeControls();
-	if(CameraPath* path = GetActivePath()) {
-		if(index >= 0 && index < static_cast<int>(path->keyframes.size())) {
-			g_gui.SetScreenCenterPosition(path->keyframes[index].pos);
+
+	// Only center on keyframe if single selection
+	std::vector<int> indices = GetSelectedKeyframeIndices();
+	if(indices.size() == 1) {
+		if(CameraPath* path = GetActivePath()) {
+			if(index >= 0 && index < static_cast<int>(path->keyframes.size())) {
+				g_gui.SetScreenCenterPosition(path->keyframes[index].pos);
+			}
 		}
 	}
+	g_gui.RefreshView();
+}
+
+void CameraPathPalettePanel::OnDeselectKeyframe(wxListEvent& WXUNUSED(event))
+{
+	UpdateKeyframeControls();
 	g_gui.RefreshView();
 }
 
@@ -508,11 +594,28 @@ void CameraPathPalettePanel::OnAddKeyframe(wxCommandEvent& WXUNUSED(event))
 		return;
 	}
 
+	double duration = 1.0;
+	double speed = 0.0;
+	double zoom = 1.0;
+	long z = pos.z;
+
+	duration_ctrl->GetValue().ToDouble(&duration);
+	speed_ctrl->GetValue().ToDouble(&speed);
+	zoom_ctrl->GetValue().ToDouble(&zoom);
+	z_ctrl->GetValue().ToLong(&z);
+
+	duration = std::max(0.0, duration);
+	speed = std::max(0.0, speed);
+	zoom = std::max(0.1, zoom);
+	z = std::max(0L, std::min<long>(rme::MapMaxLayer, z));
+
 	CameraKeyframe key;
 	key.pos = pos;
-	key.duration = 1.0;
-	key.speed = 0.0;
-	key.zoom = g_gui.GetCurrentZoom();
+	key.pos.z = static_cast<int>(z);
+	key.duration = duration;
+	key.speed = speed;
+	key.zoom = zoom;
+	key.easing = static_cast<CameraEasing>(easing_ctrl->GetSelection());
 
 	int insertIndex = static_cast<int>(path->keyframes.size());
 	int activeIndex = temp.getActiveKeyframe();
@@ -652,15 +755,15 @@ void CameraPathPalettePanel::OnApplyKeyframeProps(wxCommandEvent& WXUNUSED(event
 		return;
 	}
 
-	int index = GetSelectedKeyframeIndex();
-	if(index < 0 || index >= static_cast<int>(path->keyframes.size())) {
+	std::vector<int> indices = GetSelectedKeyframeIndices();
+	if(indices.empty()) {
 		return;
 	}
 
 	double duration = 1.0;
 	double speed = 0.0;
 	double zoom = 1.0;
-	long z = path->keyframes[index].pos.z;
+	long z = rme::MapGroundLayer;
 
 	duration_ctrl->GetValue().ToDouble(&duration);
 	speed_ctrl->GetValue().ToDouble(&speed);
@@ -672,11 +775,18 @@ void CameraPathPalettePanel::OnApplyKeyframeProps(wxCommandEvent& WXUNUSED(event
 	zoom = std::max(0.1, zoom);
 	z = std::max(0L, std::min<long>(rme::MapMaxLayer, z));
 
-	CameraKeyframe& key = path->keyframes[index];
-	key.duration = duration;
-	key.speed = speed;
-	key.zoom = zoom;
-	key.pos.z = static_cast<int>(z);
+	CameraEasing easing = static_cast<CameraEasing>(easing_ctrl->GetSelection());
+
+	for(int index : indices) {
+		if(index >= 0 && index < static_cast<int>(path->keyframes.size())) {
+			CameraKeyframe& key = path->keyframes[index];
+			key.duration = duration;
+			key.speed = speed;
+			key.zoom = zoom;
+			key.pos.z = static_cast<int>(z);
+			key.easing = easing;
+		}
+	}
 
 	Editor* editor = g_gui.GetCurrentEditor();
 	if(editor) {
@@ -684,4 +794,12 @@ void CameraPathPalettePanel::OnApplyKeyframeProps(wxCommandEvent& WXUNUSED(event
 		editor->resetActionsTimer();
 		editor->updateActions();
 	}
+}
+
+void CameraPathPalettePanel::OnToggleShowPaths(wxCommandEvent& WXUNUSED(event))
+{
+	bool show = show_paths_checkbox->GetValue();
+	g_settings.setInteger(Config::SHOW_CAMERA_PATHS, show ? 1 : 0);
+	g_gui.UpdateMenubar();
+	g_gui.RefreshView();
 }

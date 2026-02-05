@@ -39,6 +39,29 @@ CameraPathColor PickColor(size_t index)
 	return kDefaultColors[index % (sizeof(kDefaultColors) / sizeof(kDefaultColors[0]))];
 }
 
+// Easing functions - transform linear t [0,1] to eased t [0,1]
+double ApplyEasing(double t, CameraEasing easing)
+{
+	switch(easing) {
+		case CameraEasing::Linear:
+			return t;
+		case CameraEasing::EaseIn:
+			// Quadratic ease in
+			return t * t;
+		case CameraEasing::EaseOut:
+			// Quadratic ease out
+			return t * (2.0 - t);
+		case CameraEasing::EaseInOut:
+			// Quadratic ease in-out (smooth)
+			return t < 0.5 ? 2.0 * t * t : 1.0 - std::pow(-2.0 * t + 2.0, 2.0) / 2.0;
+		case CameraEasing::EaseInOutCubic:
+			// Cubic ease in-out (more pronounced)
+			return t < 0.5 ? 4.0 * t * t * t : 1.0 - std::pow(-2.0 * t + 2.0, 3.0) / 2.0;
+		default:
+			return t;
+	}
+}
+
 double CatmullRom(double p0, double p1, double p2, double p3, double t)
 {
 	const double t2 = t * t;
@@ -83,11 +106,17 @@ CameraPathSample EvaluateSegment(const CameraPath& path, size_t segmentIndex, do
 	const CameraKeyframe& p2 = path.keyframes[i2];
 	const CameraKeyframe& p3 = path.keyframes[i3];
 
+	// Apply easing to the interpolation parameter
+	const double eased_t = ApplyEasing(t, p1.easing);
+
 	CameraPathSample sample;
-	sample.x = CatmullRom(p0.pos.x, p1.pos.x, p2.pos.x, p3.pos.x, t);
-	sample.y = CatmullRom(p0.pos.y, p1.pos.y, p2.pos.y, p3.pos.y, t);
-	sample.z = p1.pos.z + (p2.pos.z - p1.pos.z) * t;
-	sample.zoom = p1.zoom + (p2.zoom - p1.zoom) * t;
+	// Use Catmull-Rom spline for smooth position interpolation
+	sample.x = CatmullRom(p0.pos.x, p1.pos.x, p2.pos.x, p3.pos.x, eased_t);
+	sample.y = CatmullRom(p0.pos.y, p1.pos.y, p2.pos.y, p3.pos.y, eased_t);
+	// Use Catmull-Rom for zoom as well for smoother zoom transitions
+	sample.zoom = CatmullRom(p0.zoom, p1.zoom, p2.zoom, p3.zoom, eased_t);
+	// Z uses eased linear interpolation (floor changes should still be smooth but discrete)
+	sample.z = p1.pos.z + (p2.pos.z - p1.pos.z) * eased_t;
 	sample.segment_index = segmentIndex;
 	sample.segment_t = t;
 	return sample;
@@ -309,6 +338,7 @@ bool CameraPaths::loadFromFile(const FileName& mapFile, wxString* outError)
 					key.duration = keyNode.value("duration", 1.0);
 					key.speed = keyNode.value("speed", 0.0);
 					key.zoom = keyNode.value("zoom", 1.0);
+					key.easing = static_cast<CameraEasing>(keyNode.value("easing", static_cast<int>(CameraEasing::EaseInOut)));
 					path.keyframes.push_back(key);
 				}
 			}
@@ -356,6 +386,7 @@ bool CameraPaths::saveToFile(const FileName& mapFile, wxString* outError) const
 			keyNode["duration"] = key.duration;
 			keyNode["speed"] = key.speed;
 			keyNode["zoom"] = key.zoom;
+			keyNode["easing"] = static_cast<int>(key.easing);
 			keyframes.push_back(keyNode);
 		}
 		pathNode["keyframes"] = keyframes;

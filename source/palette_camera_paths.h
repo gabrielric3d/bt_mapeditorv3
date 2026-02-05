@@ -21,6 +21,9 @@
 #include <wx/listctrl.h>
 #include <wx/textctrl.h>
 #include <wx/checkbox.h>
+#include <wx/choice.h>
+
+#include <vector>
 
 #include "palette_common.h"
 #include "camera_path.h"
@@ -43,6 +46,13 @@ public:
 
 	void SetMap(Map* map);
 
+	// Getters for keyframe properties from UI fields
+	double GetKeyframeDuration() const;
+	double GetKeyframeSpeed() const;
+	double GetKeyframeZoom() const;
+	int GetKeyframeZ() const;
+	int GetKeyframeEasing() const;
+
 	// wxWidgets event handling
 	void OnClickPath(wxListEvent& event);
 	void OnBeginEditPathLabel(wxListEvent& event);
@@ -53,12 +63,14 @@ public:
 	void OnPlayPause(wxCommandEvent& event);
 
 	void OnClickKeyframe(wxListEvent& event);
+	void OnDeselectKeyframe(wxListEvent& event);
 	void OnAddKeyframe(wxCommandEvent& event);
 	void OnRemoveKeyframe(wxCommandEvent& event);
 	void OnClearKeyframes(wxCommandEvent& event);
 	void OnKeyframeUp(wxCommandEvent& event);
 	void OnKeyframeDown(wxCommandEvent& event);
 	void OnApplyKeyframeProps(wxCommandEvent& event);
+	void OnToggleShowPaths(wxCommandEvent& event);
 
 protected:
 	void RefreshPathList();
@@ -66,6 +78,7 @@ protected:
 	void UpdateKeyframeControls();
 	CameraPath* GetActivePath() const;
 	int GetSelectedKeyframeIndex() const;
+	std::vector<int> GetSelectedKeyframeIndices() const;
 	Position GetCursorPosition() const;
 
 	Map* map;
@@ -75,6 +88,7 @@ protected:
 	wxButton* remove_path_button;
 	wxButton* play_pause_button;
 	wxCheckBox* loop_checkbox;
+	wxCheckBox* show_paths_checkbox;
 
 	wxButton* add_keyframe_button;
 	wxButton* remove_keyframe_button;
@@ -88,6 +102,7 @@ protected:
 	wxTextCtrl* speed_ctrl;
 	wxTextCtrl* zoom_ctrl;
 	wxTextCtrl* z_ctrl;
+	wxChoice* easing_ctrl;
 
 	DECLARE_EVENT_TABLE()
 };

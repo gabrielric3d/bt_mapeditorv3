@@ -118,6 +118,7 @@ GUI::GUI() :
 	house_exit_brush(nullptr),
 	waypoint_brush(nullptr),
 	camera_path_brush(nullptr),
+	npc_path_brush(nullptr),
 	optional_brush(nullptr),
 	eraser(nullptr),
 	normal_door_brush(nullptr),
@@ -592,6 +593,7 @@ bool GUI::ReloadBrushes(wxString& error, wxArrayString& warnings)
 	house_exit_brush = nullptr;
 	waypoint_brush = nullptr;
 	camera_path_brush = nullptr;
+	npc_path_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
 	normal_door_brush = nullptr;
@@ -672,6 +674,7 @@ void GUI::UnloadVersion()
 	house_exit_brush = nullptr;
 	waypoint_brush = nullptr;
 	camera_path_brush = nullptr;
+	npc_path_brush = nullptr;
 	optional_brush = nullptr;
 	eraser = nullptr;
 	normal_door_brush = nullptr;
