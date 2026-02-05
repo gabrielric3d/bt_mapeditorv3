@@ -224,6 +224,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 
 	MAKE_ACTION(AUTOMAGIC, wxITEM_CHECK, OnToggleAutomagic);
 	MAKE_ACTION(USE_GROUND_CARPET_BORDER, wxITEM_CHECK, OnToggleGroundCarpetBorder);
+	MAKE_ACTION(CARPET_DONT_INTERFERE_BORDERS, wxITEM_CHECK, OnToggleCarpetDontInterfereBorders);
 	MAKE_ACTION(BORDERIZE_SELECTION, wxITEM_NORMAL, OnBorderizeSelection);
 	MAKE_ACTION(BORDERIZE_MAP, wxITEM_NORMAL, OnBorderizeMap);
 	MAKE_ACTION(RANDOMIZE_SELECTION, wxITEM_NORMAL, OnRandomizeSelection);
@@ -622,6 +623,7 @@ void MainMenuBar::LoadValues()
 
 	CheckItem(AUTOMAGIC, g_settings.getBoolean(Config::USE_AUTOMAGIC));
 	CheckItem(USE_GROUND_CARPET_BORDER, g_settings.getBoolean(Config::USE_GROUND_CARPET_BORDER));
+	CheckItem(CARPET_DONT_INTERFERE_BORDERS, g_settings.getBoolean(Config::CARPET_DONT_INTERFERE_BORDERS));
 
 	CheckItem(SHOW_SHADE, g_settings.getBoolean(Config::SHOW_SHADE));
 	CheckItem(SHOW_INGAME_BOX, g_settings.getBoolean(Config::SHOW_INGAME_BOX));
@@ -1460,7 +1462,7 @@ void MainMenuBar::OnReplaceItems(wxCommandEvent& WXUNUSED(event))
 
 	if(MapTab* tab = g_gui.GetCurrentMapTab()) {
 		if(MapWindow* window = tab->GetView()) {
-			window->ShowReplaceItemsDialog(false);
+			window->ShowAdvancedReplaceDialog();
 		}
 	}
 }
@@ -1632,16 +1634,10 @@ void MainMenuBar::OnSearchForDuplicatedItemsOnSelection(wxCommandEvent& WXUNUSED
 	SearchDuplicatedItems(true);
 }
 
-void MainMenuBar::OnReplaceItemsOnSelection(wxCommandEvent& WXUNUSED(event))
+void MainMenuBar::OnReplaceItemsOnSelection(wxCommandEvent& event)
 {
-	if(!g_gui.IsVersionLoaded())
-		return;
-
-	if(MapTab* tab = g_gui.GetCurrentMapTab()) {
-		if(MapWindow* window = tab->GetView()) {
-			window->ShowReplaceItemsDialog(true);
-		}
-	}
+	// Now opens the same unified Replace Items dialog
+	OnReplaceItems(event);
 }
 
 void MainMenuBar::OnRemoveItemOnSelection(wxCommandEvent& WXUNUSED(event))
@@ -1769,6 +1765,15 @@ void MainMenuBar::OnToggleGroundCarpetBorder(wxCommandEvent& WXUNUSED(event))
 		g_gui.SetStatusText("Ground carpet border enabled.");
 	else
 		g_gui.SetStatusText("Ground carpet border disabled.");
+}
+
+void MainMenuBar::OnToggleCarpetDontInterfereBorders(wxCommandEvent& WXUNUSED(event))
+{
+	g_settings.setInteger(Config::CARPET_DONT_INTERFERE_BORDERS, IsItemChecked(MenuBar::CARPET_DONT_INTERFERE_BORDERS));
+	if(g_settings.getInteger(Config::CARPET_DONT_INTERFERE_BORDERS))
+		g_gui.SetStatusText("Carpet don't interfere borders enabled.");
+	else
+		g_gui.SetStatusText("Carpet don't interfere borders disabled.");
 }
 
 void MainMenuBar::OnBorderizeSelection(wxCommandEvent& WXUNUSED(event))

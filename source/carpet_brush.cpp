@@ -21,6 +21,7 @@
 
 #include "basemap.h"
 #include "items.h"
+#include "settings.h"
 
 //=============================================================================
 // Carpet brush
@@ -152,7 +153,30 @@ bool CarpetBrush::canDraw(BaseMap* map, const Position& position) const
 
 void CarpetBrush::draw(BaseMap* map, Tile* tile, void* parameter)
 {
-	undraw(map, tile); // Remove old
+	bool dontInterfere = g_settings.getInteger(Config::CARPET_DONT_INTERFERE_BORDERS) != 0;
+
+	if(dontInterfere) {
+		// Only remove carpets of the same brush type, keep different carpets
+		auto& items = tile->items;
+		for(auto it = items.begin(); it != items.end(); ) {
+			Item* item = *it;
+			if(item->isCarpet()) {
+				CarpetBrush* otherBrush = item->getCarpetBrush();
+				if(otherBrush == this) {
+					// Same brush type, remove it
+					delete item;
+					it = items.erase(it);
+				} else {
+					++it;
+				}
+			} else {
+				++it;
+			}
+		}
+	} else {
+		undraw(map, tile); // Remove all carpets
+	}
+
 	tile->addItem(Item::Create(getRandomCarpet(CARPET_CENTER)));
 }
 

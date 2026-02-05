@@ -70,6 +70,7 @@ namespace MenuBar
 		SELECT_MODE_LASSO,
 		AUTOMAGIC,
 		USE_GROUND_CARPET_BORDER,
+		CARPET_DONT_INTERFERE_BORDERS,
 		BORDERIZE_SELECTION,
 		BORDERIZE_MAP,
 		RANDOMIZE_SELECTION,
@@ -270,6 +271,7 @@ public:
 	void OnClearModifiedState(wxCommandEvent& event);
 	void OnToggleAutomagic(wxCommandEvent& event);
 	void OnToggleGroundCarpetBorder(wxCommandEvent& event);
+	void OnToggleCarpetDontInterfereBorders(wxCommandEvent& event);
 	void OnSelectionTypeChange(wxCommandEvent& event);
 	void OnSelectionLassoToggle(wxCommandEvent& event);
 	void OnCut(wxCommandEvent& event);

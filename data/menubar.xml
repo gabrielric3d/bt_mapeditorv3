@@ -47,6 +47,7 @@
         <menu name="$Border Options">
             <item name="Border $Automagic" hotkey="A" action="AUTOMAGIC" help="Turns on all automatic border functions."/>
             <item name="$Ground with Carpet Border" action="USE_GROUND_CARPET_BORDER" help="Uses carpet-style border logic for ground brushes (single border item per tile instead of multiple)."/>
+            <item name="$Carpet Don't Interfere Borders" action="CARPET_DONT_INTERFERE_BORDERS" help="When enabled, placing a carpet next to a different carpet won't change the other carpet's border."/>
 			<separator/>
             <item name="$Borderize Selection" hotkey="Ctrl+B" action="BORDERIZE_SELECTION" help="Creates automatic borders in the entire selected area."/>
             <item name="Borderize $Map" action="BORDERIZE_MAP" help="Reborders the entire map."/>
