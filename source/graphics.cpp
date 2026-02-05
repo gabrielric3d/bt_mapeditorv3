@@ -1959,6 +1959,7 @@ void GraphicManager::touchSpriteCache(GameSprite::NormalImage* sprite)
 
 std::string GraphicManager::getSpriteCachePath() const {
 	if(!client_version) {
+		wxLogMessage("Cannot determine sprite cache path: client_version is not set");
 		return "";
 	}
 	FileName local_path = client_version->getLocalDataPath();
@@ -1972,12 +1973,14 @@ bool GraphicManager::loadSpriteDataFromCache(const std::string& cache_path, wxSt
 	std::vector<uint16_t> sprite_sizes;
 	std::vector<uint8_t*> sprite_dumps;
 
-	g_gui.SetLoadDone(10, "Loading sprites from cache...");
-
 	if(!cache.loadFromCache(cache_path, sprite_offsets, sprite_sizes, sprite_dumps)) {
 		error = "Failed to load sprite data from cache";
 		return false;
 	}
+
+	// Set signatures from loaded cache header
+	spr_signature = cache.getSprSignature();
+	dat_signature = cache.getDatSignature();
 
 	// Apply loaded data to image_space
 	// Iterate through all sprite IDs in the cache (same as loadSpriteData does)

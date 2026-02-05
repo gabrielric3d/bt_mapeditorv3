@@ -90,6 +90,10 @@ public:
 	// Delete cache file
 	static bool deleteCache(const std::string& cache_path);
 
+	// Get signatures from loaded cache header (call after loadFromCache)
+	uint32_t getSprSignature() const { return header.spr_signature; }
+	uint32_t getDatSignature() const { return header.dat_signature; }
+
 private:
 	// Get file modification time
 	static uint64_t getFileModTime(const std::string& path);

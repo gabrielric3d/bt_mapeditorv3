@@ -299,6 +299,14 @@ wxNotebookPage* PreferencesWindow::CreateGraphicsPage()
 	performance_sizer->Add(use_disk_sprite_cache_chkbox, 0, wxLEFT | wxTOP, 5);
 	SetWindowToolTip(use_disk_sprite_cache_chkbox, "Cache sprites to disk for faster startup on subsequent launches.\nOnly works when 'Load sprites into memory' is enabled.\nCache is automatically invalidated when .spr or .dat files change.");
 
+	// Auto-enable memcached sprites when disk cache is enabled (disk cache requires memcached)
+	use_disk_sprite_cache_chkbox->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent& event) {
+		if(event.IsChecked() && !use_memcached_chkbox->GetValue()) {
+			use_memcached_chkbox->SetValue(true);
+		}
+		event.Skip();
+	});
+
 	use_optimized_map_loading_chkbox = newd wxCheckBox(graphics_page, wxID_ANY, "Use optimized map loading");
 	use_optimized_map_loading_chkbox->SetValue(g_settings.getBoolean(Config::USE_OPTIMIZED_MAP_LOADING));
 	performance_sizer->Add(use_optimized_map_loading_chkbox, 0, wxLEFT | wxBOTTOM, 5);
