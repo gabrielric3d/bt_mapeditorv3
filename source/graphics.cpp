@@ -1320,6 +1320,7 @@ void GameSprite::Image::clean(int time)
 
 GameSprite::NormalImage::NormalImage() :
 	id(0),
+	gl_texture_id(0),
 	size(0),
 	dump(nullptr),
 	fileOffset(0),
@@ -1331,7 +1332,7 @@ GameSprite::NormalImage::NormalImage() :
 GameSprite::NormalImage::~NormalImage()
 {
 	if(isGLLoaded) {
-		unloadGLTexture(id);
+		unloadGLTexture(gl_texture_id);
 	}
 	if(in_cache) {
 		g_gui.gfx.sprite_cache.erase(cache_iterator);
@@ -1494,20 +1495,27 @@ uint8_t* GameSprite::NormalImage::getRGBAData()
 GLuint GameSprite::NormalImage::getHardwareID()
 {
 	if(!isGLLoaded) {
-		createGLTexture(id);
+		// Allocate a real OpenGL texture handle if we don't have one
+		if(gl_texture_id == 0) {
+			glGenTextures(1, &gl_texture_id);
+		}
+		createGLTexture(gl_texture_id);
 	}
 	visit();
-	return id;
+	return gl_texture_id;
 }
 
 void GameSprite::NormalImage::createGLTexture(GLuint textureId)
 {
-	Image::createGLTexture(id);
+	Image::createGLTexture(gl_texture_id);
 }
 
 void GameSprite::NormalImage::unloadGLTexture(GLuint textureId)
 {
-	Image::unloadGLTexture(id);
+	if(gl_texture_id != 0) {
+		Image::unloadGLTexture(gl_texture_id);
+		gl_texture_id = 0;  // Reset after deletion
+	}
 }
 
 GameSprite::EditorImage::EditorImage(const wxArtID& bitmapId) :
@@ -1555,10 +1563,12 @@ void GameSprite::EditorImage::createGLTexture(GLuint textureId)
 	}
 
 	isGLLoaded = true;
-	id = g_gui.gfx.getFreeTextureID();
+	if(gl_texture_id == 0) {
+		glGenTextures(1, &gl_texture_id);
+	}
 	g_gui.gfx.loaded_textures += 1;
 
-	glBindTexture(GL_TEXTURE_2D, id);
+	glBindTexture(GL_TEXTURE_2D, gl_texture_id);
 	GLint filter = g_settings.getBoolean(Config::USE_ANTIALIASING) ? GL_LINEAR : GL_NEAREST;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
@@ -1571,7 +1581,10 @@ void GameSprite::EditorImage::createGLTexture(GLuint textureId)
 
 void GameSprite::EditorImage::unloadGLTexture(GLuint textureId)
 {
-	Image::unloadGLTexture(id);
+	if(gl_texture_id != 0) {
+		Image::unloadGLTexture(gl_texture_id);
+		gl_texture_id = 0;
+	}
 }
 
 GameSprite::TemplateImage::TemplateImage(GameSprite* parent, int v, const Outfit& outfit) :
@@ -1590,6 +1603,7 @@ GameSprite::TemplateImage::~TemplateImage()
 {
 	if(isGLLoaded) {
 		unloadGLTexture(gl_tid);
+		gl_tid = 0;
 	}
 }
 
@@ -1712,7 +1726,7 @@ GLuint GameSprite::TemplateImage::getHardwareID()
 {
 	if(!isGLLoaded) {
 		if(gl_tid == 0) {
-			gl_tid = g_gui.gfx.getFreeTextureID();
+			glGenTextures(1, &gl_tid);
 		}
 		createGLTexture(gl_tid);
 		if(!isGLLoaded) {
@@ -1730,7 +1744,10 @@ void GameSprite::TemplateImage::createGLTexture(GLuint unused)
 
 void GameSprite::TemplateImage::unloadGLTexture(GLuint unused)
 {
-	Image::unloadGLTexture(gl_tid);
+	if(gl_tid != 0) {
+		Image::unloadGLTexture(gl_tid);
+		gl_tid = 0;
+	}
 }
 
 GameSprite* GameSprite::createFromBitmap(const wxArtID& bitmapId)
@@ -1921,6 +1938,11 @@ void Animator::calculateSynchronous()
 
 void GameSprite::NormalImage::unload()
 {
+	// Unload GL texture first to keep state synchronized
+	if(isGLLoaded) {
+		unloadGLTexture(gl_texture_id);
+	}
+
 	// Free memory but keep fileOffset
 	if(dump) {
 		delete[] dump;
