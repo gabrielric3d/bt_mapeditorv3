@@ -2696,9 +2696,7 @@ void MainMenuBar::OnRecentBrushesWindow(wxCommandEvent& WXUNUSED(event))
 
 void MainMenuBar::OnBrowseFieldWindow(wxCommandEvent& WXUNUSED(event))
 {
-	if(BrowseTilePanel* panel = g_gui.ShowBrowseFieldPanel()) {
-		panel->LoadSelectionFromEditor();
-	}
+	g_gui.ShowBrowseFieldPanel();
 }
 
 void MainMenuBar::OnBrushManager(wxCommandEvent& WXUNUSED(event))

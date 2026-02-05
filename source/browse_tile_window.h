@@ -23,8 +23,12 @@
 #include "tile.h"
 
 #include <wx/timer.h>
+#include <wx/notebook.h>
+#include <wx/srchctrl.h>
+#include <set>
 
 class BrowseTileListBox;
+class SelectionItemListBox;
 class Editor;
 
 class BrowseTileWindow : public wxDialog
@@ -64,7 +68,7 @@ public:
 	BrowseTilePanel(wxWindow* parent);
 	~BrowseTilePanel();
 
-	void LoadSelectionFromEditor();
+	void SetTile(Tile* tile, Editor* editor);
 	void ClearSelection();
 
 private:
@@ -74,10 +78,7 @@ private:
 	void OnClickMoveUp(wxCommandEvent&);
 	void OnClickMoveDown(wxCommandEvent&);
 	void OnClickApply(wxCommandEvent&);
-	void OnClickLoadSelection(wxCommandEvent&);
 	void OnToggleAutoApply(wxCommandEvent&);
-	void OnToggleAutoLoad(wxCommandEvent&);
-	void OnAutoLoadTimer(wxTimerEvent&);
 
 	void UpdateTileInfo();
 	void UpdateControlStates();
@@ -99,8 +100,6 @@ private:
 	wxButton* moveup_button;
 	wxButton* movedown_button;
 	wxButton* apply_button;
-	wxButton* load_selection_button;
-	wxCheckBox* auto_load_checkbox;
 	wxCheckBox* auto_apply_checkbox;
 
 	Tile* working_tile;
@@ -108,11 +107,110 @@ private:
 	Position working_position;
 	bool working_position_valid;
 
-	wxTimer* auto_load_timer;
-	bool auto_load_enabled;
 	bool auto_apply_enabled;
 
 	void TriggerAutoApply();
+};
+
+// ============================================================================
+// SelectionItemListBox - Custom list box for displaying items to manipulate in selection
+class SelectionItemListBox : public wxVListBox
+{
+public:
+	SelectionItemListBox(wxWindow* parent, wxWindowID id);
+	~SelectionItemListBox();
+
+	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const;
+	wxCoord OnMeasureItem(size_t index) const;
+
+	void AddItem(uint16_t itemId);
+	void RemoveSelected();
+	void MoveSelectedUp();
+	void MoveSelectedDown();
+	void Clear();
+
+	uint16_t GetSelectedItemId() const;
+	const std::vector<uint16_t>& GetItemIds() const { return item_ids; }
+
+protected:
+	void UpdateList();
+
+	std::vector<uint16_t> item_ids;
+};
+
+// ============================================================================
+// ApplySelectionPanel - Panel for manipulating items across multiple tiles
+class ApplySelectionPanel : public wxPanel
+{
+public:
+	ApplySelectionPanel(wxWindow* parent);
+	~ApplySelectionPanel();
+
+	void RefreshSelectionInfo();
+	void LoadItemsFromSelection();
+
+private:
+	void OnSearchChanged(wxCommandEvent& event);
+	void OnSearchResultSelected(wxCommandEvent& event);
+	void OnAddItem(wxCommandEvent& event);
+	void OnAddRange(wxCommandEvent& event);
+	void OnRemoveItem(wxCommandEvent& event);
+	void OnMoveUp(wxCommandEvent& event);
+	void OnMoveDown(wxCommandEvent& event);
+	void OnClear(wxCommandEvent& event);
+	void OnLoadSelection(wxCommandEvent& event);
+	void OnItemListSelected(wxCommandEvent& event);
+
+	void PopulateSearchResults();
+	void UpdateButtonStates();
+	void MoveItemsInSelection(bool moveUp);
+
+	// Search panel
+	wxSearchCtrl* search_ctrl;
+	wxListBox* search_results;
+	wxButton* add_button;
+
+	// Range input
+	wxTextCtrl* from_id_ctrl;
+	wxTextCtrl* to_id_ctrl;
+	wxButton* add_range_button;
+
+	// Item manipulation list
+	SelectionItemListBox* item_list;
+	wxButton* remove_button;
+	wxButton* moveup_button;
+	wxButton* movedown_button;
+
+	// Action buttons
+	wxButton* clear_button;
+	wxCheckBox* load_from_selection_checkbox;
+	wxButton* load_selection_button;
+
+	// Status
+	wxStaticText* status_label;
+	wxStaticText* selection_info_label;
+
+	// Search state
+	std::vector<uint16_t> filtered_items;
+};
+
+// ============================================================================
+// BrowseFieldNotebook - Container with tabs for Browse Tile and Apply Selection
+class BrowseFieldNotebook : public wxPanel
+{
+public:
+	BrowseFieldNotebook(wxWindow* parent);
+	~BrowseFieldNotebook();
+
+	BrowseTilePanel* GetBrowseTilePanel() { return browse_tile_panel; }
+	ApplySelectionPanel* GetApplySelectionPanel() { return apply_selection_panel; }
+
+	void OnPageChanged(wxBookCtrlEvent& event);
+
+private:
+	wxNotebook* notebook;
+	BrowseTilePanel* browse_tile_panel;
+	ApplySelectionPanel* apply_selection_panel;
 };
 
 #endif

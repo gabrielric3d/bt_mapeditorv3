@@ -66,8 +66,10 @@ class OldPropertiesWindow;
 class EditTownsDialog;
 class ItemButton;
 class BrowseTilePanel;
+class BrowseFieldNotebook;
 
 class LiveSocket;
+class AreaDecorationDialog;
 
 extern const wxEventType EVT_UPDATE_MENUS;
 extern const wxEventType EVT_UPDATE_ACTIONS;
@@ -265,7 +267,8 @@ public:
 	bool IsDrawingMode() const { return mode == DRAWING_MODE; }
 
 	void BeginRectanglePick(std::function<void(const Position&, const Position&)> onComplete,
-	                        std::function<void()> onCancel = nullptr);
+	                        std::function<void()> onCancel = nullptr,
+	                        std::function<void(const Position&)> onFirstClick = nullptr);
 	void CancelRectanglePick();
 	bool IsRectanglePickActive() const { return rect_pick.active; }
 	bool HandleRectanglePickClick(const Position& pos);
@@ -451,7 +454,7 @@ public:
 	DuplicatedItemsWindow* duplicated_items_window;
 	ActionsHistoryWindow* actions_history_window;
 	RecentBrushesWindow* recent_brushes_window;
-	BrowseTilePanel* browse_tile_panel;
+	BrowseFieldNotebook* browse_field_notebook;
 	RecentBrushMap recent_brushes;
 	GraphicManager gfx;
 
@@ -461,6 +464,13 @@ public:
 	// Map to track detached views for each editor
 	std::map<Editor*, std::list<wxFrame*>> detached_views;
 	std::map<Editor*, std::list<MapWindow*>> dockable_views;
+
+	// Persistent dialogs (hidden instead of destroyed)
+	AreaDecorationDialog* area_decoration_dialog;
+
+	// Area Decoration dialog management
+	void ShowAreaDecorationDialog();
+	void DestroyAreaDecorationDialog();
 
 	//=========================================================================
 	// Brush references
@@ -523,6 +533,7 @@ protected:
 		Position first;
 		std::function<void(const Position&, const Position&)> onComplete;
 		std::function<void()> onCancel;
+		std::function<void(const Position&)> onFirstClick;
 	};
 	RectanglePickState rect_pick;
 

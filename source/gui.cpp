@@ -52,6 +52,7 @@
 #include "sprite_cache.h"
 #include "filehandle.h"
 #include "camera_path.h"
+#include "area_decoration_dialog.h"
 
 #include <algorithm>
 
@@ -106,7 +107,7 @@ GUI::GUI() :
 	duplicated_items_window(nullptr),
 	actions_history_window(nullptr),
 	recent_brushes_window(nullptr),
-	browse_tile_panel(nullptr),
+	browse_field_notebook(nullptr),
 	secondary_map(nullptr),
 	doodad_buffer_map(nullptr),
 
@@ -122,6 +123,8 @@ GUI::GUI() :
 	quest_door_brush(nullptr),
 	hatch_door_brush(nullptr),
 	window_door_brush(nullptr),
+
+	area_decoration_dialog(nullptr),
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
@@ -163,6 +166,12 @@ GUI::~GUI()
 		}
 	}
 	dockable_views.clear();
+
+	// Destroy persistent dialogs
+	if (area_decoration_dialog) {
+		area_decoration_dialog->Destroy();
+		area_decoration_dialog = nullptr;
+	}
 
 	delete doodad_buffer_map;
 	delete g_gui.aui_manager;
@@ -962,8 +971,13 @@ void GUI::CloseCurrentEditor()
 	if(duplicated_items_window) {
 		duplicated_items_window->Clear();
 	}
-	if(browse_tile_panel) {
-		browse_tile_panel->ClearSelection();
+	if(browse_field_notebook && browse_field_notebook->GetBrowseTilePanel()) {
+		browse_field_notebook->GetBrowseTilePanel()->ClearSelection();
+	}
+
+	// Hide Area Decoration dialog if no editor is open
+	if (!IsEditorOpen() && area_decoration_dialog) {
+		area_decoration_dialog->Hide();
 	}
 }
 
@@ -984,8 +998,8 @@ bool GUI::CloseLiveEditors(LiveSocket* sock)
 			}
 		}
 	}
-	if(browse_tile_panel) {
-		browse_tile_panel->ClearSelection();
+	if(browse_field_notebook && browse_field_notebook->GetBrowseTilePanel()) {
+		browse_field_notebook->GetBrowseTilePanel()->ClearSelection();
 	}
 	root->UpdateMenubar();
 	return true;
@@ -1036,9 +1050,15 @@ bool GUI::CloseAllEditors()
 	if(duplicated_items_window) {
 		duplicated_items_window->Clear();
 	}
-	if(browse_tile_panel) {
-		browse_tile_panel->ClearSelection();
+	if(browse_field_notebook && browse_field_notebook->GetBrowseTilePanel()) {
+		browse_field_notebook->GetBrowseTilePanel()->ClearSelection();
 	}
+
+	// Hide Area Decoration dialog when all editors are closed
+	if (area_decoration_dialog) {
+		area_decoration_dialog->Hide();
+	}
+
 	return true;
 }
 
@@ -1631,28 +1651,56 @@ void GUI::HideRecentBrushesWindow()
 
 BrowseTilePanel* GUI::ShowBrowseFieldPanel()
 {
-	if(!browse_tile_panel) {
-		browse_tile_panel = newd BrowseTilePanel(root);
-		Theme::ApplyText(browse_tile_panel, true);
-		aui_manager->AddPane(browse_tile_panel,
-			wxAuiPaneInfo().Caption("Browse Field").Right().BestSize(320, 420));
+	if(!browse_field_notebook) {
+		browse_field_notebook = newd BrowseFieldNotebook(root);
+		Theme::ApplyText(browse_field_notebook, true);
+		aui_manager->AddPane(browse_field_notebook,
+			wxAuiPaneInfo().Caption("Browse Field").Right().BestSize(320, 520));
 	} else {
-		aui_manager->GetPane(browse_tile_panel).Show();
+		aui_manager->GetPane(browse_field_notebook).Show();
 	}
 
 	aui_manager->Update();
-	return browse_tile_panel;
+	return browse_field_notebook->GetBrowseTilePanel();
 }
 
 void GUI::HideBrowseFieldPanel()
 {
-	if(browse_tile_panel) {
-		aui_manager->GetPane(browse_tile_panel).Show(false);
+	if(browse_field_notebook) {
+		aui_manager->GetPane(browse_field_notebook).Show(false);
 		aui_manager->Update();
 	}
 }
 
 //=============================================================================
+// Area Decoration Dialog management
+
+void GUI::ShowAreaDecorationDialog()
+{
+	if (!IsEditorOpen()) {
+		return;
+	}
+
+	if (area_decoration_dialog) {
+		// Dialog already exists, update engine and show it
+		area_decoration_dialog->UpdateEngine();
+		area_decoration_dialog->Show();
+		area_decoration_dialog->Raise();
+	} else {
+		// Create new dialog
+		area_decoration_dialog = newd AreaDecorationDialog(root);
+		area_decoration_dialog->Show();
+	}
+}
+
+void GUI::DestroyAreaDecorationDialog()
+{
+	if (area_decoration_dialog) {
+		area_decoration_dialog->Destroy();
+		area_decoration_dialog = nullptr;
+	}
+}
+
 // Palette Window Interface implementation
 
 PaletteWindow* GUI::GetPalette()
@@ -2351,12 +2399,14 @@ void GUI::SwitchMode()
 }
 
 void GUI::BeginRectanglePick(std::function<void(const Position&, const Position&)> onComplete,
-                             std::function<void()> onCancel)
+                             std::function<void()> onCancel,
+                             std::function<void(const Position&)> onFirstClick)
 {
 	rect_pick.active = true;
 	rect_pick.hasFirst = false;
 	rect_pick.onComplete = std::move(onComplete);
 	rect_pick.onCancel = std::move(onCancel);
+	rect_pick.onFirstClick = std::move(onFirstClick);
 	SetStatusText("Select first corner on the map (Esc cancels).");
 }
 
@@ -2380,6 +2430,10 @@ bool GUI::HandleRectanglePickClick(const Position& pos)
 	if(!rect_pick.hasFirst) {
 		rect_pick.first = pos;
 		rect_pick.hasFirst = true;
+		// Notify first click callback
+		if(rect_pick.onFirstClick) {
+			rect_pick.onFirstClick(pos);
+		}
 		SetStatusText("Select second corner on the map.");
 		return true;
 	}
