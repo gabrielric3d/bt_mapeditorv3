@@ -94,6 +94,7 @@ private:
 	wxListCtrl* m_itemsListCtrl;
 	wxImageList* m_itemsImageList;
 	wxButton* m_editItemBtn;
+	wxButton* m_previewClusterItemBtn;
 	wxButton* m_replaceClusterBtn;
 	wxSpinCtrl* m_newItemIdSpin;
 	wxSpinCtrl* m_newItemWeightSpin;
@@ -166,6 +167,7 @@ private:
 	void UpdateClusterControls();
 	void OnAddItem(wxCommandEvent& event);
 	void OnEditItem(wxCommandEvent& event);
+	void OnPreviewClusterItem(wxCommandEvent& event);
 	void OnReplaceClusterFromSelection(wxCommandEvent& event);
 	void OnRemoveItem(wxCommandEvent& event);
 	void OnClearItems(wxCommandEvent& event);

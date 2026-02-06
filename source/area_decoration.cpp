@@ -1570,9 +1570,47 @@ void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, u
 	}
 }
 
+// Helper: check if a map tile contains ALL the item IDs from a cluster tile definition.
+// The map tile may have more items, but must contain at least all items in the pattern.
+static bool tileMatchesClusterPattern(Tile* mapTile, const CompositeTile& clusterTile) {
+	if (!mapTile) return false;
+	if (clusterTile.itemIds.empty()) return true; // Empty pattern matches any tile
+
+	// Build a multiset of item IDs on the map tile (ground + items)
+	std::vector<uint16_t> mapItemIds;
+	if (mapTile->ground) {
+		mapItemIds.push_back(mapTile->ground->getID());
+	}
+	for (Item* item : mapTile->items) {
+		if (item) {
+			mapItemIds.push_back(item->getID());
+		}
+	}
+
+	// Check that every item in the cluster pattern exists on the map tile
+	// Use a copy so we can remove matched items (handles duplicates)
+	std::vector<uint16_t> remaining = mapItemIds;
+	for (uint16_t patternId : clusterTile.itemIds) {
+		if (patternId == 0) continue;
+		auto it = std::find(remaining.begin(), remaining.end(), patternId);
+		if (it == remaining.end()) {
+			return false; // Pattern item not found on map tile
+		}
+		remaining.erase(it); // Remove matched item to handle duplicates
+	}
+	return true;
+}
+
 void DecorationEngine::generateClusterCentered(const std::vector<std::pair<Position, uint16_t>>& tiles,
                                                 const FloorRule& rule) {
-	if (rule.clusterTiles.empty() || tiles.empty()) return;
+	if (rule.clusterTiles.empty() || tiles.empty() || rule.items.empty()) return;
+	if (!rule.hasCenterPoint) return; // Centered mode requires a center point
+	if (!m_editor && !m_virtualPreview) return;
+
+	// The cluster is a POSITION TEMPLATE that defines an EXACT pattern of items.
+	// We search the map for places where this exact pattern exists.
+	// In centered mode, items from rule.items are placed ONLY at the center tile position.
+	Position centerOff = rule.centerOffset;
 
 	// Build a set of valid tile positions for fast lookup
 	std::unordered_set<uint64_t> validPositions;
@@ -1585,44 +1623,37 @@ void DecorationEngine::generateClusterCentered(const std::vector<std::pair<Posit
 		validPositions.insert(posHash(tile.first.x, tile.first.y, tile.first.z));
 	}
 
-	// Get the cluster bounding box relative to center
-	Position clusterMin, clusterMax;
-	rule.getClusterBounds(clusterMin, clusterMax);
+	Map* map = m_virtualPreview ? nullptr : &m_editor->getMap();
 
-	// Determine the area bounds
-	Position areaMin = tiles[0].first;
-	Position areaMax = tiles[0].first;
-	for (const auto& tile : tiles) {
-		areaMin.x = std::min(areaMin.x, tile.first.x);
-		areaMin.y = std::min(areaMin.y, tile.first.y);
-		areaMin.z = std::min(areaMin.z, tile.first.z);
-		areaMax.x = std::max(areaMax.x, tile.first.x);
-		areaMax.y = std::max(areaMax.y, tile.first.y);
-		areaMax.z = std::max(areaMax.z, tile.first.z);
-	}
-
-	// Build list of candidate center positions where the entire cluster fits within the area
-	// The center offset maps to the placed position, so we compute offsets from center to all tiles
-	Position centerOff = rule.centerOffset;
-
+	// Build list of candidate center positions where the entire cluster pattern
+	// matches EXACTLY on the map (every cluster tile's items found on the corresponding map tile)
 	std::vector<Position> candidatePositions;
 	for (const auto& tile : tiles) {
 		const Position& pos = tile.first;
 
-		// Check if all cluster tiles would be within valid area when cluster is centered here
-		bool allFit = true;
+		bool allMatch = true;
 		for (const auto& ct : rule.clusterTiles) {
 			Position absPos;
 			absPos.x = pos.x + (ct.offset.x - centerOff.x);
 			absPos.y = pos.y + (ct.offset.y - centerOff.y);
 			absPos.z = pos.z + (ct.offset.z - centerOff.z);
 
+			// Must be within the area
 			if (validPositions.find(posHash(absPos.x, absPos.y, absPos.z)) == validPositions.end()) {
-				allFit = false;
+				allMatch = false;
 				break;
 			}
+
+			// Must match the cluster pattern exactly on the map
+			if (map && !ct.itemIds.empty()) {
+				Tile* mapTile = map->getTile(absPos);
+				if (!tileMatchesClusterPattern(mapTile, ct)) {
+					allMatch = false;
+					break;
+				}
+			}
 		}
-		if (allFit) {
+		if (allMatch) {
 			candidatePositions.push_back(pos);
 		}
 	}
@@ -1661,42 +1692,48 @@ void DecorationEngine::generateClusterCentered(const std::vector<std::pair<Posit
 		}
 		if (tooClose) continue;
 
-		// Validate all cluster tile positions (not blocked, etc.)
-		bool allValid = true;
-		std::vector<PreviewItem> placementItems;
+		// The center position is where the center tile maps to in the world
+		// Items from rule.items are placed at this center position
+		const ItemEntry* selected = selectItemFromRule(&rule);
+		if (!selected) continue;
 
-		for (const auto& ct : rule.clusterTiles) {
-			if (ct.itemIds.empty()) continue;
+		// For composite items with their own center point, adjust the base position
+		// so that the item's center tile aligns with the floor cluster's center position.
+		// buildPlacementItems places items at: basePos + compositeTile.offset
+		// We want the item's center to land at centerPos, so:
+		//   basePos + itemCenterOffset = centerPos
+		//   basePos = centerPos - itemCenterOffset
+		Position basePos = centerPos;
+		if (selected->isCompositeEntry() && selected->hasCenterPoint) {
+			basePos.x -= selected->centerOffset.x;
+			basePos.y -= selected->centerOffset.y;
+			basePos.z -= selected->centerOffset.z;
+		}
 
-			Position absPos;
-			absPos.x = centerPos.x + (ct.offset.x - centerOff.x);
-			absPos.y = centerPos.y + (ct.offset.y - centerOff.y);
-			absPos.z = centerPos.z + (ct.offset.z - centerOff.z);
-
-			// Validate tile placement
-			if (!m_virtualPreview) {
-				if (!validateTilePlacement(absPos, ct.itemIds[0])) {
-					allValid = false;
-					break;
-				}
-			}
-
-			// Add all items at this cluster tile position
-			for (uint16_t itemId : ct.itemIds) {
-				if (itemId == 0) continue;
-				PreviewItem pi;
-				pi.position = absPos;
-				pi.itemId = itemId;
-				pi.sourceRule = &rule;
-				placementItems.push_back(pi);
+		// Validate placement at base position
+		if (!m_virtualPreview) {
+			uint16_t checkId = selected->isCompositeEntry() ? selected->getRepresentativeItemId() : selected->itemId;
+			if (!validateTilePlacement(basePos, checkId)) {
+				continue;
 			}
 		}
 
-		if (!allValid || placementItems.empty()) continue;
+		// Build placement items at adjusted base position
+		std::vector<PreviewItem> placementItems;
+		if (!buildPlacementItems(basePos, *selected, &rule, placementItems)) {
+			continue;
+		}
+
+		if (placementItems.empty()) continue;
 
 		// Check max items cap
 		if (m_preset.maxItemsTotal >= 0 &&
 		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+			continue;
+		}
+
+		// Check spacing
+		if (!checkSpacingForPlacement(placementItems)) {
 			continue;
 		}
 
@@ -1709,88 +1746,157 @@ void DecorationEngine::generateClusterCentered(const std::vector<std::pair<Posit
 
 void DecorationEngine::generateClusterRandom(const std::vector<std::pair<Position, uint16_t>>& tiles,
                                               const FloorRule& rule) {
-	if (rule.clusterTiles.empty() || tiles.empty()) return;
+	if (rule.clusterTiles.empty() || tiles.empty() || rule.items.empty()) return;
+	if (!m_editor && !m_virtualPreview) return;
 
-	// Build a weighted pool of all items from all cluster tiles
-	struct WeightedItem {
-		uint16_t itemId;
-		int weight;
+	// The cluster is a POSITION TEMPLATE that defines an EXACT pattern of items.
+	// We search the map for places where this exact pattern exists.
+	// In random mode, items from rule.items are scattered across all matched cluster positions.
+
+	// Build a set of valid tile positions for fast lookup
+	std::unordered_set<uint64_t> validPositions;
+	auto posHash = [](int x, int y, int z) -> uint64_t {
+		return (static_cast<uint64_t>(x & 0xFFFF) << 32) |
+		       (static_cast<uint64_t>(y & 0xFFFF) << 16) |
+		       static_cast<uint64_t>(z & 0xFFFF);
 	};
-	std::vector<WeightedItem> itemPool;
-	int totalWeight = 0;
+	for (const auto& tile : tiles) {
+		validPositions.insert(posHash(tile.first.x, tile.first.y, tile.first.z));
+	}
 
-	for (const auto& ct : rule.clusterTiles) {
-		for (uint16_t id : ct.itemIds) {
-			if (id > 0) {
-				// Each item gets equal weight (1) in the pool
-				itemPool.push_back({id, 1});
-				totalWeight += 1;
+	Map* map = m_virtualPreview ? nullptr : &m_editor->getMap();
+
+	// Use the first cluster tile as an anchor
+	Position anchorOff = rule.clusterTiles[0].offset;
+
+	// Build list of candidate anchor positions where the entire cluster pattern
+	// matches EXACTLY on the map
+	std::vector<Position> candidatePositions;
+	for (const auto& tile : tiles) {
+		const Position& pos = tile.first;
+
+		bool allMatch = true;
+		for (const auto& ct : rule.clusterTiles) {
+			Position absPos;
+			absPos.x = pos.x + (ct.offset.x - anchorOff.x);
+			absPos.y = pos.y + (ct.offset.y - anchorOff.y);
+			absPos.z = pos.z + (ct.offset.z - anchorOff.z);
+
+			// Must be within the area
+			if (validPositions.find(posHash(absPos.x, absPos.y, absPos.z)) == validPositions.end()) {
+				allMatch = false;
+				break;
 			}
+
+			// Must match the cluster pattern exactly on the map
+			if (map && !ct.itemIds.empty()) {
+				Tile* mapTile = map->getTile(absPos);
+				if (!tileMatchesClusterPattern(mapTile, ct)) {
+					allMatch = false;
+					break;
+				}
+			}
+		}
+		if (allMatch) {
+			candidatePositions.push_back(pos);
 		}
 	}
 
-	if (itemPool.empty() || totalWeight <= 0) return;
+	if (candidatePositions.empty()) return;
 
-	// Shuffle tile order for randomness
-	std::vector<size_t> indices(tiles.size());
-	std::iota(indices.begin(), indices.end(), 0);
-	std::shuffle(indices.begin(), indices.end(), m_rng);
+	// Shuffle candidates for random selection
+	std::shuffle(candidatePositions.begin(), candidatePositions.end(), m_rng);
 
-	int rulePlacements = 0;
+	// Track placed instance anchors for min distance enforcement
+	std::vector<Position> instanceAnchors;
+	int instancesPlaced = 0;
 	std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
-	std::uniform_int_distribution<int> weightDist(0, totalWeight - 1);
 
-	for (size_t idx : indices) {
+	for (const auto& anchorPos : candidatePositions) {
+		if (instancesPlaced >= rule.instanceCount) break;
+
 		if (m_preset.maxItemsTotal >= 0 &&
 		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
 			m_previewWasCapped = true;
 			break;
 		}
 
-		if (rule.maxPlacements >= 0 && rulePlacements >= rule.maxPlacements) {
-			break;
-		}
-
-		const Position& pos = tiles[idx].first;
-
-		// Density check
-		if (densityDist(m_rng) > rule.density) {
-			continue;
-		}
-
-		// Pick a random item from the pool
-		int roll = weightDist(m_rng);
-		uint16_t selectedId = itemPool.back().itemId;
-		int cumulative = 0;
-		for (const auto& wi : itemPool) {
-			cumulative += wi.weight;
-			if (roll < cumulative) {
-				selectedId = wi.itemId;
-				break;
+		// Check minimum distance to other cluster instances
+		bool tooClose = false;
+		if (rule.instanceMinDistance > 0) {
+			for (const auto& existing : instanceAnchors) {
+				if (existing.z != anchorPos.z) continue;
+				int dx = std::abs(existing.x - anchorPos.x);
+				int dy = std::abs(existing.y - anchorPos.y);
+				int dist = std::max(dx, dy);
+				if (dist < rule.instanceMinDistance) {
+					tooClose = true;
+					break;
+				}
 			}
 		}
+		if (tooClose) continue;
 
-		// Check spacing
-		if (!checkSpacing(pos, selectedId)) {
-			continue;
-		}
-
-		// Validate placement
-		if (!m_virtualPreview && !validateTilePlacement(pos, selectedId)) {
-			continue;
-		}
-
-		// Place the item
-		PreviewItem pi;
-		pi.position = pos;
-		pi.itemId = selectedId;
-		pi.sourceRule = &rule;
-
+		// For each cluster tile position, try to place an item from rule.items
 		std::vector<PreviewItem> placementItems;
-		placementItems.push_back(pi);
+		bool anyValid = false;
 
+		for (const auto& ct : rule.clusterTiles) {
+			Position absPos;
+			absPos.x = anchorPos.x + (ct.offset.x - anchorOff.x);
+			absPos.y = anchorPos.y + (ct.offset.y - anchorOff.y);
+			absPos.z = anchorPos.z + (ct.offset.z - anchorOff.z);
+
+			// Density check per tile
+			if (densityDist(m_rng) > rule.density) {
+				continue;
+			}
+
+			// Pick a random item from rule.items
+			const ItemEntry* selected = selectItemFromRule(&rule);
+			if (!selected) continue;
+
+			// For composite items with their own center point, adjust the base position
+			// so that the item's center tile aligns with this cluster tile position.
+			Position basePos = absPos;
+			if (selected->isCompositeEntry() && selected->hasCenterPoint) {
+				basePos.x -= selected->centerOffset.x;
+				basePos.y -= selected->centerOffset.y;
+				basePos.z -= selected->centerOffset.z;
+			}
+
+			// Validate placement
+			if (!m_virtualPreview) {
+				uint16_t checkId = selected->isCompositeEntry() ? selected->getRepresentativeItemId() : selected->itemId;
+				if (!validateTilePlacement(basePos, checkId)) {
+					continue;
+				}
+			}
+
+			// Build placement items at this cluster tile position
+			std::vector<PreviewItem> tileItems;
+			if (!buildPlacementItems(basePos, *selected, &rule, tileItems)) {
+				continue;
+			}
+
+			for (auto& pi : tileItems) {
+				placementItems.push_back(std::move(pi));
+			}
+			anyValid = true;
+		}
+
+		if (!anyValid || placementItems.empty()) continue;
+
+		// Check max items cap
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+			continue;
+		}
+
+		// Commit placement
 		commitPlacement(placementItems);
-		rulePlacements++;
+		instanceAnchors.push_back(anchorPos);
+		instancesPlaced++;
 	}
 }
 

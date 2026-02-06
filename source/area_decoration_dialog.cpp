@@ -66,6 +66,7 @@ namespace {
 		ID_BROWSE_ITEM,
 		ID_ADD_CLUSTER,
 		ID_REPLACE_CLUSTER,
+		ID_PREVIEW_CLUSTER_ITEM,
 		ID_ITEMS_LIST,
 		ID_ADD_DOODAD,
 		ID_DOODAD_LIST,
@@ -213,6 +214,7 @@ wxBEGIN_EVENT_TABLE(FloorRuleEditDialog, wxDialog)
 	EVT_BUTTON(ID_CLUSTER_BROWSE_ITEM, FloorRuleEditDialog::OnClusterBrowseItem)
 	EVT_BUTTON(ID_ADD_ITEM, FloorRuleEditDialog::OnAddItem)
 	EVT_BUTTON(ID_EDIT_ITEM, FloorRuleEditDialog::OnEditItem)
+	EVT_BUTTON(ID_PREVIEW_CLUSTER_ITEM, FloorRuleEditDialog::OnPreviewClusterItem)
 	EVT_BUTTON(ID_REPLACE_CLUSTER, FloorRuleEditDialog::OnReplaceClusterFromSelection)
 	EVT_BUTTON(ID_REMOVE_ITEM, FloorRuleEditDialog::OnRemoveItem)
 	EVT_BUTTON(ID_CLEAR_ITEMS, FloorRuleEditDialog::OnClearItems)
@@ -632,15 +634,19 @@ void FloorRuleEditDialog::CreateControls() {
 
 	wxButton* addBtn = newd wxButton(this, ID_ADD_ITEM, "Add", wxDefaultPosition, wxSize(50, -1));
 	m_editItemBtn = newd wxButton(this, ID_EDIT_ITEM, "Edit", wxDefaultPosition, wxSize(50, -1));
+	m_previewClusterItemBtn = newd wxButton(this, ID_PREVIEW_CLUSTER_ITEM, "Preview", wxDefaultPosition, wxSize(60, -1));
 	wxButton* removeBtn = newd wxButton(this, ID_REMOVE_ITEM, "Remove", wxDefaultPosition, wxSize(60, -1));
 	wxButton* clearBtn = newd wxButton(this, ID_CLEAR_ITEMS, "Clear All", wxDefaultPosition, wxSize(70, -1));
 	itemControlsSizer->Add(addBtn, 0, wxRIGHT, 5);
 	itemControlsSizer->Add(m_editItemBtn, 0, wxRIGHT, 5);
+	itemControlsSizer->Add(m_previewClusterItemBtn, 0, wxRIGHT, 5);
 	itemControlsSizer->Add(removeBtn, 0);
 	itemControlsSizer->Add(clearBtn, 0, wxLEFT, 5);
 
 	m_editItemBtn->Enable(false);
 	m_editItemBtn->SetToolTip("Apply the fields above to the selected item/cluster");
+	m_previewClusterItemBtn->Enable(false);
+	m_previewClusterItemBtn->SetToolTip("Preview the selected cluster item");
 
 	itemsBox->Add(itemControlsSizer, 0, wxALL, 5);
 
@@ -804,6 +810,9 @@ void FloorRuleEditDialog::UpdateItemsList() {
 
 	if (m_editItemBtn) {
 		m_editItemBtn->Enable(false);
+	}
+	if (m_previewClusterItemBtn) {
+		m_previewClusterItemBtn->Enable(false);
 	}
 	if (m_replaceClusterBtn) {
 		m_replaceClusterBtn->Enable(false);
@@ -1228,7 +1237,6 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 		m_rule.floorId = 0;
 		m_rule.fromFloorId = 0;
 		m_rule.toFloorId = 0;
-		m_rule.items.clear();  // Clear floor-mode items; cluster uses clusterTiles instead
 		m_rule.instanceCount = m_instanceCountSpin ? m_instanceCountSpin->GetValue() : 1;
 		m_rule.instanceMinDistance = m_instanceMinDistSpin ? m_instanceMinDistSpin->GetValue() : 5;
 		if (m_rule.clusterTiles.empty()) {
@@ -1372,6 +1380,36 @@ void FloorRuleEditDialog::OnEditItem(wxCommandEvent& event) {
 	}
 }
 
+void FloorRuleEditDialog::OnPreviewClusterItem(wxCommandEvent& event) {
+	long selected = m_itemsListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	if (selected < 0 || selected >= static_cast<long>(m_rule.items.size())) {
+		wxMessageBox("Select a cluster/composite item to preview.", "Preview", wxOK | wxICON_INFORMATION);
+		return;
+	}
+
+	AreaDecoration::ItemEntry& entry = m_rule.items[selected];
+	if (!entry.isCompositeEntry() || entry.compositeTiles.empty()) {
+		wxMessageBox("Selected item has no tiles to preview.", "Preview", wxOK | wxICON_INFORMATION);
+		return;
+	}
+
+	// Use a temporary FloorRule to display the preview, restoring saved center point
+	AreaDecoration::FloorRule tempRule;
+	tempRule.clusterTiles = entry.compositeTiles;
+	tempRule.hasCenterPoint = entry.hasCenterPoint;
+	tempRule.centerOffset = entry.centerOffset;
+
+	ClusterPreviewWindow* preview = newd ClusterPreviewWindow(this, tempRule, nullptr, "Item Cluster Preview");
+	preview->ShowModal();
+	preview->Destroy();
+
+	// Copy back any changes
+	entry.compositeTiles = tempRule.clusterTiles;
+	entry.hasCenterPoint = tempRule.hasCenterPoint;
+	entry.centerOffset = tempRule.centerOffset;
+	UpdateItemsList();
+}
+
 void FloorRuleEditDialog::OnReplaceClusterFromSelection(wxCommandEvent& event) {
 	long selected = m_itemsListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
 	if (selected < 0 || selected >= static_cast<long>(m_rule.items.size())) {
@@ -1475,11 +1513,11 @@ bool FloorRuleEditDialog::BuildClusterTilesFromSelection(std::vector<AreaDecorat
 		AreaDecoration::CompositeTile compTile;
 		compTile.offset = Position(pos.x - center.x, pos.y - center.y, pos.z - center.z);
 
-		if (tile->ground) {
+		if (tile->ground && tile->ground->isSelected()) {
 			compTile.itemIds.push_back(tile->ground->getID());
 		}
 		for (Item* item : tile->items) {
-			if (item) {
+			if (item && item->isSelected()) {
 				compTile.itemIds.push_back(item->getID());
 			}
 		}
@@ -1540,12 +1578,26 @@ void FloorRuleEditDialog::OnAddClusterFromSelection(wxCommandEvent& event) {
 		return;
 	}
 
+	// Use a temporary FloorRule to open the preview and let user define center point
+	AreaDecoration::FloorRule tempRule;
+	tempRule.clusterTiles = std::move(clusterTiles);
+
+	ClusterPreviewWindow* preview = newd ClusterPreviewWindow(this, tempRule, nullptr, "Item Cluster Preview");
+	preview->ShowModal();
+	preview->Destroy();
+
+	// Copy back the (possibly modified) cluster tiles and center point
+	clusterTiles = std::move(tempRule.clusterTiles);
+
 	int weight = m_newItemWeightSpin ? m_newItemWeightSpin->GetValue() : 100;
 	int count = m_clusterCountSpin ? m_clusterCountSpin->GetValue() : 3;
 	int radius = m_clusterRadiusSpin ? m_clusterRadiusSpin->GetValue() : 3;
 	int minDist = m_clusterMinDistanceSpin ? m_clusterMinDistanceSpin->GetValue() : 2;
 
-	m_rule.items.push_back(AreaDecoration::ItemEntry::MakeCluster(clusterTiles, weight, count, radius, minDist));
+	AreaDecoration::ItemEntry newEntry = AreaDecoration::ItemEntry::MakeCluster(clusterTiles, weight, count, radius, minDist);
+	newEntry.hasCenterPoint = tempRule.hasCenterPoint;
+	newEntry.centerOffset = tempRule.centerOffset;
+	m_rule.items.push_back(std::move(newEntry));
 	UpdateItemsList();
 }
 
@@ -1640,8 +1692,21 @@ void FloorRuleEditDialog::OnClusterFromSelection(wxCommandEvent& event) {
 
 	m_rule.clusterTiles = std::move(tiles);
 	UpdateClusterTilesList();
-	wxMessageBox(wxString::Format("Loaded %zu tiles from selection.", m_rule.clusterTiles.size()),
-	             "Success", wxOK | wxICON_INFORMATION, this);
+
+	// Open the preview window immediately so the user can define the center point
+	ClusterPreviewWindow* preview = newd ClusterPreviewWindow(this, m_rule, [this]() {
+		UpdateClusterTilesList();
+		if (m_clusterCenterLabel) {
+			if (m_rule.hasCenterPoint) {
+				m_clusterCenterLabel->SetLabel(wxString::Format("Center: (%d, %d)",
+					m_rule.centerOffset.x, m_rule.centerOffset.y));
+			} else {
+				m_clusterCenterLabel->SetLabel("No center defined");
+			}
+		}
+	}, "Floor Selection - Cluster Preview");
+	preview->ShowModal();
+	preview->Destroy();
 }
 
 void FloorRuleEditDialog::OnClusterPreview(wxCommandEvent& event) {
@@ -1656,7 +1721,7 @@ void FloorRuleEditDialog::OnClusterPreview(wxCommandEvent& event) {
 				m_clusterCenterLabel->SetLabel("No center defined");
 			}
 		}
-	});
+	}, "Floor Selection - Cluster Preview");
 	preview->ShowModal();
 	preview->Destroy();
 }
@@ -1887,6 +1952,9 @@ void FloorRuleEditDialog::OnItemsListSelected(wxListEvent& event) {
 
 	if (m_editItemBtn) {
 		m_editItemBtn->Enable(true);
+	}
+	if (m_previewClusterItemBtn) {
+		m_previewClusterItemBtn->Enable(entry.isCompositeEntry());
 	}
 	if (m_replaceClusterBtn) {
 		m_replaceClusterBtn->Enable(entry.isClusterEntry());

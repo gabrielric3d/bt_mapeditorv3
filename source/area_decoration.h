@@ -55,6 +55,8 @@ struct ItemEntry {
 	int clusterCount = 3;
 	int clusterRadius = 3;
 	int clusterMinDistance = 2;
+	bool hasCenterPoint = false;
+	Position centerOffset;
 
 	ItemEntry() = default;
 	ItemEntry(uint16_t id, int w = 100) : itemId(id), weight(w), isComposite(false) {}

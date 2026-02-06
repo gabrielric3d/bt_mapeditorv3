@@ -25,7 +25,8 @@
 class ClusterPreviewWindow : public wxDialog {
 public:
 	ClusterPreviewWindow(wxWindow* parent, AreaDecoration::FloorRule& rule,
-	                     std::function<void()> onChangeCallback = nullptr);
+	                     std::function<void()> onChangeCallback = nullptr,
+	                     const wxString& title = "Cluster Preview");
 	virtual ~ClusterPreviewWindow();
 
 private:

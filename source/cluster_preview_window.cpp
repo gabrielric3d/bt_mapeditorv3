@@ -40,8 +40,9 @@ wxBEGIN_EVENT_TABLE(ClusterPreviewWindow, wxDialog)
 wxEND_EVENT_TABLE()
 
 ClusterPreviewWindow::ClusterPreviewWindow(wxWindow* parent, AreaDecoration::FloorRule& rule,
-                                           std::function<void()> onChangeCallback)
-	: wxDialog(parent, wxID_ANY, "Cluster Preview", wxDefaultPosition, wxSize(450, 500),
+                                           std::function<void()> onChangeCallback,
+                                           const wxString& title)
+	: wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(450, 500),
 	           wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxMINIMIZE_BOX),
 	  m_rule(rule),
 	  m_onChangeCallback(onChangeCallback),
@@ -450,6 +451,10 @@ void ClusterPreviewWindow::OnCenterCheckChanged(wxCommandEvent& event) {
 }
 
 void ClusterPreviewWindow::OnClose(wxCloseEvent& event) {
-	// Changes already applied via reference, just destroy
-	Destroy();
+	// End the modal loop so the caller can read back m_rule changes before destroying
+	if (IsModal()) {
+		EndModal(wxID_CLOSE);
+	} else {
+		Destroy();
+	}
 }
