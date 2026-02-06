@@ -120,6 +120,15 @@ struct ItemGroup {
 };
 
 //=============================================================================
+// RuleMode - Determines how a FloorRule operates
+//=============================================================================
+enum class RuleMode {
+	SingleFloor,    // Match single floor ID
+	FloorRange,     // Match floor ID range
+	Cluster         // Cluster-based placement (no floor matching)
+};
+
+//=============================================================================
 // FloorRule - Defines what items can spawn on specific floors
 //=============================================================================
 struct FloorRule {
@@ -149,8 +158,21 @@ struct FloorRule {
 	int priority = 0;
 	bool enabled = true;
 
+	// Rule mode (determines which fields are active)
+	RuleMode ruleMode = RuleMode::SingleFloor;
+
+	// --- Cluster mode fields (only used when ruleMode == Cluster) ---
+	std::vector<CompositeTile> clusterTiles;  // Items on a grid with offsets
+	bool hasCenterPoint = false;
+	Position centerOffset;  // Relative offset within the cluster grid
+
+	// For centered mode: how many cluster instances to place
+	int instanceCount = 1;
+	int instanceMinDistance = 5;  // Min distance between instances
+
 	bool matchesFloor(uint16_t groundId) const;
-	bool isRangeRule() const { return fromFloorId > 0 && toFloorId > 0; }
+	bool isRangeRule() const { return ruleMode == RuleMode::FloorRange; }
+	bool isClusterRule() const { return ruleMode == RuleMode::Cluster; }
 	bool isFriendRange() const { return friendFromFloorId > 0 && friendToFloorId > 0; }
 	bool matchesFriendFloor(uint16_t groundId) const {
 		if (isFriendRange()) {
@@ -159,6 +181,12 @@ struct FloorRule {
 		return groundId == friendFloorId;
 	}
 	bool hasFriendFloor() const { return (friendFloorId > 0) || isFriendRange(); }
+
+	// Cluster helper methods
+	void getClusterBounds(Position& outMin, Position& outMax) const;
+	std::vector<uint16_t> getClusterItemIds() const;
+	size_t getClusterTotalItemCount() const;
+	uint16_t getClusterRepresentativeItemId() const;
 };
 
 //=============================================================================
@@ -390,6 +418,11 @@ private:
 	void generatePureRandom(const std::vector<std::pair<Position, uint16_t>>& tiles);
 	void generateClustered(const std::vector<std::pair<Position, uint16_t>>& tiles);
 	void generateGridBased(const std::vector<std::pair<Position, uint16_t>>& tiles);
+
+	void generateClusterCentered(const std::vector<std::pair<Position, uint16_t>>& tiles,
+	                              const FloorRule& rule);
+	void generateClusterRandom(const std::vector<std::pair<Position, uint16_t>>& tiles,
+	                            const FloorRule& rule);
 
 	const ItemEntry* selectItemFromRule(const FloorRule* rule);
 };

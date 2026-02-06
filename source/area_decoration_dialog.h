@@ -68,6 +68,7 @@ private:
 	wxTextCtrl* m_nameInput;
 	wxRadioButton* m_singleFloorRadio;
 	wxRadioButton* m_floorRangeRadio;
+	wxRadioButton* m_clusterRadio;
 	wxSpinCtrl* m_singleFloorSpin;
 	wxSpinCtrl* m_fromFloorSpin;
 	wxSpinCtrl* m_toFloorSpin;
@@ -75,6 +76,20 @@ private:
 	// Floor preview panel
 	wxPanel* m_floorPreviewPanelFrom;
 	wxPanel* m_floorPreviewPanelTo;
+
+	// Cluster mode controls panel (shown only in cluster mode)
+	wxPanel* m_clusterControlsPanel;
+	wxListCtrl* m_clusterTilesListCtrl;
+	wxImageList* m_clusterTilesImageList;
+	wxSpinCtrl* m_clusterTileOffsetXSpin;
+	wxSpinCtrl* m_clusterTileOffsetYSpin;
+	wxSpinCtrl* m_clusterNewItemIdSpin;
+	wxButton* m_clusterBrowseItemBtn;
+	wxButton* m_clusterPreviewBtn;
+	wxButton* m_clusterFromSelectionBtn;
+	wxSpinCtrl* m_instanceCountSpin;
+	wxSpinCtrl* m_instanceMinDistSpin;
+	wxStaticText* m_clusterCenterLabel;
 
 	wxListCtrl* m_itemsListCtrl;
 	wxImageList* m_itemsImageList;
@@ -138,6 +153,17 @@ private:
 	void OnFloorIdChanged(wxSpinEvent& event);
 	void OnFriendFloorTypeChanged(wxCommandEvent& event);
 	void OnFriendFloorIdChanged(wxSpinEvent& event);
+
+	// Cluster mode event handlers
+	void OnClusterAddTile(wxCommandEvent& event);
+	void OnClusterRemoveTile(wxCommandEvent& event);
+	void OnClusterAddItem(wxCommandEvent& event);
+	void OnClusterRemoveItem(wxCommandEvent& event);
+	void OnClusterFromSelection(wxCommandEvent& event);
+	void OnClusterPreview(wxCommandEvent& event);
+	void OnClusterBrowseItem(wxCommandEvent& event);
+	void UpdateClusterTilesList();
+	void UpdateClusterControls();
 	void OnAddItem(wxCommandEvent& event);
 	void OnEditItem(wxCommandEvent& event);
 	void OnReplaceClusterFromSelection(wxCommandEvent& event);

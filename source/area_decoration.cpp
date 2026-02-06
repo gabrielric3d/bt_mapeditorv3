@@ -70,10 +70,63 @@ const ItemEntry* ItemGroup::selectRandom(std::mt19937& rng) const {
 //=============================================================================
 
 bool FloorRule::matchesFloor(uint16_t groundId) const {
-	if (fromFloorId > 0 && toFloorId > 0) {
+	// Cluster rules don't match floors - they place independently
+	if (ruleMode == RuleMode::Cluster) {
+		return false;
+	}
+	if (ruleMode == RuleMode::FloorRange) {
 		return groundId >= fromFloorId && groundId <= toFloorId;
 	}
 	return groundId == floorId;
+}
+
+void FloorRule::getClusterBounds(Position& outMin, Position& outMax) const {
+	if (clusterTiles.empty()) {
+		outMin = Position(0, 0, 0);
+		outMax = Position(0, 0, 0);
+		return;
+	}
+
+	outMin = clusterTiles[0].offset;
+	outMax = clusterTiles[0].offset;
+
+	for (const auto& tile : clusterTiles) {
+		outMin.x = std::min(outMin.x, tile.offset.x);
+		outMin.y = std::min(outMin.y, tile.offset.y);
+		outMin.z = std::min(outMin.z, tile.offset.z);
+		outMax.x = std::max(outMax.x, tile.offset.x);
+		outMax.y = std::max(outMax.y, tile.offset.y);
+		outMax.z = std::max(outMax.z, tile.offset.z);
+	}
+}
+
+std::vector<uint16_t> FloorRule::getClusterItemIds() const {
+	std::unordered_set<uint16_t> uniqueIds;
+	for (const auto& tile : clusterTiles) {
+		for (uint16_t id : tile.itemIds) {
+			if (id > 0) {
+				uniqueIds.insert(id);
+			}
+		}
+	}
+	return std::vector<uint16_t>(uniqueIds.begin(), uniqueIds.end());
+}
+
+size_t FloorRule::getClusterTotalItemCount() const {
+	size_t count = 0;
+	for (const auto& tile : clusterTiles) {
+		count += tile.itemIds.size();
+	}
+	return count;
+}
+
+uint16_t FloorRule::getClusterRepresentativeItemId() const {
+	for (const auto& tile : clusterTiles) {
+		for (uint16_t id : tile.itemIds) {
+			if (id > 0) return id;
+		}
+	}
+	return 0;
 }
 
 //=============================================================================
@@ -112,7 +165,38 @@ bool DecorationPreset::validate(std::string& errorOut) const {
 	}
 
 	for (const auto& rule : floorRules) {
-		if (rule.isRangeRule()) {
+		if (rule.isClusterRule()) {
+			// Cluster rule validation
+			if (rule.clusterTiles.empty()) {
+				errorOut = "Cluster rule '" + rule.name + "' has no cluster tiles";
+				return false;
+			}
+			bool hasClusterItems = false;
+			for (const auto& tile : rule.clusterTiles) {
+				if (!tile.itemIds.empty()) {
+					hasClusterItems = true;
+					break;
+				}
+			}
+			if (!hasClusterItems) {
+				errorOut = "Cluster rule '" + rule.name + "' has no items in cluster tiles";
+				return false;
+			}
+			if (rule.hasCenterPoint) {
+				Position cMin, cMax;
+				rule.getClusterBounds(cMin, cMax);
+				if (rule.centerOffset.x < cMin.x || rule.centerOffset.x > cMax.x ||
+				    rule.centerOffset.y < cMin.y || rule.centerOffset.y > cMax.y ||
+				    rule.centerOffset.z < cMin.z || rule.centerOffset.z > cMax.z) {
+					errorOut = "Cluster rule '" + rule.name + "' centerOffset is outside cluster bounds";
+					return false;
+				}
+			}
+			if (rule.instanceCount <= 0) {
+				errorOut = "Cluster rule '" + rule.name + "' instanceCount must be > 0";
+				return false;
+			}
+		} else if (rule.isRangeRule()) {
 			if (rule.fromFloorId > rule.toFloorId) {
 				errorOut = "Invalid floor range: fromFloorId > toFloorId";
 				return false;
@@ -134,7 +218,8 @@ bool DecorationPreset::validate(std::string& errorOut) const {
 			return false;
 		}
 
-		if (rule.items.empty()) {
+		// Cluster rules use clusterTiles, not items list
+		if (!rule.isClusterRule() && rule.items.empty()) {
 			errorOut = "Floor rule '" + rule.name + "' has no items";
 			return false;
 		}
@@ -530,6 +615,16 @@ bool DecorationEngine::generatePreview(uint64_t seed) {
 			break;
 	}
 
+	// Process cluster rules (separate pass)
+	for (const auto& rule : m_preset.floorRules) {
+		if (!rule.enabled || !rule.isClusterRule()) continue;
+		if (rule.hasCenterPoint) {
+			generateClusterCentered(tiles, rule);
+		} else {
+			generateClusterRandom(tiles, rule);
+		}
+	}
+
 	m_previewState.rebuildSpatialIndex();
 	m_previewState.isValid = true;
 
@@ -590,6 +685,16 @@ bool DecorationEngine::generatePreviewVirtual(int width, int height, uint16_t gr
 		case DistributionMode::GridBased:
 			generateGridBased(tiles);
 			break;
+	}
+
+	// Process cluster rules (separate pass)
+	for (const auto& rule : m_preset.floorRules) {
+		if (!rule.enabled || !rule.isClusterRule()) continue;
+		if (rule.hasCenterPoint) {
+			generateClusterCentered(tiles, rule);
+		} else {
+			generateClusterRandom(tiles, rule);
+		}
 	}
 
 	m_previewState.rebuildSpatialIndex();
@@ -898,6 +1003,15 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 		friendRanges.emplace_back(from, to);
 	}
 
+	// Check if any enabled cluster rules exist
+	bool hasAnyClusterRules = false;
+	for (const auto& rule : m_preset.floorRules) {
+		if (rule.enabled && rule.isClusterRule()) {
+			hasAnyClusterRules = true;
+			break;
+		}
+	}
+
 	outTiles.reserve(positions.size());
 
 	for (const Position& pos : positions) {
@@ -905,7 +1019,14 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 		if (!tile) continue;
 
 		Item* ground = tile->ground;
-		if (!ground) continue;
+		if (!ground) {
+			// If cluster rules exist, include tiles without ground as well
+			// (using groundId 0 so they won't match regular floor rules)
+			if (hasAnyClusterRules) {
+				outTiles.push_back({pos, 0});
+			}
+			continue;
+		}
 
 		uint16_t groundId = ground->getID();
 
@@ -919,7 +1040,7 @@ bool DecorationEngine::collectTileData(std::vector<std::pair<Position, uint16_t>
 			}
 		}
 
-		if (m_preset.skipBlockedTiles && tile->isBlocking() && !isFriendGround) {
+		if (m_preset.skipBlockedTiles && tile->isBlocking() && !isFriendGround && !hasAnyClusterRules) {
 			continue;
 		}
 
@@ -1446,6 +1567,230 @@ void DecorationEngine::generateGridBased(const std::vector<std::pair<Position, u
 	}
 }
 
+void DecorationEngine::generateClusterCentered(const std::vector<std::pair<Position, uint16_t>>& tiles,
+                                                const FloorRule& rule) {
+	if (rule.clusterTiles.empty() || tiles.empty()) return;
+
+	// Build a set of valid tile positions for fast lookup
+	std::unordered_set<uint64_t> validPositions;
+	auto posHash = [](int x, int y, int z) -> uint64_t {
+		return (static_cast<uint64_t>(x & 0xFFFF) << 32) |
+		       (static_cast<uint64_t>(y & 0xFFFF) << 16) |
+		       static_cast<uint64_t>(z & 0xFFFF);
+	};
+	for (const auto& tile : tiles) {
+		validPositions.insert(posHash(tile.first.x, tile.first.y, tile.first.z));
+	}
+
+	// Get the cluster bounding box relative to center
+	Position clusterMin, clusterMax;
+	rule.getClusterBounds(clusterMin, clusterMax);
+
+	// Determine the area bounds
+	Position areaMin = tiles[0].first;
+	Position areaMax = tiles[0].first;
+	for (const auto& tile : tiles) {
+		areaMin.x = std::min(areaMin.x, tile.first.x);
+		areaMin.y = std::min(areaMin.y, tile.first.y);
+		areaMin.z = std::min(areaMin.z, tile.first.z);
+		areaMax.x = std::max(areaMax.x, tile.first.x);
+		areaMax.y = std::max(areaMax.y, tile.first.y);
+		areaMax.z = std::max(areaMax.z, tile.first.z);
+	}
+
+	// Build list of candidate center positions where the entire cluster fits within the area
+	// The center offset maps to the placed position, so we compute offsets from center to all tiles
+	Position centerOff = rule.centerOffset;
+
+	std::vector<Position> candidatePositions;
+	for (const auto& tile : tiles) {
+		const Position& pos = tile.first;
+
+		// Check if all cluster tiles would be within valid area when cluster is centered here
+		bool allFit = true;
+		for (const auto& ct : rule.clusterTiles) {
+			Position absPos;
+			absPos.x = pos.x + (ct.offset.x - centerOff.x);
+			absPos.y = pos.y + (ct.offset.y - centerOff.y);
+			absPos.z = pos.z + (ct.offset.z - centerOff.z);
+
+			if (validPositions.find(posHash(absPos.x, absPos.y, absPos.z)) == validPositions.end()) {
+				allFit = false;
+				break;
+			}
+		}
+		if (allFit) {
+			candidatePositions.push_back(pos);
+		}
+	}
+
+	if (candidatePositions.empty()) return;
+
+	// Shuffle candidates for random selection
+	std::shuffle(candidatePositions.begin(), candidatePositions.end(), m_rng);
+
+	// Track placed instance centers for min distance enforcement
+	std::vector<Position> instanceCenters;
+	int instancesPlaced = 0;
+
+	for (const auto& centerPos : candidatePositions) {
+		if (instancesPlaced >= rule.instanceCount) break;
+
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+			m_previewWasCapped = true;
+			break;
+		}
+
+		// Check minimum distance to other cluster instance centers
+		bool tooClose = false;
+		if (rule.instanceMinDistance > 0) {
+			for (const auto& existing : instanceCenters) {
+				if (existing.z != centerPos.z) continue;
+				int dx = std::abs(existing.x - centerPos.x);
+				int dy = std::abs(existing.y - centerPos.y);
+				int dist = std::max(dx, dy);
+				if (dist < rule.instanceMinDistance) {
+					tooClose = true;
+					break;
+				}
+			}
+		}
+		if (tooClose) continue;
+
+		// Validate all cluster tile positions (not blocked, etc.)
+		bool allValid = true;
+		std::vector<PreviewItem> placementItems;
+
+		for (const auto& ct : rule.clusterTiles) {
+			if (ct.itemIds.empty()) continue;
+
+			Position absPos;
+			absPos.x = centerPos.x + (ct.offset.x - centerOff.x);
+			absPos.y = centerPos.y + (ct.offset.y - centerOff.y);
+			absPos.z = centerPos.z + (ct.offset.z - centerOff.z);
+
+			// Validate tile placement
+			if (!m_virtualPreview) {
+				if (!validateTilePlacement(absPos, ct.itemIds[0])) {
+					allValid = false;
+					break;
+				}
+			}
+
+			// Add all items at this cluster tile position
+			for (uint16_t itemId : ct.itemIds) {
+				if (itemId == 0) continue;
+				PreviewItem pi;
+				pi.position = absPos;
+				pi.itemId = itemId;
+				pi.sourceRule = &rule;
+				placementItems.push_back(pi);
+			}
+		}
+
+		if (!allValid || placementItems.empty()) continue;
+
+		// Check max items cap
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced + static_cast<int>(placementItems.size()) > m_preset.maxItemsTotal) {
+			continue;
+		}
+
+		// Commit placement
+		commitPlacement(placementItems);
+		instanceCenters.push_back(centerPos);
+		instancesPlaced++;
+	}
+}
+
+void DecorationEngine::generateClusterRandom(const std::vector<std::pair<Position, uint16_t>>& tiles,
+                                              const FloorRule& rule) {
+	if (rule.clusterTiles.empty() || tiles.empty()) return;
+
+	// Build a weighted pool of all items from all cluster tiles
+	struct WeightedItem {
+		uint16_t itemId;
+		int weight;
+	};
+	std::vector<WeightedItem> itemPool;
+	int totalWeight = 0;
+
+	for (const auto& ct : rule.clusterTiles) {
+		for (uint16_t id : ct.itemIds) {
+			if (id > 0) {
+				// Each item gets equal weight (1) in the pool
+				itemPool.push_back({id, 1});
+				totalWeight += 1;
+			}
+		}
+	}
+
+	if (itemPool.empty() || totalWeight <= 0) return;
+
+	// Shuffle tile order for randomness
+	std::vector<size_t> indices(tiles.size());
+	std::iota(indices.begin(), indices.end(), 0);
+	std::shuffle(indices.begin(), indices.end(), m_rng);
+
+	int rulePlacements = 0;
+	std::uniform_real_distribution<float> densityDist(0.0f, 1.0f);
+	std::uniform_int_distribution<int> weightDist(0, totalWeight - 1);
+
+	for (size_t idx : indices) {
+		if (m_preset.maxItemsTotal >= 0 &&
+		    m_previewState.totalItemsPlaced >= m_preset.maxItemsTotal) {
+			m_previewWasCapped = true;
+			break;
+		}
+
+		if (rule.maxPlacements >= 0 && rulePlacements >= rule.maxPlacements) {
+			break;
+		}
+
+		const Position& pos = tiles[idx].first;
+
+		// Density check
+		if (densityDist(m_rng) > rule.density) {
+			continue;
+		}
+
+		// Pick a random item from the pool
+		int roll = weightDist(m_rng);
+		uint16_t selectedId = itemPool.back().itemId;
+		int cumulative = 0;
+		for (const auto& wi : itemPool) {
+			cumulative += wi.weight;
+			if (roll < cumulative) {
+				selectedId = wi.itemId;
+				break;
+			}
+		}
+
+		// Check spacing
+		if (!checkSpacing(pos, selectedId)) {
+			continue;
+		}
+
+		// Validate placement
+		if (!m_virtualPreview && !validateTilePlacement(pos, selectedId)) {
+			continue;
+		}
+
+		// Place the item
+		PreviewItem pi;
+		pi.position = pos;
+		pi.itemId = selectedId;
+		pi.sourceRule = &rule;
+
+		std::vector<PreviewItem> placementItems;
+		placementItems.push_back(pi);
+
+		commitPlacement(placementItems);
+		rulePlacements++;
+	}
+}
+
 bool DecorationEngine::applyPreview() {
 	if (!m_previewState.isValid || m_previewState.items.empty()) {
 		m_lastError = "No valid preview to apply";
@@ -1663,6 +2008,15 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 	for (const auto& rule : floorRules) {
 		pugi::xml_node ruleNode = rulesNode.append_child("rule");
 		ruleNode.append_attribute("name") = rule.name.c_str();
+
+		// Write rule_mode attribute
+		if (rule.ruleMode == RuleMode::Cluster) {
+			ruleNode.append_attribute("rule_mode") = "cluster";
+		} else if (rule.ruleMode == RuleMode::FloorRange) {
+			ruleNode.append_attribute("rule_mode") = "range";
+		}
+		// SingleFloor is the default, omit for backward compat
+
 		ruleNode.append_attribute("floor_id") = rule.floorId;
 		ruleNode.append_attribute("from_floor_id") = rule.fromFloorId;
 		ruleNode.append_attribute("to_floor_id") = rule.toFloorId;
@@ -1671,6 +2025,17 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 		ruleNode.append_attribute("priority") = rule.priority;
 		ruleNode.append_attribute("enabled") = rule.enabled;
 		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
+
+		// Cluster-specific attributes
+		if (rule.isClusterRule()) {
+			ruleNode.append_attribute("has_center") = rule.hasCenterPoint;
+			ruleNode.append_attribute("center_x") = rule.centerOffset.x;
+			ruleNode.append_attribute("center_y") = rule.centerOffset.y;
+			ruleNode.append_attribute("center_z") = rule.centerOffset.z;
+			ruleNode.append_attribute("instance_count") = rule.instanceCount;
+			ruleNode.append_attribute("instance_min_distance") = rule.instanceMinDistance;
+		}
+
 		if (rule.isFriendRange()) {
 			ruleNode.append_attribute("friend_floor_id") = 0;
 			ruleNode.append_attribute("friend_from_floor_id") = rule.friendFromFloorId;
@@ -1683,6 +2048,23 @@ bool DecorationPreset::saveToFile(const std::string& filepath) const {
 		ruleNode.append_attribute("friend_chance") = rule.friendChance;
 		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
 
+		// Cluster tiles (for cluster rules)
+		if (rule.isClusterRule()) {
+			for (const auto& ct : rule.clusterTiles) {
+				if (ct.itemIds.empty()) continue;
+				pugi::xml_node ctNode = ruleNode.append_child("cluster_tile");
+				ctNode.append_attribute("x") = ct.offset.x;
+				ctNode.append_attribute("y") = ct.offset.y;
+				ctNode.append_attribute("z") = ct.offset.z;
+				for (uint16_t id : ct.itemIds) {
+					if (id == 0) continue;
+					pugi::xml_node itemNode = ctNode.append_child("item");
+					itemNode.append_attribute("id") = id;
+				}
+			}
+		}
+
+		// Regular items (for non-cluster rules)
 		pugi::xml_node itemsNode = ruleNode.append_child("items");
 		for (const auto& item : rule.items) {
 			if (item.isCompositeEntry()) {
@@ -1790,6 +2172,53 @@ bool DecorationPreset::loadFromFile(const std::string& filepath) {
 		rule.priority = ruleNode.attribute("priority").as_int(0);
 		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
 		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
+
+		// Read rule_mode with backward compatibility
+		std::string ruleModeStr = ruleNode.attribute("rule_mode").as_string("");
+		if (ruleModeStr == "cluster") {
+			rule.ruleMode = RuleMode::Cluster;
+		} else if (ruleModeStr == "range") {
+			rule.ruleMode = RuleMode::FloorRange;
+		} else {
+			// Backward compat: determine mode from existing fields
+			if (rule.fromFloorId > 0 && rule.toFloorId > 0) {
+				rule.ruleMode = RuleMode::FloorRange;
+			} else {
+				rule.ruleMode = RuleMode::SingleFloor;
+			}
+		}
+
+		// Read cluster-specific attributes
+		if (rule.isClusterRule()) {
+			rule.hasCenterPoint = ruleNode.attribute("has_center").as_bool(false);
+			rule.centerOffset = Position(
+				ruleNode.attribute("center_x").as_int(0),
+				ruleNode.attribute("center_y").as_int(0),
+				ruleNode.attribute("center_z").as_int(0));
+			rule.instanceCount = ruleNode.attribute("instance_count").as_int(1);
+			rule.instanceMinDistance = ruleNode.attribute("instance_min_distance").as_int(5);
+
+			// Parse cluster_tile nodes
+			for (pugi::xml_node ctNode = ruleNode.child("cluster_tile"); ctNode;
+			     ctNode = ctNode.next_sibling("cluster_tile")) {
+				CompositeTile ct;
+				ct.offset = Position(
+					ctNode.attribute("x").as_int(0),
+					ctNode.attribute("y").as_int(0),
+					ctNode.attribute("z").as_int(0));
+				for (pugi::xml_node idNode = ctNode.child("item"); idNode;
+				     idNode = idNode.next_sibling("item")) {
+					uint16_t id = idNode.attribute("id").as_uint(0);
+					if (id > 0) {
+						ct.itemIds.push_back(id);
+					}
+				}
+				if (!ct.itemIds.empty()) {
+					rule.clusterTiles.push_back(ct);
+				}
+			}
+		}
+
 		uint16_t friendFrom = ruleNode.attribute("friend_from_floor_id").as_uint(0);
 		uint16_t friendTo = ruleNode.attribute("friend_to_floor_id").as_uint(0);
 		if (friendFrom > 0 && friendTo > 0) {
@@ -1901,6 +2330,14 @@ std::string DecorationPreset::toXmlString() const {
 	for (const auto& rule : floorRules) {
 		pugi::xml_node ruleNode = rulesNode.append_child("rule");
 		ruleNode.append_attribute("name") = rule.name.c_str();
+
+		// Write rule_mode attribute
+		if (rule.ruleMode == RuleMode::Cluster) {
+			ruleNode.append_attribute("rule_mode") = "cluster";
+		} else if (rule.ruleMode == RuleMode::FloorRange) {
+			ruleNode.append_attribute("rule_mode") = "range";
+		}
+
 		ruleNode.append_attribute("floor_id") = rule.floorId;
 		ruleNode.append_attribute("from_floor_id") = rule.fromFloorId;
 		ruleNode.append_attribute("to_floor_id") = rule.toFloorId;
@@ -1909,6 +2346,17 @@ std::string DecorationPreset::toXmlString() const {
 		ruleNode.append_attribute("priority") = rule.priority;
 		ruleNode.append_attribute("enabled") = rule.enabled;
 		ruleNode.append_attribute("border_item_id") = rule.borderItemId;
+
+		// Cluster-specific attributes
+		if (rule.isClusterRule()) {
+			ruleNode.append_attribute("has_center") = rule.hasCenterPoint;
+			ruleNode.append_attribute("center_x") = rule.centerOffset.x;
+			ruleNode.append_attribute("center_y") = rule.centerOffset.y;
+			ruleNode.append_attribute("center_z") = rule.centerOffset.z;
+			ruleNode.append_attribute("instance_count") = rule.instanceCount;
+			ruleNode.append_attribute("instance_min_distance") = rule.instanceMinDistance;
+		}
+
 		if (rule.isFriendRange()) {
 			ruleNode.append_attribute("friend_floor_id") = 0;
 			ruleNode.append_attribute("friend_from_floor_id") = rule.friendFromFloorId;
@@ -1920,6 +2368,22 @@ std::string DecorationPreset::toXmlString() const {
 		}
 		ruleNode.append_attribute("friend_chance") = rule.friendChance;
 		ruleNode.append_attribute("friend_strength") = rule.friendStrength;
+
+		// Cluster tiles (for cluster rules)
+		if (rule.isClusterRule()) {
+			for (const auto& ct : rule.clusterTiles) {
+				if (ct.itemIds.empty()) continue;
+				pugi::xml_node ctNode = ruleNode.append_child("cluster_tile");
+				ctNode.append_attribute("x") = ct.offset.x;
+				ctNode.append_attribute("y") = ct.offset.y;
+				ctNode.append_attribute("z") = ct.offset.z;
+				for (uint16_t id : ct.itemIds) {
+					if (id == 0) continue;
+					pugi::xml_node itemNode = ctNode.append_child("item");
+					itemNode.append_attribute("id") = id;
+				}
+			}
+		}
 
 		pugi::xml_node itemsNode = ruleNode.append_child("items");
 		for (const auto& item : rule.items) {
@@ -2024,6 +2488,53 @@ bool DecorationPreset::fromXmlString(const std::string& xml) {
 		rule.priority = ruleNode.attribute("priority").as_int(0);
 		rule.enabled = ruleNode.attribute("enabled").as_bool(true);
 		rule.borderItemId = ruleNode.attribute("border_item_id").as_uint(0);
+
+		// Read rule_mode with backward compatibility
+		std::string ruleModeStr = ruleNode.attribute("rule_mode").as_string("");
+		if (ruleModeStr == "cluster") {
+			rule.ruleMode = RuleMode::Cluster;
+		} else if (ruleModeStr == "range") {
+			rule.ruleMode = RuleMode::FloorRange;
+		} else {
+			// Backward compat: determine mode from existing fields
+			if (rule.fromFloorId > 0 && rule.toFloorId > 0) {
+				rule.ruleMode = RuleMode::FloorRange;
+			} else {
+				rule.ruleMode = RuleMode::SingleFloor;
+			}
+		}
+
+		// Read cluster-specific attributes
+		if (rule.isClusterRule()) {
+			rule.hasCenterPoint = ruleNode.attribute("has_center").as_bool(false);
+			rule.centerOffset = Position(
+				ruleNode.attribute("center_x").as_int(0),
+				ruleNode.attribute("center_y").as_int(0),
+				ruleNode.attribute("center_z").as_int(0));
+			rule.instanceCount = ruleNode.attribute("instance_count").as_int(1);
+			rule.instanceMinDistance = ruleNode.attribute("instance_min_distance").as_int(5);
+
+			// Parse cluster_tile nodes
+			for (pugi::xml_node ctNode = ruleNode.child("cluster_tile"); ctNode;
+			     ctNode = ctNode.next_sibling("cluster_tile")) {
+				CompositeTile ct;
+				ct.offset = Position(
+					ctNode.attribute("x").as_int(0),
+					ctNode.attribute("y").as_int(0),
+					ctNode.attribute("z").as_int(0));
+				for (pugi::xml_node idNode = ctNode.child("item"); idNode;
+				     idNode = idNode.next_sibling("item")) {
+					uint16_t id = idNode.attribute("id").as_uint(0);
+					if (id > 0) {
+						ct.itemIds.push_back(id);
+					}
+				}
+				if (!ct.itemIds.empty()) {
+					rule.clusterTiles.push_back(ct);
+				}
+			}
+		}
+
 		uint16_t friendFrom = ruleNode.attribute("friend_from_floor_id").as_uint(0);
 		uint16_t friendTo = ruleNode.attribute("friend_to_floor_id").as_uint(0);
 		if (friendFrom > 0 && friendTo > 0) {

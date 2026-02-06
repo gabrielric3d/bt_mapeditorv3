@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <climits>
 #include <unordered_set>
+#include "cluster_preview_window.h"
 
 namespace {
 	enum {
@@ -86,6 +87,22 @@ namespace {
 		ID_FRIEND_PREVIEW_TO,
 		ID_RULE_OK,
 		ID_RULE_CANCEL,
+
+		// Cluster mode IDs (FloorRuleEditDialog)
+		ID_FLOOR_TYPE_CLUSTER,
+		ID_CLUSTER_ADD_TILE,
+		ID_CLUSTER_REMOVE_TILE,
+		ID_CLUSTER_ADD_ITEM,
+		ID_CLUSTER_REMOVE_ITEM,
+		ID_CLUSTER_FROM_SELECTION,
+		ID_CLUSTER_PREVIEW,
+		ID_CLUSTER_BROWSE_ITEM,
+		ID_CLUSTER_TILES_LIST,
+		ID_CLUSTER_INSTANCE_COUNT,
+		ID_CLUSTER_INSTANCE_DIST,
+		ID_CLUSTER_NEW_ITEM_ID,
+		ID_CLUSTER_OFFSET_X,
+		ID_CLUSTER_OFFSET_Y,
 
 		// Preset management IDs
 		ID_PRESET_CHOICE,
@@ -185,6 +202,14 @@ bool ItemListDropTarget::OnDropText(wxCoord x, wxCoord y, const wxString& data) 
 wxBEGIN_EVENT_TABLE(FloorRuleEditDialog, wxDialog)
 	EVT_RADIOBUTTON(ID_FLOOR_TYPE_SINGLE, FloorRuleEditDialog::OnFloorTypeChanged)
 	EVT_RADIOBUTTON(ID_FLOOR_TYPE_RANGE, FloorRuleEditDialog::OnFloorTypeChanged)
+	EVT_RADIOBUTTON(ID_FLOOR_TYPE_CLUSTER, FloorRuleEditDialog::OnFloorTypeChanged)
+	EVT_BUTTON(ID_CLUSTER_ADD_TILE, FloorRuleEditDialog::OnClusterAddTile)
+	EVT_BUTTON(ID_CLUSTER_REMOVE_TILE, FloorRuleEditDialog::OnClusterRemoveTile)
+	EVT_BUTTON(ID_CLUSTER_ADD_ITEM, FloorRuleEditDialog::OnClusterAddItem)
+	EVT_BUTTON(ID_CLUSTER_REMOVE_ITEM, FloorRuleEditDialog::OnClusterRemoveItem)
+	EVT_BUTTON(ID_CLUSTER_FROM_SELECTION, FloorRuleEditDialog::OnClusterFromSelection)
+	EVT_BUTTON(ID_CLUSTER_PREVIEW, FloorRuleEditDialog::OnClusterPreview)
+	EVT_BUTTON(ID_CLUSTER_BROWSE_ITEM, FloorRuleEditDialog::OnClusterBrowseItem)
 	EVT_BUTTON(ID_ADD_ITEM, FloorRuleEditDialog::OnAddItem)
 	EVT_BUTTON(ID_EDIT_ITEM, FloorRuleEditDialog::OnEditItem)
 	EVT_BUTTON(ID_REPLACE_CLUSTER, FloorRuleEditDialog::OnReplaceClusterFromSelection)
@@ -220,8 +245,21 @@ FloorRuleEditDialog::FloorRuleEditDialog(wxWindow* parent, AreaDecoration::Floor
 	           wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)  // Non-modal friendly style
 	, m_rule(rule)
 	, m_onCloseCallback(onCloseCallback)
+	, m_clusterRadio(nullptr)
 	, m_floorPreviewPanelFrom(nullptr)
 	, m_floorPreviewPanelTo(nullptr)
+	, m_clusterControlsPanel(nullptr)
+	, m_clusterTilesListCtrl(nullptr)
+	, m_clusterTilesImageList(nullptr)
+	, m_clusterTileOffsetXSpin(nullptr)
+	, m_clusterTileOffsetYSpin(nullptr)
+	, m_clusterNewItemIdSpin(nullptr)
+	, m_clusterBrowseItemBtn(nullptr)
+	, m_clusterPreviewBtn(nullptr)
+	, m_clusterFromSelectionBtn(nullptr)
+	, m_instanceCountSpin(nullptr)
+	, m_instanceMinDistSpin(nullptr)
+	, m_clusterCenterLabel(nullptr)
 	, m_itemsImageList(nullptr)
 	, m_borderItemSpin(nullptr)
 	, m_borderPreviewPanel(nullptr)
@@ -255,6 +293,10 @@ FloorRuleEditDialog::~FloorRuleEditDialog() {
 	if (m_doodadImageList) {
 		delete m_doodadImageList;
 		m_doodadImageList = nullptr;
+	}
+	if (m_clusterTilesImageList) {
+		delete m_clusterTilesImageList;
+		m_clusterTilesImageList = nullptr;
 	}
 }
 
@@ -320,7 +362,94 @@ void FloorRuleEditDialog::CreateControls() {
 	rangeSizer->Add(m_toFloorSpin, 0, wxALIGN_CENTER_VERTICAL);
 	floorBox->Add(rangeSizer, 0, wxALL, 5);
 
+	// Cluster option (3rd radio - no wxRB_GROUP since it continues the group from singleFloorRadio)
+	m_clusterRadio = newd wxRadioButton(this, ID_FLOOR_TYPE_CLUSTER, "Cluster");
+	floorBox->Add(m_clusterRadio, 0, wxALL, 5);
+
 	leftColumn->Add(floorBox, 0, wxALL | wxEXPAND, 5);
+
+	// ---- Cluster Controls Panel (hidden by default) ----
+	m_clusterControlsPanel = newd wxPanel(this, wxID_ANY);
+	wxBoxSizer* clusterPanelSizer = newd wxBoxSizer(wxVERTICAL);
+
+	wxStaticBoxSizer* clusterTilesBox = newd wxStaticBoxSizer(wxVERTICAL, m_clusterControlsPanel, "Cluster Tiles");
+
+	// Cluster tiles list
+	m_clusterTilesImageList = newd wxImageList(ITEM_ICON_SIZE, ITEM_ICON_SIZE, true);
+	m_clusterTilesListCtrl = newd wxListCtrl(m_clusterControlsPanel, ID_CLUSTER_TILES_LIST,
+		wxDefaultPosition, wxSize(-1, 120), wxLC_REPORT | wxLC_SINGLE_SEL);
+	m_clusterTilesListCtrl->SetImageList(m_clusterTilesImageList, wxIMAGE_LIST_SMALL);
+	m_clusterTilesListCtrl->InsertColumn(0, "", wxLIST_FORMAT_LEFT, 40);
+	m_clusterTilesListCtrl->InsertColumn(1, "Offset", wxLIST_FORMAT_LEFT, 80);
+	m_clusterTilesListCtrl->InsertColumn(2, "Items", wxLIST_FORMAT_LEFT, 160);
+	clusterTilesBox->Add(m_clusterTilesListCtrl, 1, wxALL | wxEXPAND, 5);
+
+	// Tile offset + item controls row
+	wxBoxSizer* clusterTileCtrlSizer = newd wxBoxSizer(wxHORIZONTAL);
+	clusterTileCtrlSizer->Add(newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "Offset X:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_clusterTileOffsetXSpin = newd wxSpinCtrl(m_clusterControlsPanel, ID_CLUSTER_OFFSET_X, "0",
+		wxDefaultPosition, wxSize(55, -1), wxSP_ARROW_KEYS, -50, 50, 0);
+	clusterTileCtrlSizer->Add(m_clusterTileOffsetXSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	clusterTileCtrlSizer->Add(newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "Y:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_clusterTileOffsetYSpin = newd wxSpinCtrl(m_clusterControlsPanel, ID_CLUSTER_OFFSET_Y, "0",
+		wxDefaultPosition, wxSize(55, -1), wxSP_ARROW_KEYS, -50, 50, 0);
+	clusterTileCtrlSizer->Add(m_clusterTileOffsetYSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+
+	clusterTileCtrlSizer->Add(newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "Item:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_clusterNewItemIdSpin = newd wxSpinCtrl(m_clusterControlsPanel, ID_CLUSTER_NEW_ITEM_ID, "0",
+		wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 65535, 0);
+	clusterTileCtrlSizer->Add(m_clusterNewItemIdSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_clusterBrowseItemBtn = newd wxButton(m_clusterControlsPanel, ID_CLUSTER_BROWSE_ITEM, "...", wxDefaultPosition, wxSize(25, -1));
+	clusterTileCtrlSizer->Add(m_clusterBrowseItemBtn, 0, wxALIGN_CENTER_VERTICAL);
+	clusterTilesBox->Add(clusterTileCtrlSizer, 0, wxALL, 5);
+
+	// Tile/item buttons row
+	wxBoxSizer* clusterBtnRow = newd wxBoxSizer(wxHORIZONTAL);
+	clusterBtnRow->Add(newd wxButton(m_clusterControlsPanel, ID_CLUSTER_ADD_TILE, "Add Tile", wxDefaultPosition, wxSize(70, -1)), 0, wxRIGHT, 3);
+	clusterBtnRow->Add(newd wxButton(m_clusterControlsPanel, ID_CLUSTER_REMOVE_TILE, "Remove Tile", wxDefaultPosition, wxSize(85, -1)), 0, wxRIGHT, 8);
+	clusterBtnRow->Add(newd wxButton(m_clusterControlsPanel, ID_CLUSTER_ADD_ITEM, "Add Item", wxDefaultPosition, wxSize(70, -1)), 0, wxRIGHT, 3);
+	clusterBtnRow->Add(newd wxButton(m_clusterControlsPanel, ID_CLUSTER_REMOVE_ITEM, "Remove Item", wxDefaultPosition, wxSize(90, -1)), 0);
+	clusterTilesBox->Add(clusterBtnRow, 0, wxALL, 5);
+
+	// From Selection + Preview buttons
+	wxBoxSizer* clusterActionRow = newd wxBoxSizer(wxHORIZONTAL);
+	m_clusterFromSelectionBtn = newd wxButton(m_clusterControlsPanel, ID_CLUSTER_FROM_SELECTION, "Add From Selection");
+	m_clusterFromSelectionBtn->SetToolTip("Populate cluster tiles from current map selection");
+	clusterActionRow->Add(m_clusterFromSelectionBtn, 0, wxRIGHT, 5);
+	m_clusterPreviewBtn = newd wxButton(m_clusterControlsPanel, ID_CLUSTER_PREVIEW, "Preview Cluster");
+	m_clusterPreviewBtn->SetToolTip("Open cluster preview/editor window");
+	clusterActionRow->Add(m_clusterPreviewBtn, 0);
+	clusterTilesBox->Add(clusterActionRow, 0, wxALL, 5);
+
+	clusterPanelSizer->Add(clusterTilesBox, 1, wxEXPAND);
+
+	// Instance settings
+	wxStaticBoxSizer* instanceBox = newd wxStaticBoxSizer(wxVERTICAL, m_clusterControlsPanel, "Instance Settings");
+	wxFlexGridSizer* instanceGrid = newd wxFlexGridSizer(2, 5, 10);
+
+	instanceGrid->Add(newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "Instance Count:"), 0, wxALIGN_CENTER_VERTICAL);
+	m_instanceCountSpin = newd wxSpinCtrl(m_clusterControlsPanel, ID_CLUSTER_INSTANCE_COUNT, "1",
+		wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 1, 100, 1);
+	m_instanceCountSpin->SetToolTip("Number of cluster instances to place");
+	instanceGrid->Add(m_instanceCountSpin, 0);
+
+	instanceGrid->Add(newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "Min Distance:"), 0, wxALIGN_CENTER_VERTICAL);
+	m_instanceMinDistSpin = newd wxSpinCtrl(m_clusterControlsPanel, ID_CLUSTER_INSTANCE_DIST, "5",
+		wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 100, 5);
+	m_instanceMinDistSpin->SetToolTip("Minimum distance between cluster instances");
+	instanceGrid->Add(m_instanceMinDistSpin, 0);
+
+	instanceBox->Add(instanceGrid, 0, wxALL, 5);
+
+	// Center point label
+	m_clusterCenterLabel = newd wxStaticText(m_clusterControlsPanel, wxID_ANY, "No center defined");
+	instanceBox->Add(m_clusterCenterLabel, 0, wxLEFT | wxBOTTOM, 5);
+
+	clusterPanelSizer->Add(instanceBox, 0, wxTOP | wxEXPAND, 5);
+
+	m_clusterControlsPanel->SetSizer(clusterPanelSizer);
+	m_clusterControlsPanel->Hide();  // Hidden by default
+	leftColumn->Add(m_clusterControlsPanel, 0, wxALL | wxEXPAND, 5);
 
 	// Settings
 	wxStaticBoxSizer* settingsBox = newd wxStaticBoxSizer(wxVERTICAL, this, "Settings");
@@ -559,7 +688,29 @@ void FloorRuleEditDialog::CreateControls() {
 void FloorRuleEditDialog::LoadRuleData() {
 	m_nameInput->SetValue(m_rule.name);
 
-	if (m_rule.isRangeRule()) {
+	if (m_rule.isClusterRule()) {
+		m_clusterRadio->SetValue(true);
+		m_singleFloorSpin->Enable(false);
+		m_fromFloorSpin->Enable(false);
+		m_toFloorSpin->Enable(false);
+		// Load cluster-specific settings
+		if (m_instanceCountSpin) {
+			m_instanceCountSpin->SetValue(m_rule.instanceCount);
+		}
+		if (m_instanceMinDistSpin) {
+			m_instanceMinDistSpin->SetValue(m_rule.instanceMinDistance);
+		}
+		// Update center label
+		if (m_clusterCenterLabel) {
+			if (m_rule.hasCenterPoint) {
+				m_clusterCenterLabel->SetLabel(wxString::Format("Center: (%d, %d)",
+					m_rule.centerOffset.x, m_rule.centerOffset.y));
+			} else {
+				m_clusterCenterLabel->SetLabel("No center defined");
+			}
+		}
+		UpdateClusterTilesList();
+	} else if (m_rule.isRangeRule()) {
 		m_floorRangeRadio->SetValue(true);
 		m_fromFloorSpin->SetValue(m_rule.fromFloorId);
 		m_toFloorSpin->SetValue(m_rule.toFloorId);
@@ -570,6 +721,8 @@ void FloorRuleEditDialog::LoadRuleData() {
 		m_fromFloorSpin->Enable(false);
 		m_toFloorSpin->Enable(false);
 	}
+
+	UpdateClusterControls();
 
 	m_densitySpin->SetValue(static_cast<int>(m_rule.density * 100));
 	m_maxPlacementsSpin->SetValue(m_rule.maxPlacements);
@@ -1060,7 +1213,20 @@ void FloorRuleEditDialog::AddItemsFromDoodad(DoodadBrush* doodad) {
 bool FloorRuleEditDialog::TransferDataFromWindow() {
 	m_rule.name = m_nameInput->GetValue().ToStdString();
 
-	if (m_floorRangeRadio->GetValue()) {
+	if (m_clusterRadio->GetValue()) {
+		m_rule.ruleMode = AreaDecoration::RuleMode::Cluster;
+		m_rule.floorId = 0;
+		m_rule.fromFloorId = 0;
+		m_rule.toFloorId = 0;
+		m_rule.instanceCount = m_instanceCountSpin ? m_instanceCountSpin->GetValue() : 1;
+		m_rule.instanceMinDistance = m_instanceMinDistSpin ? m_instanceMinDistSpin->GetValue() : 5;
+		if (m_rule.clusterTiles.empty()) {
+			wxMessageBox("Cluster must have at least one tile with items.", "Validation Error",
+			             wxOK | wxICON_ERROR, this);
+			return false;
+		}
+	} else if (m_floorRangeRadio->GetValue()) {
+		m_rule.ruleMode = AreaDecoration::RuleMode::FloorRange;
 		m_rule.floorId = 0;
 		m_rule.fromFloorId = m_fromFloorSpin->GetValue();
 		m_rule.toFloorId = m_toFloorSpin->GetValue();
@@ -1070,6 +1236,7 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 			return false;
 		}
 	} else {
+		m_rule.ruleMode = AreaDecoration::RuleMode::SingleFloor;
 		m_rule.floorId = m_singleFloorSpin->GetValue();
 		m_rule.fromFloorId = 0;
 		m_rule.toFloorId = 0;
@@ -1080,7 +1247,8 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 		}
 	}
 
-	if (m_rule.items.empty()) {
+	// For non-cluster modes, items must be present
+	if (!m_clusterRadio->GetValue() && m_rule.items.empty()) {
 		wxMessageBox("Rule must have at least one item", "Error", wxOK | wxICON_ERROR);
 		return false;
 	}
@@ -1111,10 +1279,24 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 
 void FloorRuleEditDialog::OnFloorTypeChanged(wxCommandEvent& event) {
 	bool isSingle = m_singleFloorRadio->GetValue();
+	bool isRange = m_floorRangeRadio->GetValue();
+	bool isCluster = m_clusterRadio->GetValue();
+
+	// Floor controls
 	m_singleFloorSpin->Enable(isSingle);
-	m_fromFloorSpin->Enable(!isSingle);
-	m_toFloorSpin->Enable(!isSingle);
+	m_fromFloorSpin->Enable(isRange);
+	m_toFloorSpin->Enable(isRange);
+
+	// Cluster controls
+	UpdateClusterControls();
+
 	UpdateFloorPreview();
+
+	// Re-layout to accommodate shown/hidden panels
+	if (GetSizer()) {
+		GetSizer()->Layout();
+	}
+	Fit();
 }
 
 void FloorRuleEditDialog::OnFloorIdChanged(wxSpinEvent& event) {
@@ -1354,6 +1536,185 @@ void FloorRuleEditDialog::OnAddClusterFromSelection(wxCommandEvent& event) {
 
 	m_rule.items.push_back(AreaDecoration::ItemEntry::MakeCluster(clusterTiles, weight, count, radius, minDist));
 	UpdateItemsList();
+}
+
+//=============================================================================
+// Cluster Mode Event Handlers
+//=============================================================================
+
+void FloorRuleEditDialog::OnClusterAddTile(wxCommandEvent& event) {
+	int offsetX = m_clusterTileOffsetXSpin ? m_clusterTileOffsetXSpin->GetValue() : 0;
+	int offsetY = m_clusterTileOffsetYSpin ? m_clusterTileOffsetYSpin->GetValue() : 0;
+
+	// Check if a tile with this offset already exists
+	for (const auto& tile : m_rule.clusterTiles) {
+		if (tile.offset.x == offsetX && tile.offset.y == offsetY) {
+			wxMessageBox(wxString::Format("A tile at offset (%d, %d) already exists.", offsetX, offsetY),
+			             "Duplicate Tile", wxOK | wxICON_WARNING, this);
+			return;
+		}
+	}
+
+	AreaDecoration::CompositeTile newTile;
+	newTile.offset = Position(offsetX, offsetY, 0);
+	m_rule.clusterTiles.push_back(newTile);
+	UpdateClusterTilesList();
+}
+
+void FloorRuleEditDialog::OnClusterRemoveTile(wxCommandEvent& event) {
+	if (!m_clusterTilesListCtrl) return;
+	long selected = m_clusterTilesListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	if (selected < 0 || selected >= static_cast<long>(m_rule.clusterTiles.size())) {
+		wxMessageBox("Select a tile to remove.", "Remove Tile", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+	m_rule.clusterTiles.erase(m_rule.clusterTiles.begin() + selected);
+	UpdateClusterTilesList();
+}
+
+void FloorRuleEditDialog::OnClusterAddItem(wxCommandEvent& event) {
+	if (!m_clusterTilesListCtrl || !m_clusterNewItemIdSpin) return;
+	long selected = m_clusterTilesListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	if (selected < 0 || selected >= static_cast<long>(m_rule.clusterTiles.size())) {
+		wxMessageBox("Select a tile first, then add an item to it.", "Add Item", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	uint16_t itemId = static_cast<uint16_t>(m_clusterNewItemIdSpin->GetValue());
+	if (itemId == 0) {
+		wxMessageBox("Item ID cannot be 0.", "Error", wxOK | wxICON_ERROR, this);
+		return;
+	}
+
+	m_rule.clusterTiles[selected].itemIds.push_back(itemId);
+	UpdateClusterTilesList();
+
+	// Re-select the tile
+	if (selected < m_clusterTilesListCtrl->GetItemCount()) {
+		m_clusterTilesListCtrl->SetItemState(selected, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+		m_clusterTilesListCtrl->EnsureVisible(selected);
+	}
+}
+
+void FloorRuleEditDialog::OnClusterRemoveItem(wxCommandEvent& event) {
+	if (!m_clusterTilesListCtrl) return;
+	long selected = m_clusterTilesListCtrl->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+	if (selected < 0 || selected >= static_cast<long>(m_rule.clusterTiles.size())) {
+		wxMessageBox("Select a tile first.", "Remove Item", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	auto& tileItems = m_rule.clusterTiles[selected].itemIds;
+	if (tileItems.empty()) {
+		wxMessageBox("Selected tile has no items to remove.", "Remove Item", wxOK | wxICON_INFORMATION, this);
+		return;
+	}
+
+	// Remove the last item from the selected tile
+	tileItems.pop_back();
+	UpdateClusterTilesList();
+
+	// Re-select the tile
+	if (selected < m_clusterTilesListCtrl->GetItemCount()) {
+		m_clusterTilesListCtrl->SetItemState(selected, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+		m_clusterTilesListCtrl->EnsureVisible(selected);
+	}
+}
+
+void FloorRuleEditDialog::OnClusterFromSelection(wxCommandEvent& event) {
+	std::vector<AreaDecoration::CompositeTile> tiles;
+	if (!BuildClusterTilesFromSelection(tiles)) {
+		return;
+	}
+
+	m_rule.clusterTiles = std::move(tiles);
+	UpdateClusterTilesList();
+	wxMessageBox(wxString::Format("Loaded %zu tiles from selection.", m_rule.clusterTiles.size()),
+	             "Success", wxOK | wxICON_INFORMATION, this);
+}
+
+void FloorRuleEditDialog::OnClusterPreview(wxCommandEvent& event) {
+	ClusterPreviewWindow* preview = newd ClusterPreviewWindow(this, m_rule, [this]() {
+		// Callback when cluster is modified in the preview window
+		UpdateClusterTilesList();
+		if (m_clusterCenterLabel) {
+			if (m_rule.hasCenterPoint) {
+				m_clusterCenterLabel->SetLabel(wxString::Format("Center: (%d, %d)",
+					m_rule.centerOffset.x, m_rule.centerOffset.y));
+			} else {
+				m_clusterCenterLabel->SetLabel("No center defined");
+			}
+		}
+	});
+	preview->ShowModal();
+	preview->Destroy();
+}
+
+void FloorRuleEditDialog::OnClusterBrowseItem(wxCommandEvent& event) {
+	FindItemDialog dialog(this, "Select Item");
+	if (dialog.ShowModal() == wxID_OK) {
+		uint16_t itemId = dialog.getResultID();
+		if (itemId > 0 && m_clusterNewItemIdSpin) {
+			m_clusterNewItemIdSpin->SetValue(itemId);
+		}
+	}
+}
+
+void FloorRuleEditDialog::UpdateClusterTilesList() {
+	if (!m_clusterTilesListCtrl || !m_clusterTilesImageList) return;
+
+	m_clusterTilesListCtrl->DeleteAllItems();
+	m_clusterTilesImageList->RemoveAll();
+
+	for (size_t i = 0; i < m_rule.clusterTiles.size(); ++i) {
+		const auto& tile = m_rule.clusterTiles[i];
+
+		// Get representative item for icon
+		uint16_t iconItemId = 0;
+		if (!tile.itemIds.empty()) {
+			iconItemId = tile.itemIds[0];
+		}
+
+		wxBitmap bmp = GetItemBitmap(iconItemId, ITEM_ICON_SIZE);
+		int imgIdx = m_clusterTilesImageList->Add(bmp);
+
+		// Offset column
+		wxString offsetStr = wxString::Format("(%d, %d)", tile.offset.x, tile.offset.y);
+
+		// Items column - list all item IDs
+		wxString itemsStr;
+		for (size_t j = 0; j < tile.itemIds.size(); ++j) {
+			if (j > 0) itemsStr += ", ";
+			itemsStr += wxString::Format("%d", tile.itemIds[j]);
+			if (j >= 5 && tile.itemIds.size() > 6) {
+				itemsStr += wxString::Format(" +%zu more", tile.itemIds.size() - j - 1);
+				break;
+			}
+		}
+		if (tile.itemIds.empty()) {
+			itemsStr = "(empty)";
+		}
+
+		long idx = m_clusterTilesListCtrl->InsertItem(i, "", imgIdx);
+		m_clusterTilesListCtrl->SetItem(idx, 1, offsetStr);
+		m_clusterTilesListCtrl->SetItem(idx, 2, itemsStr);
+	}
+}
+
+void FloorRuleEditDialog::UpdateClusterControls() {
+	bool isCluster = m_clusterRadio ? m_clusterRadio->GetValue() : false;
+
+	if (m_clusterControlsPanel) {
+		m_clusterControlsPanel->Show(isCluster);
+	}
+
+	// Floor preview and floor spins are not relevant in cluster mode
+	if (m_floorPreviewPanelFrom) {
+		m_floorPreviewPanelFrom->Show(!isCluster);
+	}
+	if (m_floorPreviewPanelTo) {
+		m_floorPreviewPanelTo->Show(!isCluster);
+	}
 }
 
 bool FloorRuleEditDialog::EditItemDialog(size_t index) {
@@ -2086,13 +2447,24 @@ void AreaDecorationDialog::UpdateRulesList() {
 		const auto& rule = m_preset.floorRules[i];
 
 		wxString floorStr;
-		if (rule.isRangeRule()) {
+		if (rule.isClusterRule()) {
+			Position minP, maxP;
+			rule.getClusterBounds(minP, maxP);
+			int w = maxP.x - minP.x + 1;
+			int h = maxP.y - minP.y + 1;
+			floorStr = wxString::Format("Cluster %dx%d", w, h);
+		} else if (rule.isRangeRule()) {
 			floorStr = wxString::Format("%d - %d", rule.fromFloorId, rule.toFloorId);
 		} else {
 			floorStr = wxString::Format("%d", rule.floorId);
 		}
 
-		uint16_t floorPreviewId = rule.isRangeRule() ? rule.fromFloorId : rule.floorId;
+		uint16_t floorPreviewId = 0;
+		if (rule.isClusterRule()) {
+			floorPreviewId = rule.getClusterRepresentativeItemId();
+		} else {
+			floorPreviewId = rule.isRangeRule() ? rule.fromFloorId : rule.floorId;
+		}
 		uint16_t friendPreviewId = rule.isFriendRange() ? rule.friendFromFloorId : rule.friendFloorId;
 
 		int floorImg = -1;
@@ -2115,7 +2487,11 @@ void AreaDecorationDialog::UpdateRulesList() {
 			m_rulesListCtrl->SetItemColumnImage(idx, 2, friendImg);
 		}
 		m_rulesListCtrl->SetItem(idx, 3, floorStr);
-		m_rulesListCtrl->SetItem(idx, 4, wxString::Format("%zu", rule.items.size()));
+		if (rule.isClusterRule()) {
+			m_rulesListCtrl->SetItem(idx, 4, wxString::Format("%zu tiles", rule.clusterTiles.size()));
+		} else {
+			m_rulesListCtrl->SetItem(idx, 4, wxString::Format("%zu", rule.items.size()));
+		}
 		m_rulesListCtrl->SetItem(idx, 5, wxString::Format("%.0f%%", rule.density * 100));
 		m_rulesListCtrl->SetItem(idx, 6, wxString::Format("%d", rule.priority));
 		m_rulesListCtrl->SetItem(idx, 7, rule.borderItemId > 0 ? wxString::Format("%d", rule.borderItemId) : wxString("-"));

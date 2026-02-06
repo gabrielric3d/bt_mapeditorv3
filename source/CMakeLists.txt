@@ -20,6 +20,7 @@ ${CMAKE_CURRENT_LIST_DIR}/brush.h
 ${CMAKE_CURRENT_LIST_DIR}/brush_enums.h
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.h
 ${CMAKE_CURRENT_LIST_DIR}/client_version.h
+${CMAKE_CURRENT_LIST_DIR}/cluster_preview_window.h
 ${CMAKE_CURRENT_LIST_DIR}/common.h
 ${CMAKE_CURRENT_LIST_DIR}/common_windows.h
 ${CMAKE_CURRENT_LIST_DIR}/complexitem.h
@@ -149,6 +150,7 @@ ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
+${CMAKE_CURRENT_LIST_DIR}/cluster_preview_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/common.cpp
 ${CMAKE_CURRENT_LIST_DIR}/common_windows.cpp
 ${CMAKE_CURRENT_LIST_DIR}/complexitem.cpp
