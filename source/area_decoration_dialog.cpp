@@ -33,6 +33,7 @@
 #include <wx/dcbuffer.h>
 #include <algorithm>
 #include <climits>
+#include <memory>
 #include <unordered_set>
 #include "cluster_preview_window.h"
 
@@ -297,6 +298,10 @@ FloorRuleEditDialog::~FloorRuleEditDialog() {
 	if (m_clusterTilesImageList) {
 		delete m_clusterTilesImageList;
 		m_clusterTilesImageList = nullptr;
+	}
+	if (m_itemsImageList) {
+		delete m_itemsImageList;
+		m_itemsImageList = nullptr;
 	}
 }
 
@@ -860,6 +865,11 @@ void FloorRuleEditDialog::UpdateBorderPreview() {
 }
 
 void FloorRuleEditDialog::OnPaintFloorPreview(wxPaintEvent& event) {
+	// In cluster mode, no floor to preview
+	if (m_clusterRadio && m_clusterRadio->GetValue()) {
+		return;
+	}
+
 	wxPanel* panel = wxDynamicCast(event.GetEventObject(), wxPanel);
 	if (!panel) {
 		return;
@@ -1218,6 +1228,7 @@ bool FloorRuleEditDialog::TransferDataFromWindow() {
 		m_rule.floorId = 0;
 		m_rule.fromFloorId = 0;
 		m_rule.toFloorId = 0;
+		m_rule.items.clear();  // Clear floor-mode items; cluster uses clusterTiles instead
 		m_rule.instanceCount = m_instanceCountSpin ? m_instanceCountSpin->GetValue() : 1;
 		m_rule.instanceMinDistance = m_instanceMinDistSpin ? m_instanceMinDistSpin->GetValue() : 5;
 		if (m_rule.clusterTiles.empty()) {
@@ -1501,7 +1512,7 @@ void FloorRuleEditDialog::PrepareClusterPaste(const AreaDecoration::ItemEntry& e
 		minZ = std::min(minZ, tile.offset.z);
 	}
 
-	BaseMap* buffer = newd BaseMap();
+	std::unique_ptr<BaseMap> buffer(newd BaseMap());
 
 	for (const auto& tile : entry.compositeTiles) {
 		Position pos(tile.offset.x - minX, tile.offset.y - minY, tile.offset.z - minZ);
@@ -1518,7 +1529,7 @@ void FloorRuleEditDialog::PrepareClusterPaste(const AreaDecoration::ItemEntry& e
 		}
 	}
 
-	g_gui.copybuffer.setBuffer(buffer, Position(0, 0, 0));
+	g_gui.copybuffer.setBuffer(buffer.release(), Position(0, 0, 0));
 	g_gui.PreparePaste(false);
 	g_gui.SetStatusText("Paste the cluster on the map, edit it, then select and use 'Replace Selected Cluster'.");
 }
@@ -2437,6 +2448,16 @@ void AreaDecorationDialog::UpdateUI() {
 	UpdateRulesList();
 }
 
+void AreaDecorationDialog::UpdateRuleButtons() {
+	bool enable = !m_editDialogOpen;
+	wxWindow* addBtn = FindWindowById(ID_ADD_RULE, this);
+	wxWindow* editBtn = FindWindowById(ID_EDIT_RULE, this);
+	wxWindow* removeBtn = FindWindowById(ID_REMOVE_RULE, this);
+	if (addBtn) addBtn->Enable(enable);
+	if (editBtn) editBtn->Enable(enable);
+	if (removeBtn) removeBtn->Enable(enable);
+}
+
 void AreaDecorationDialog::UpdateRulesList() {
 	m_rulesListCtrl->DeleteAllItems();
 	if (m_rulesImageList) {
@@ -2797,6 +2818,10 @@ void AreaDecorationDialog::OnAddRule(wxCommandEvent& event) {
 	size_t ruleIndex = m_preset.floorRules.size() - 1;
 	UpdateRulesList();
 
+	// Disable rule buttons while edit dialog is open
+	m_editDialogOpen = true;
+	UpdateRuleButtons();
+
 	// Open non-modal dialog for editing
 	FloorRuleEditDialog* dialog = newd FloorRuleEditDialog(
 		g_gui.root,  // Use root window to allow palette interaction
@@ -2808,6 +2833,8 @@ void AreaDecorationDialog::OnAddRule(wxCommandEvent& event) {
 					m_preset.floorRules.erase(m_preset.floorRules.begin() + ruleIndex);
 				}
 			}
+			m_editDialogOpen = false;
+			UpdateRuleButtons();
 			UpdateRulesList();
 		}
 	);
@@ -2826,6 +2853,10 @@ void AreaDecorationDialog::OnEditRule(wxCommandEvent& event) {
 	// Store a backup copy in case user cancels
 	AreaDecoration::FloorRule backupRule = m_preset.floorRules[ruleIndex];
 
+	// Disable rule buttons while edit dialog is open
+	m_editDialogOpen = true;
+	UpdateRuleButtons();
+
 	FloorRuleEditDialog* dialog = newd FloorRuleEditDialog(
 		g_gui.root,  // Use root window to allow palette interaction
 		m_preset.floorRules[ruleIndex],
@@ -2836,6 +2867,8 @@ void AreaDecorationDialog::OnEditRule(wxCommandEvent& event) {
 					m_preset.floorRules[ruleIndex] = backupRule;
 				}
 			}
+			m_editDialogOpen = false;
+			UpdateRuleButtons();
 			UpdateRulesList();
 		}
 	);
@@ -2858,6 +2891,10 @@ void AreaDecorationDialog::OnRuleDoubleClick(wxListEvent& event) {
 		// Store a backup copy in case user cancels
 		AreaDecoration::FloorRule backupRule = m_preset.floorRules[ruleIndex];
 
+		// Disable rule buttons while edit dialog is open
+		m_editDialogOpen = true;
+		UpdateRuleButtons();
+
 		FloorRuleEditDialog* dialog = newd FloorRuleEditDialog(
 			g_gui.root,  // Use root window to allow palette interaction
 			m_preset.floorRules[ruleIndex],
@@ -2868,6 +2905,8 @@ void AreaDecorationDialog::OnRuleDoubleClick(wxListEvent& event) {
 						m_preset.floorRules[ruleIndex] = backupRule;
 					}
 				}
+				m_editDialogOpen = false;
+				UpdateRuleButtons();
 				UpdateRulesList();
 			}
 		);

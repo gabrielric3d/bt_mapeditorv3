@@ -251,6 +251,11 @@ private:
 	AreaDecoration::AreaDefinition m_area;
 	AreaDecoration::DecorationPreset m_preset;
 
+	// Track whether a FloorRuleEditDialog is currently open to prevent
+	// add/remove operations that would invalidate the edit dialog's rule reference
+	bool m_editDialogOpen = false;
+	void UpdateRuleButtons();
+
 	void CreateControls();
 	void CreatePresetControls(wxBoxSizer* mainSizer);
 	void CreateAreaTab(wxNotebook* notebook);

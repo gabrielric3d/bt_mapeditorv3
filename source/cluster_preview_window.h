@@ -57,6 +57,9 @@ private:
 	void OnCenterCheckChanged(wxCommandEvent& event);
 	void OnClose(wxCloseEvent& event);
 
+	// Cell size calculation helper
+	int CalculateCellSize() const;
+
 	// Rendering helpers
 	void DrawCellSprites(wxDC& dc, int cellX, int cellY,
 	                     const AreaDecoration::CompositeTile& tile);

@@ -49,6 +49,7 @@ ClusterPreviewWindow::ClusterPreviewWindow(wxWindow* parent, AreaDecoration::Flo
 	  m_centerCheck(nullptr),
 	  m_infoText(nullptr),
 	  m_centerText(nullptr),
+	  m_hoverCell(0, 0, 0),
 	  m_gridMinX(0), m_gridMinY(0),
 	  m_gridMaxX(0), m_gridMaxY(0),
 	  m_gridWidth(1), m_gridHeight(1)
@@ -198,12 +199,7 @@ void ClusterPreviewWindow::OnPaintGrid(wxPaintEvent& event) {
 	}
 
 	// Calculate cell size to fit the grid into the panel, capped at m_cellSize
-	int availW = panelSize.GetWidth() - 8;
-	int availH = panelSize.GetHeight() - 8;
-	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
-	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
-	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	int cellSz = CalculateCellSize();
 
 	// Centering offset
 	int totalW = m_gridWidth * cellSz;
@@ -253,16 +249,19 @@ void ClusterPreviewWindow::OnPaintGrid(wxPaintEvent& event) {
 	}
 }
 
-void ClusterPreviewWindow::DrawCellSprites(wxDC& dc, int cellX, int cellY,
-                                           const AreaDecoration::CompositeTile& tile) {
-	// Calculate cell size (same logic as OnPaintGrid)
+int ClusterPreviewWindow::CalculateCellSize() const {
 	wxSize panelSize = m_gridPanel->GetSize();
 	int availW = panelSize.GetWidth() - 8;
 	int availH = panelSize.GetHeight() - 8;
 	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
 	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
 	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	return (cellSz < 16) ? 16 : cellSz;
+}
+
+void ClusterPreviewWindow::DrawCellSprites(wxDC& dc, int cellX, int cellY,
+                                           const AreaDecoration::CompositeTile& tile) {
+	int cellSz = CalculateCellSize();
 
 	// Dark background for item cells
 	dc.SetBrush(wxBrush(wxColour(12, 20, 42)));
@@ -304,14 +303,7 @@ void ClusterPreviewWindow::DrawCellSprites(wxDC& dc, int cellX, int cellY,
 }
 
 void ClusterPreviewWindow::DrawCenterHighlight(wxDC& dc, int cellX, int cellY) {
-	// Calculate cell size
-	wxSize panelSize = m_gridPanel->GetSize();
-	int availW = panelSize.GetWidth() - 8;
-	int availH = panelSize.GetHeight() - 8;
-	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
-	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
-	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	int cellSz = CalculateCellSize();
 
 	// Bright yellow/gold border (3px thick)
 	dc.SetBrush(*wxTRANSPARENT_BRUSH);
@@ -330,29 +322,17 @@ void ClusterPreviewWindow::DrawCenterHighlight(wxDC& dc, int cellX, int cellY) {
 }
 
 void ClusterPreviewWindow::DrawHoverHighlight(wxDC& dc, int cellX, int cellY) {
-	// Calculate cell size
-	wxSize panelSize = m_gridPanel->GetSize();
-	int availW = panelSize.GetWidth() - 8;
-	int availH = panelSize.GetHeight() - 8;
-	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
-	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
-	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	int cellSz = CalculateCellSize();
 
-	// Light blue semi-transparent overlay
-	dc.SetBrush(wxBrush(wxColour(100, 160, 255, 60)));
+	// Light blue hover overlay (solid color - wxDC does not support alpha on Windows)
+	dc.SetBrush(wxBrush(wxColour(70, 100, 160)));
 	dc.SetPen(wxPen(wxColour(100, 160, 255), 2));
 	dc.DrawRectangle(cellX, cellY, cellSz, cellSz);
 }
 
 void ClusterPreviewWindow::OnGridMouseMove(wxMouseEvent& event) {
 	wxSize panelSize = m_gridPanel->GetSize();
-	int availW = panelSize.GetWidth() - 8;
-	int availH = panelSize.GetHeight() - 8;
-	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
-	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
-	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	int cellSz = CalculateCellSize();
 
 	int totalW = m_gridWidth * cellSz;
 	int totalH = m_gridHeight * cellSz;
@@ -415,12 +395,7 @@ void ClusterPreviewWindow::OnGridLeftClick(wxMouseEvent& event) {
 	if (!m_centerCheck->GetValue()) return;
 
 	wxSize panelSize = m_gridPanel->GetSize();
-	int availW = panelSize.GetWidth() - 8;
-	int availH = panelSize.GetHeight() - 8;
-	int cellW = (m_gridWidth > 0) ? availW / m_gridWidth : m_cellSize;
-	int cellH = (m_gridHeight > 0) ? availH / m_gridHeight : m_cellSize;
-	int cellSz = std::min({cellW, cellH, m_cellSize});
-	if (cellSz < 16) cellSz = 16;
+	int cellSz = CalculateCellSize();
 
 	int totalW = m_gridWidth * cellSz;
 	int totalH = m_gridHeight * cellSz;

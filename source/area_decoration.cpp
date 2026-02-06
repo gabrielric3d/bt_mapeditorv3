@@ -556,10 +556,13 @@ void DecorationEngine::setArea(const AreaDefinition& area) {
 	clearPreview();
 }
 
+// IMPORTANT: clearPreview() must be called before m_preset is modified,
+// because PreviewItem.sourceRule stores raw pointers to elements of m_preset.floorRules.
+// Modifying m_preset without clearing preview would create dangling pointers.
 void DecorationEngine::setPreset(const DecorationPreset& preset) {
+	clearPreview();
 	m_preset = preset;
 	m_preset.sortRulesByPriority();
-	clearPreview();
 }
 
 bool DecorationEngine::generatePreview(uint64_t seed) {
