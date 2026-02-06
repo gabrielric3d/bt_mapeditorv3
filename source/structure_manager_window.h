@@ -44,6 +44,8 @@ public:
 	~StructureManagerDialog() override;
 	static bool HandleGlobalHotkey(wxKeyEvent& event);
 	static bool GetFixedSavePreview(int& width, int& height, int& zFrom, int& zTo);
+	static bool RotatePaste();
+	static bool CanRotatePaste();
 
 private:
 	class StructurePreviewPanel;
@@ -96,6 +98,7 @@ private:
 	void UpdateSaveOptionsUi();
 	wxString GetAutoNameBase() const;
 	int GetNextAutoNameIndex(const wxString& base, const wxString& categoryPath) const;
+	wxString GetAutoNamePrefix(const wxString& base) const;
 	bool BuildFixedAreaBuffer(Editor& editor, const Position& center, int width, int height, int zFrom, int zTo,
 		BaseMap& outMap, Position& outMinPos, Position& outMaxPos, int& outTiles, int& outItems) const;
 	void OnRenameStructure(wxCommandEvent& event);

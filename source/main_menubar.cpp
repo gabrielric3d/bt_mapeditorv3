@@ -510,9 +510,13 @@ void MainMenuBar::Update()
 
 	EnableItem(CUT, has_map);
 	EnableItem(COPY, has_map);
-	EnableItem(ROTATE_SELECTION_CW, has_map && has_selection && editor->getSelection().size() >= 2);
-	EnableItem(ROTATE_SELECTION_CCW, has_map && has_selection && editor->getSelection().size() >= 2);
-	EnableItem(ROTATE_SELECTION_180, has_map && has_selection && editor->getSelection().size() >= 2);
+	{
+		bool canRotateSelection = has_map && has_selection && editor->getSelection().size() >= 2;
+		bool structurePasteActive = StructureManagerDialog::CanRotatePaste();
+		EnableItem(ROTATE_SELECTION_CW, canRotateSelection || structurePasteActive);
+		EnableItem(ROTATE_SELECTION_CCW, canRotateSelection);
+		EnableItem(ROTATE_SELECTION_180, canRotateSelection);
+	}
 
 	EnableItem(BORDERIZE_SELECTION, has_map && has_selection);
 	EnableItem(BORDERIZE_MAP, is_local);
@@ -689,6 +693,26 @@ void MainMenuBar::SetAcceleratorsEnabled(bool enabled)
 	} else {
 		frame->SetAcceleratorTable(wxAcceleratorTable());
 	}
+}
+
+bool MainMenuBar::MatchesActionHotkey(MenuBar::ActionID id, const wxKeyEvent& event) const
+{
+	auto it = menu_hotkeys.find(id);
+	if(it == menu_hotkeys.end() || it->second.currentHotkey.empty()) {
+		return false;
+	}
+
+	HotkeyData configured;
+	if(!ParseHotkeyText(it->second.currentHotkey, configured)) {
+		return false;
+	}
+
+	HotkeyData pressed;
+	if(!EventToHotkey(event, pressed)) {
+		return false;
+	}
+
+	return pressed.flags == configured.flags && pressed.keycode == configured.keycode;
 }
 
 void MainMenuBar::UpdateFloorMenu()
@@ -1707,6 +1731,10 @@ void MainMenuBar::OnPaste(wxCommandEvent& WXUNUSED(event))
 
 void MainMenuBar::OnRotateSelectionCW(wxCommandEvent& WXUNUSED(event))
 {
+	if(StructureManagerDialog::RotatePaste()) {
+		return;
+	}
+
 	if(!g_gui.IsEditorOpen()) {
 		return;
 	}

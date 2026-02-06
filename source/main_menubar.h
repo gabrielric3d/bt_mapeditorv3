@@ -224,6 +224,7 @@ public:
 	void SaveRecentFiles();
 	std::vector<wxString> GetRecentFiles();
 	void SetAcceleratorsEnabled(bool enabled);
+	bool MatchesActionHotkey(MenuBar::ActionID id, const wxKeyEvent& event) const;
 
 	// Interface
 	void EnableItem(MenuBar::ActionID id, bool enable);

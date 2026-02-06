@@ -84,6 +84,7 @@ public:
 	std::vector<wxString> GetRecentFiles();
 
 	MainToolBar* GetAuiToolBar() const { return tool_bar; }
+	MainMenuBar* GetMainMenuBar() const { return menu_bar; }
 
 	void OnUpdateMenus(wxCommandEvent& event);
 	void OnUpdateActions(wxCommandEvent& event);

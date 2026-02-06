@@ -42,6 +42,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "application.h"
 #include "artprovider.h"
 #include "copybuffer.h"
 #include "client_version.h"
@@ -50,6 +51,7 @@
 #include "gui.h"
 #include "iomap_otbm.h"
 #include "map.h"
+#include "main_menubar.h"
 #include "map_display.h"
 #include "map_window.h"
 #include "settings.h"
@@ -129,6 +131,42 @@ namespace
 			}
 		}
 		return sanitized;
+	}
+
+	int NaturalCompareNoCase(const wxString& a, const wxString& b)
+	{
+		size_t ia = 0, ib = 0;
+		while(ia < a.length() && ib < b.length()) {
+			wxUniChar ca = a[ia];
+			wxUniChar cb = b[ib];
+			bool digitA = wxIsdigit(ca);
+			bool digitB = wxIsdigit(cb);
+
+			if(digitA && digitB) {
+				// Skip leading zeros and compare numeric values
+				size_t startA = ia, startB = ib;
+				while(ia < a.length() && wxIsdigit(a[ia])) ++ia;
+				while(ib < b.length() && wxIsdigit(b[ib])) ++ib;
+				size_t lenA = ia - startA;
+				size_t lenB = ib - startB;
+				if(lenA != lenB)
+					return lenA < lenB ? -1 : 1;
+				for(size_t k = 0; k < lenA; ++k) {
+					if(a[startA + k] != b[startB + k])
+						return a[startA + k] < b[startB + k] ? -1 : 1;
+				}
+			} else {
+				wxUniChar la = wxTolower(ca);
+				wxUniChar lb = wxTolower(cb);
+				if(la != lb)
+					return la < lb ? -1 : 1;
+				++ia;
+				++ib;
+			}
+		}
+		if(ia < a.length()) return 1;
+		if(ib < b.length()) return -1;
+		return 0;
 	}
 
 	bool BuildSelectionBuffer(Editor& editor, BaseMap& outMap, Position& outMinPos, Position& outMaxPos, int& outTiles, int& outItems)
@@ -822,7 +860,10 @@ void StructureManagerDialog::CreateControls()
 	centerSizer->Add(reorderHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 2);
 	wxStaticText* navHint = newd wxStaticText(centerPanel, wxID_ANY, "PgUp/PgDn: previous/next item (works with map focus)");
 	navHint->SetForegroundColour(wxColour(255, 165, 0));
-	centerSizer->Add(navHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 4);
+	centerSizer->Add(navHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 2);
+	wxStaticText* saveHint = newd wxStaticText(centerPanel, wxID_ANY, "Ctrl+Shift+S: save selection (works with map focus)");
+	saveHint->SetForegroundColour(wxColour(255, 165, 0));
+	centerSizer->Add(saveHint, 0, wxLEFT | wxRIGHT | wxBOTTOM, 4);
 	centerPanel->SetSizer(centerSizer);
 	centerPanel->SetMinSize(wxSize(260, -1));
 	contentSizer->Add(centerPanel, 0, wxEXPAND | wxALL, 8);
@@ -1046,11 +1087,11 @@ void StructureManagerDialog::LoadStructures()
 	scanDir(m_baseDir, "");
 
 	std::sort(m_entries.begin(), m_entries.end(), [](const StructureEntry& a, const StructureEntry& b) {
-		return a.name.CmpNoCase(b.name) < 0;
+		return NaturalCompareNoCase(a.name, b.name) < 0;
 	});
 
 	std::sort(m_categoryPaths.begin(), m_categoryPaths.end(), [](const wxString& a, const wxString& b) {
-		return a.CmpNoCase(b) < 0;
+		return NaturalCompareNoCase(a, b) < 0;
 	});
 	m_categoryPaths.erase(std::unique(m_categoryPaths.begin(), m_categoryPaths.end(),
 		[](const wxString& a, const wxString& b) { return a.CmpNoCase(b) == 0; }), m_categoryPaths.end());
@@ -1382,7 +1423,7 @@ std::vector<const StructureManagerDialog::StructureEntry*> StructureManagerDialo
 	ReadOrderFile(category, order);
 	if(order.empty()) {
 		std::sort(entries.begin(), entries.end(), [](const StructureEntry* a, const StructureEntry* b) {
-			return a->name.CmpNoCase(b->name) < 0;
+			return NaturalCompareNoCase(a->name, b->name) < 0;
 		});
 		return entries;
 	}
@@ -1412,7 +1453,7 @@ std::vector<const StructureManagerDialog::StructureEntry*> StructureManagerDialo
 		}
 	}
 	std::sort(remaining.begin(), remaining.end(), [](const StructureEntry* a, const StructureEntry* b) {
-		return a->name.CmpNoCase(b->name) < 0;
+		return NaturalCompareNoCase(a->name, b->name) < 0;
 	});
 	ordered.insert(ordered.end(), remaining.begin(), remaining.end());
 	return ordered;
@@ -1453,7 +1494,8 @@ void StructureManagerDialog::UpdateSaveOptionsUi()
 				const wxString categoryPath = GetSelectedCategoryPath();
 				const wxString safeBase = wxstr(SanitizeFilename(nstr(base)));
 				int next = GetNextAutoNameIndex(safeBase, categoryPath);
-				m_autoNamePreview->SetLabel("Next: " + safeBase + i2ws(next));
+				const wxString safePrefix = GetAutoNamePrefix(safeBase);
+				m_autoNamePreview->SetLabel("Next: " + safePrefix + i2ws(next));
 			}
 		}
 	}
@@ -1475,9 +1517,34 @@ int StructureManagerDialog::GetNextAutoNameIndex(const wxString& base, const wxS
 		return 1;
 	}
 
-	wxString baseLower = base;
-	baseLower.MakeLower();
-	int maxIndex = 0;
+	// Split base into text prefix and trailing number.
+	// e.g. "borda12" -> prefix="borda", startIndex=12
+	// e.g. "borda"   -> prefix="borda", startIndex=0
+	wxString prefix = base;
+	int startIndex = 0;
+	{
+		size_t digitStart = base.length();
+		while(digitStart > 0 && wxIsdigit(base[digitStart - 1])) {
+			--digitStart;
+		}
+		if(digitStart < base.length()) {
+			prefix = base.Mid(0, digitStart);
+			wxString numPart = base.Mid(digitStart);
+			long val = 0;
+			numPart.ToLong(&val);
+			startIndex = static_cast<int>(val);
+		}
+	}
+
+	if(prefix.empty()) {
+		// Base is entirely numeric, use it as-is
+		prefix = base;
+		startIndex = 0;
+	}
+
+	wxString prefixLower = prefix;
+	prefixLower.MakeLower();
+	int maxIndex = startIndex > 0 ? startIndex - 1 : 0;
 
 	for(const auto& entry : m_entries) {
 		if(entry.category != categoryPath) {
@@ -1485,10 +1552,10 @@ int StructureManagerDialog::GetNextAutoNameIndex(const wxString& base, const wxS
 		}
 		wxString nameLower = entry.name;
 		nameLower.MakeLower();
-		if(!nameLower.StartsWith(baseLower)) {
+		if(!nameLower.StartsWith(prefixLower)) {
 			continue;
 		}
-		wxString suffix = entry.name.Mid(base.length());
+		wxString suffix = entry.name.Mid(prefix.length());
 		if(suffix.empty()) {
 			continue;
 		}
@@ -1509,6 +1576,18 @@ int StructureManagerDialog::GetNextAutoNameIndex(const wxString& base, const wxS
 	}
 
 	return maxIndex + 1;
+}
+
+wxString StructureManagerDialog::GetAutoNamePrefix(const wxString& base) const
+{
+	size_t digitStart = base.length();
+	while(digitStart > 0 && wxIsdigit(base[digitStart - 1])) {
+		--digitStart;
+	}
+	if(digitStart < base.length() && digitStart > 0) {
+		return base.Mid(0, digitStart);
+	}
+	return base;
 }
 
 bool StructureManagerDialog::BuildFixedAreaBuffer(Editor& editor, const Position& center, int width, int height, int zFrom, int zTo,
@@ -1806,15 +1885,16 @@ void StructureManagerDialog::SelectAdjacentEntry(int delta)
 		return;
 	}
 
+	const int count = static_cast<int>(m_listEntries.size());
 	int selection = m_list->GetSelection();
 	if(selection == wxNOT_FOUND) {
-		selection = (delta > 0) ? 0 : static_cast<int>(m_listEntries.size()) - 1;
+		selection = (delta > 0) ? 0 : count - 1;
 	} else {
 		selection += delta;
 		if(selection < 0) {
+			selection = count - 1;
+		} else if(selection >= count) {
 			selection = 0;
-		} else if(selection >= static_cast<int>(m_listEntries.size())) {
-			selection = static_cast<int>(m_listEntries.size()) - 1;
 		}
 	}
 
@@ -1893,9 +1973,10 @@ void StructureManagerDialog::OnSaveSelection(wxCommandEvent& WXUNUSED(event))
 		}
 		std::string sanitizedBase = SanitizeFilename(nstr(base));
 		wxString safeBase = wxstr(sanitizedBase);
+		wxString safePrefix = GetAutoNamePrefix(safeBase);
 		int index = GetNextAutoNameIndex(safeBase, categoryPath);
 		for(;; ++index) {
-			safeName = safeBase + i2ws(index);
+			safeName = safePrefix + i2ws(index);
 			path = wxFileName(dir, safeName + ".otbm").GetFullPath();
 			if(!wxFileExists(path)) {
 				break;
@@ -2833,6 +2914,45 @@ bool StructureManagerDialog::HandleGlobalHotkey(wxKeyEvent& event)
 	return s_active->HandleGlobalHotkeyInternal(event);
 }
 
+bool StructureManagerDialog::RotatePaste()
+{
+	if(!s_active || !s_active->IsShown() || s_active->m_tutorialActive) {
+		return false;
+	}
+	if(!s_active->m_pasteRotationChoice) {
+		return false;
+	}
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->copybuffer.canPaste()) {
+		return false;
+	}
+	const int count = static_cast<int>(s_active->m_pasteRotationChoice->GetCount());
+	if(count <= 0) {
+		return false;
+	}
+	int desired = s_active->m_pasteRotationChoice->GetSelection();
+	if(desired == wxNOT_FOUND) {
+		desired = 0;
+	}
+	desired = (desired + 1) % count;
+	s_active->m_pasteRotationChoice->SetSelection(desired);
+	wxCommandEvent dummy;
+	s_active->OnPasteRotationChanged(dummy);
+	return true;
+}
+
+bool StructureManagerDialog::CanRotatePaste()
+{
+	if(!s_active || !s_active->IsShown() || s_active->m_tutorialActive) {
+		return false;
+	}
+	if(!s_active->m_pasteRotationChoice) {
+		return false;
+	}
+	Editor* editor = g_gui.GetCurrentEditor();
+	return editor && editor->copybuffer.canPaste();
+}
+
 bool StructureManagerDialog::HandleGlobalHotkeyInternal(wxKeyEvent& event)
 {
 	if(m_tutorialActive) {
@@ -2860,24 +2980,36 @@ bool StructureManagerDialog::HandleGlobalHotkeyInternal(wxKeyEvent& event)
 			return true;
 		}
 	}
-	if(key == 'Z' || key == 'z') {
-		Editor* editor = g_gui.GetCurrentEditor();
-		if(!editor || !editor->copybuffer.canPaste() || !m_pasteRotationChoice) {
-			return false;
+	{
+		bool isRotateKey = (key == 'Z' || key == 'z');
+		if(!isRotateKey) {
+			MainFrame* frame = g_gui.root;
+			if(frame) {
+				MainMenuBar* mb = frame->GetMainMenuBar();
+				if(mb && mb->MatchesActionHotkey(MenuBar::ROTATE_SELECTION_CW, event)) {
+					isRotateKey = true;
+				}
+			}
 		}
-		const int count = static_cast<int>(m_pasteRotationChoice->GetCount());
-		if(count <= 0) {
-			return false;
+		if(isRotateKey) {
+			Editor* editor = g_gui.GetCurrentEditor();
+			if(!editor || !editor->copybuffer.canPaste() || !m_pasteRotationChoice) {
+				return false;
+			}
+			const int count = static_cast<int>(m_pasteRotationChoice->GetCount());
+			if(count <= 0) {
+				return false;
+			}
+			int desired = m_pasteRotationChoice->GetSelection();
+			if(desired == wxNOT_FOUND) {
+				desired = 0;
+			}
+			desired = (desired + 1) % count;
+			m_pasteRotationChoice->SetSelection(desired);
+			wxCommandEvent dummy;
+			OnPasteRotationChanged(dummy);
+			return true;
 		}
-		int desired = m_pasteRotationChoice->GetSelection();
-		if(desired == wxNOT_FOUND) {
-			desired = 0;
-		}
-		desired = (desired + 1) % count;
-		m_pasteRotationChoice->SetSelection(desired);
-		wxCommandEvent dummy;
-		OnPasteRotationChanged(dummy);
-		return true;
 	}
 	return false;
 }
