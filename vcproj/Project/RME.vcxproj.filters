@@ -58,6 +58,12 @@
     <ClInclude Include="..\..\source\camera_path.h">
       <Filter>editor</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\npc_path.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\npc_path_brush.h">
+      <Filter>editor\brushes</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\application.h">
       <Filter>gui</Filter>
     </ClInclude>
@@ -221,6 +227,9 @@
     <ClInclude Include="..\..\source\palette_camera_paths.h">
       <Filter>gui\palette</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\palette_npc_paths.h">
+      <Filter>gui\palette</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\palette_creature.h">
       <Filter>gui\palette</Filter>
     </ClInclude>
@@ -354,6 +363,9 @@
     <ClInclude Include="..\..\source\brush_manager_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\brush_manager_panel.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\structure_manager_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
@@ -376,6 +388,9 @@
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\replace_items_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\advanced_replace_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\const.h" />
@@ -402,6 +417,12 @@
     </ClCompile>
     <ClCompile Include="..\..\source\camera_path.cpp">
       <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\npc_path.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\npc_path_brush.cpp">
+      <Filter>editor\brushes</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\copybuffer.cpp">
       <Filter>editor</Filter>
@@ -577,6 +598,9 @@
     <ClCompile Include="..\..\source\palette_camera_paths.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\palette_npc_paths.cpp">
+      <Filter>gui\palette</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\palette_creature.cpp">
       <Filter>gui\palette</Filter>
     </ClCompile>
@@ -682,6 +706,9 @@
     <ClCompile Include="..\..\source\brush_manager_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\brush_manager_panel.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\structure_manager_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
@@ -704,6 +731,9 @@
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\replace_items_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\advanced_replace_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\actions_history_window.cpp">

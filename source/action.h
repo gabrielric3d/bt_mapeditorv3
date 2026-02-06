@@ -27,6 +27,7 @@ class Tile;
 class House;
 class Waypoint;
 struct CameraPathsSnapshot;
+struct NPCPathsSnapshot;
 class Change;
 class Action;
 class BatchAction;
@@ -57,6 +58,7 @@ enum ChangeType {
 	CHANGE_MOVE_HOUSE_EXIT,
 	CHANGE_MOVE_WAYPOINT,
 	CHANGE_CAMERA_PATHS,
+	CHANGE_NPC_PATHS,
 };
 
 struct HouseData {
@@ -80,6 +82,7 @@ public:
 	static Change* Create(House* house, const Position& position);
 	static Change* Create(Waypoint* waypoint, const Position& position);
 	static Change* Create(const CameraPathsSnapshot& snapshot);
+	static Change* Create(const NPCPathsSnapshot& snapshot);
 
 	void clear();
 

@@ -50,6 +50,7 @@ class HouseBrush;
 class HouseExitBrush;
 class WaypointBrush;
 class CameraPathBrush;
+class NPCPathBrush;
 class FlagBrush;
 class EraserBrush;
 
@@ -153,6 +154,7 @@ public:
 	virtual bool isHouseExit() const { return false; }
 	virtual bool isWaypoint() const { return false; }
 	virtual bool isCameraPath() const { return false; }
+	virtual bool isNPCPath() const { return false; }
 	virtual bool isFlag() const { return false; }
 	virtual bool isEraser() const { return false; }
 
@@ -175,6 +177,7 @@ public:
 	virtual HouseExitBrush* asHouseExit() { return nullptr; }
 	virtual WaypointBrush* asWaypoint() { return nullptr; }
 	virtual CameraPathBrush* asCameraPath() { return nullptr; }
+	virtual NPCPathBrush* asNPCPath() { return nullptr; }
 	virtual FlagBrush* asFlag() { return nullptr; }
 	virtual EraserBrush* asEraser() { return nullptr; }
 

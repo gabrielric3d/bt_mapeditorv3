@@ -300,6 +300,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SHOW_MOUNTAIN_OVERLAY, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_STAIR_DIRECTION, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_CAMERA_PATHS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_NPC_PATHS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_ONLY_GROUNDS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(CAMERA_PLAY_PAUSE, wxITEM_NORMAL, OnCameraPlayPause);
 	MAKE_ACTION(CAMERA_ADD_KEYFRAME, wxITEM_NORMAL, OnCameraAddKeyframe);
@@ -719,6 +720,7 @@ void MainMenuBar::UpdateIndicatorsMenu()
 	CheckItem(SHOW_MOUNTAIN_OVERLAY, g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY));
 	CheckItem(SHOW_STAIR_DIRECTION, g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION));
 	CheckItem(SHOW_CAMERA_PATHS, g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
+	CheckItem(SHOW_NPC_PATHS, g_settings.getBoolean(Config::SHOW_NPC_PATHS));
 }
 
 bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& error)
@@ -2637,6 +2639,7 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 	g_settings.setInteger(Config::SHOW_MOUNTAIN_OVERLAY, IsItemChecked(MenuBar::SHOW_MOUNTAIN_OVERLAY));
 	g_settings.setInteger(Config::SHOW_STAIR_DIRECTION, IsItemChecked(MenuBar::SHOW_STAIR_DIRECTION));
 	g_settings.setInteger(Config::SHOW_CAMERA_PATHS, IsItemChecked(MenuBar::SHOW_CAMERA_PATHS));
+	g_settings.setInteger(Config::SHOW_NPC_PATHS, IsItemChecked(MenuBar::SHOW_NPC_PATHS));
 	g_settings.setInteger(Config::SHOW_ONLY_GROUNDS, IsItemChecked(MenuBar::SHOW_ONLY_GROUNDS));
 
 	g_gui.RefreshView();

@@ -30,6 +30,7 @@ enum TilesetCategoryType {
 	TILESET_HOUSE,
 	TILESET_WAYPOINT,
 	TILESET_CAMERA_PATH,
+	TILESET_NPC_PATH,
 };
 
 class TilesetCategory {

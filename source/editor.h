@@ -23,6 +23,7 @@
 #include "iomap.h"
 #include "map.h"
 #include "camera_path.h"
+#include "npc_path.h"
 
 #include "action.h"
 #include "selection.h"
@@ -135,6 +136,7 @@ public: // Functions
 	void undraw(const PositionVector& todraw, PositionVector& toborder, bool alt);
 	void drawGroundSingleTile(const Position& position);
 	void ApplyCameraPathsSnapshot(const CameraPathsSnapshot& snapshot, ActionIdentifier actionType = ACTION_DRAW);
+	void ApplyNPCPathsSnapshot(const NPCPathsSnapshot& snapshot, ActionIdentifier actionType = ACTION_DRAW);
 
 protected:
 	void drawInternal(const Position offset, bool alt, bool dodraw);

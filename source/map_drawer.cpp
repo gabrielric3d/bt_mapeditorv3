@@ -34,6 +34,7 @@
 #include "graphics.h"
 #include "complexitem.h"
 #include "camera_path.h"
+#include "npc_path.h"
 #include "structure_manager_window.h"
 
 #include "doodad_brush.h"
@@ -90,6 +91,7 @@ void DrawingOptions::SetDefault()
 	show_moveables = false;
 	show_only_grounds = false;
 	show_camera_paths = false;
+	show_npc_paths = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
 	full_detail_zoom_out = false;
@@ -136,6 +138,7 @@ void DrawingOptions::SetIngame()
 	show_moveables = false;
 	show_only_grounds = false;
 	show_camera_paths = false;
+	show_npc_paths = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
 	full_detail_zoom_out = false;
@@ -181,6 +184,7 @@ void DrawingOptions::LoadFromSettings()
 	show_mountain_overlay = g_settings.getBoolean(Config::SHOW_MOUNTAIN_OVERLAY);
 	show_stair_direction = g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION);
 	show_camera_paths = g_settings.getBoolean(Config::SHOW_CAMERA_PATHS);
+	show_npc_paths = g_settings.getBoolean(Config::SHOW_NPC_PATHS);
 	show_only_grounds = g_settings.getBoolean(Config::SHOW_ONLY_GROUNDS);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
@@ -381,6 +385,8 @@ void MapDrawer::Draw()
 		DrawGrid();
 	if(options.show_camera_paths)
 		DrawCameraPaths();
+	if(options.show_npc_paths)
+		DrawNPCPaths();
 
 	// Skip lights in medium/high LOD levels
 	if(options.isDrawLight() && lod_level < 2)
@@ -854,6 +860,230 @@ void MapDrawer::DrawCameraPaths()
 			glRasterPos2f(centerX - (textWidth * 0.5f), centerY - 6.0f);
 			for(char c : label) {
 				glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
+			}
+		}
+	}
+
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawNPCPaths()
+{
+	if(options.ingame) {
+		return;
+	}
+
+	const NPCPaths& npcPaths = editor.getMap().npc_paths;
+	const std::vector<NPCPath>& paths = npcPaths.getPaths();
+	if(paths.empty()) {
+		return;
+	}
+
+	const std::string& activePathName = npcPaths.getActivePathName();
+	const int activeWaypointIdx = npcPaths.getActiveWaypoint();
+
+	// Lambda to convert map coordinates to screen coordinates
+	auto toScreen = [&](double mapX, double mapY, int mapZ, float& sx, float& sy) {
+		int offset = 0;
+		if(mapZ <= rme::MapGroundLayer) {
+			offset = (rme::MapGroundLayer - mapZ) * rme::TileSize;
+		} else {
+			offset = rme::TileSize * (floor - mapZ);
+		}
+		sx = static_cast<float>((mapX * rme::TileSize) - view_scroll_x - offset);
+		sy = static_cast<float>((mapY * rme::TileSize) - view_scroll_y - offset);
+	};
+
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_LINE_SMOOTH);
+
+	// Draw path lines (use linear interpolation since NPC paths are typically straight)
+	for(const NPCPath& path : paths) {
+		if(path.waypoints.size() < 2) {
+			continue;
+		}
+
+		const bool isActive = path.name == activePathName;
+		const uint8_t alpha = isActive ? 220 : 120;
+		// Use a different color from camera paths (default is cyan-ish 80, 200, 255)
+		// NPC paths use the path's color with slightly different rendering
+		glColor4ub(path.color.r, path.color.g, path.color.b, alpha);
+		glLineWidth(isActive ? 2.5f : 1.5f);
+
+		const size_t count = path.waypoints.size();
+		const size_t segments = path.loop ? count : (count - 1);
+
+		for(size_t seg = 0; seg < segments; ++seg) {
+			const size_t next = path.loop ? (seg + 1) % count : (seg + 1);
+			const NPCWaypoint& a = path.waypoints[seg];
+			const NPCWaypoint& b = path.waypoints[next];
+			if(a.pos.z != floor || b.pos.z != floor) {
+				continue;
+			}
+
+			float sx1, sy1, sx2, sy2;
+			toScreen(a.pos.x, a.pos.y, a.pos.z, sx1, sy1);
+			toScreen(b.pos.x, b.pos.y, b.pos.z, sx2, sy2);
+
+			// Draw line between waypoints
+			glBegin(GL_LINES);
+			glVertex2f(sx1 + rme::TileSize * 0.5f, sy1 + rme::TileSize * 0.5f);
+			glVertex2f(sx2 + rme::TileSize * 0.5f, sy2 + rme::TileSize * 0.5f);
+			glEnd();
+
+			// Draw direction arrow in the middle of the line
+			float midX = (sx1 + sx2) * 0.5f + rme::TileSize * 0.5f;
+			float midY = (sy1 + sy2) * 0.5f + rme::TileSize * 0.5f;
+			float dx = sx2 - sx1;
+			float dy = sy2 - sy1;
+			float len = std::sqrt(dx * dx + dy * dy);
+			if(len > 10.0f) {
+				dx /= len;
+				dy /= len;
+				const float arrowSize = 6.0f;
+				// Draw arrowhead
+				glBegin(GL_TRIANGLES);
+				glVertex2f(midX + dx * arrowSize, midY + dy * arrowSize);
+				glVertex2f(midX - dy * arrowSize * 0.5f - dx * arrowSize * 0.5f, midY + dx * arrowSize * 0.5f - dy * arrowSize * 0.5f);
+				glVertex2f(midX + dy * arrowSize * 0.5f - dx * arrowSize * 0.5f, midY - dx * arrowSize * 0.5f - dy * arrowSize * 0.5f);
+				glEnd();
+			}
+		}
+	}
+
+	glLineWidth(1.0f);
+
+	// Draw waypoint markers
+	for(const NPCPath& path : paths) {
+		const bool isActive = path.name == activePathName;
+		const uint8_t alpha = isActive ? 230 : 160;
+		const wxColor fill(path.color.r, path.color.g, path.color.b, alpha);
+		const wxColor outline(0, 0, 0, 200);
+		const wxColor activeOutline(255, 255, 0, 230);  // Yellow for active waypoint
+
+		for(size_t i = 0; i < path.waypoints.size(); ++i) {
+			const NPCWaypoint& waypoint = path.waypoints[i];
+			if(waypoint.pos.z != floor) {
+				continue;
+			}
+
+			float sx, sy;
+			toScreen(waypoint.pos.x, waypoint.pos.y, waypoint.pos.z, sx, sy);
+			const float centerX = sx + rme::TileSize * 0.5f;
+			const float centerY = sy + rme::TileSize * 0.5f;
+			const bool isActiveWaypoint = isActive && static_cast<int>(i) == activeWaypointIdx;
+			const int size = isActiveWaypoint ? 12 : 9;
+			const int half = size / 2;
+
+			// Draw circle-ish marker (diamond shape for NPCs to distinguish from camera path squares)
+			glColor4ub(fill.Red(), fill.Green(), fill.Blue(), alpha);
+			glBegin(GL_QUADS);
+			glVertex2f(centerX, centerY - half);      // top
+			glVertex2f(centerX + half, centerY);      // right
+			glVertex2f(centerX, centerY + half);      // bottom
+			glVertex2f(centerX - half, centerY);      // left
+			glEnd();
+
+			// Draw outline
+			const wxColor& outlineColor = isActiveWaypoint ? activeOutline : outline;
+			glColor4ub(outlineColor.Red(), outlineColor.Green(), outlineColor.Blue(), outlineColor.Alpha());
+			glLineWidth(isActiveWaypoint ? 2.0f : 1.0f);
+			glBegin(GL_LINE_LOOP);
+			glVertex2f(centerX, centerY - half);
+			glVertex2f(centerX + half, centerY);
+			glVertex2f(centerX, centerY + half);
+			glVertex2f(centerX - half, centerY);
+			glEnd();
+			glLineWidth(1.0f);
+
+			// Draw waypoint number
+			const std::string label = i2s(static_cast<int>(i + 1));
+			int textWidth = 0;
+			for(char c : label) {
+				textWidth += glutBitmapWidth(GLUT_BITMAP_8_BY_13, c);
+			}
+			glColor4ub(255, 255, 255, 220);
+			glRasterPos2f(centerX - (textWidth * 0.5f), centerY - 8.0f);
+			for(char c : label) {
+				glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
+			}
+
+			// Draw action icons for waypoints with actions
+			float iconOffsetY = half + 4.0f;
+			for(const NPCAction& action : waypoint.actions) {
+				switch(action.type) {
+					case NPCActionType::Speak: {
+						// Draw speech bubble icon (small rounded rectangle)
+						glColor4ub(255, 255, 255, 200);
+						const float bubbleSize = 5.0f;
+						drawFilledRect(
+							static_cast<int>(centerX - bubbleSize),
+							static_cast<int>(centerY + iconOffsetY),
+							static_cast<int>(bubbleSize * 2),
+							static_cast<int>(bubbleSize * 1.5f),
+							wxColor(255, 255, 255, 200));
+						// Bubble tail
+						glBegin(GL_TRIANGLES);
+						glVertex2f(centerX - 2.0f, centerY + iconOffsetY + bubbleSize * 1.5f);
+						glVertex2f(centerX, centerY + iconOffsetY + bubbleSize * 2.0f);
+						glVertex2f(centerX + 2.0f, centerY + iconOffsetY + bubbleSize * 1.5f);
+						glEnd();
+						iconOffsetY += bubbleSize * 2.5f;
+						break;
+					}
+					case NPCActionType::Wait: {
+						// Draw clock/timer icon (small circle)
+						glColor4ub(255, 200, 100, 200);
+						const float clockSize = 4.0f;
+						glBegin(GL_TRIANGLE_FAN);
+						glVertex2f(centerX, centerY + iconOffsetY + clockSize);
+						for(int angle = 0; angle <= 360; angle += 30) {
+							float rad = static_cast<float>(angle) * 3.14159f / 180.0f;
+							glVertex2f(centerX + std::cos(rad) * clockSize, centerY + iconOffsetY + clockSize + std::sin(rad) * clockSize);
+						}
+						glEnd();
+						iconOffsetY += clockSize * 2.5f;
+						break;
+					}
+					case NPCActionType::FaceDirection: {
+						// Draw direction arrow icon
+						glColor4ub(100, 200, 255, 200);
+						const float arrowSize = 4.0f;
+						float dirX = 0, dirY = 0;
+						switch(action.direction) {
+							case 0: dirY = -1; break;  // North
+							case 1: dirX = 1; break;   // East
+							case 2: dirY = 1; break;   // South
+							case 3: dirX = -1; break;  // West
+						}
+						glBegin(GL_TRIANGLES);
+						glVertex2f(centerX + dirX * arrowSize, centerY + iconOffsetY + arrowSize + dirY * arrowSize);
+						glVertex2f(centerX - dirY * arrowSize * 0.5f - dirX * arrowSize * 0.3f, centerY + iconOffsetY + arrowSize + dirX * arrowSize * 0.5f - dirY * arrowSize * 0.3f);
+						glVertex2f(centerX + dirY * arrowSize * 0.5f - dirX * arrowSize * 0.3f, centerY + iconOffsetY + arrowSize - dirX * arrowSize * 0.5f - dirY * arrowSize * 0.3f);
+						glEnd();
+						iconOffsetY += arrowSize * 2.5f;
+						break;
+					}
+					case NPCActionType::Emote: {
+						// Draw star/emote icon
+						glColor4ub(255, 255, 100, 200);
+						const float starSize = 4.0f;
+						glBegin(GL_TRIANGLES);
+						// Simple star shape
+						glVertex2f(centerX, centerY + iconOffsetY);
+						glVertex2f(centerX - starSize * 0.4f, centerY + iconOffsetY + starSize);
+						glVertex2f(centerX + starSize * 0.4f, centerY + iconOffsetY + starSize);
+						glVertex2f(centerX, centerY + iconOffsetY + starSize * 1.5f);
+						glVertex2f(centerX - starSize * 0.4f, centerY + iconOffsetY + starSize * 0.5f);
+						glVertex2f(centerX + starSize * 0.4f, centerY + iconOffsetY + starSize * 0.5f);
+						glEnd();
+						iconOffsetY += starSize * 2.0f;
+						break;
+					}
+					case NPCActionType::None:
+					default:
+						break;
+				}
 			}
 		}
 	}

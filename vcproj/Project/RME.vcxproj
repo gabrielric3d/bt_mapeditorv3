@@ -221,6 +221,7 @@
     <ClCompile Include="..\..\source\border_editor_window.cpp" />
     <ClCompile Include="..\..\source\brush_tables.cpp" />
     <ClCompile Include="..\..\source\brush_manager_window.cpp" />
+    <ClCompile Include="..\..\source\brush_manager_panel.cpp" />
     <ClCompile Include="..\..\source\brush_tips_window.cpp" />
     <ClCompile Include="..\..\source\structure_manager_window.cpp" />
     <ClCompile Include="..\..\source\area_decoration.cpp" />
@@ -231,6 +232,7 @@
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\iominimap.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
+    <ClCompile Include="..\..\source\advanced_replace_window.cpp" />
     <ClCompile Include="..\..\source\welcome_dialog.cpp" />
     <ClCompile Include="..\..\source\recent_brushes_window.cpp" />
     <ClInclude Include="..\..\source\actions_history_window.h" />
@@ -240,6 +242,7 @@
     <ClInclude Include="..\..\source\duplicated_items_window.h" />
     <ClInclude Include="..\..\source\light_drawer.h" />
     <ClInclude Include="..\..\source\brush_manager_window.h" />
+    <ClInclude Include="..\..\source\brush_manager_panel.h" />
     <ClInclude Include="..\..\source\brush_tips_window.h" />
     <ClInclude Include="..\..\source\structure_manager_window.h" />
     <ClInclude Include="..\..\source\area_decoration.h" />
@@ -307,6 +310,7 @@
     <ClCompile Include="..\..\source\properties_window.cpp" />
     <ClCompile Include="..\..\source\raw_brush.cpp" />
     <ClInclude Include="..\..\source\replace_items_window.h" />
+    <ClInclude Include="..\..\source\advanced_replace_window.h" />
     <ClInclude Include="..\..\source\rme_forward_declarations.h" />
     <ClInclude Include="..\..\source\rme_net.h" />
     <ClCompile Include="..\..\source\rme_net.cpp" />
@@ -349,6 +353,8 @@
     <ClCompile Include="..\..\source\palette_common.cpp" />
     <ClInclude Include="..\..\source\palette_camera_paths.h" />
     <ClCompile Include="..\..\source\palette_camera_paths.cpp" />
+    <ClInclude Include="..\..\source\palette_npc_paths.h" />
+    <ClCompile Include="..\..\source\palette_npc_paths.cpp" />
     <ClInclude Include="..\..\source\palette_creature.h" />
     <ClCompile Include="..\..\source\palette_creature.cpp" />
     <ClInclude Include="..\..\source\palette_house.h" />
@@ -379,6 +385,10 @@
     <ClCompile Include="..\..\source\action.cpp" />
     <ClInclude Include="..\..\source\camera_path.h" />
     <ClCompile Include="..\..\source\camera_path.cpp" />
+    <ClInclude Include="..\..\source\npc_path.h" />
+    <ClCompile Include="..\..\source\npc_path.cpp" />
+    <ClInclude Include="..\..\source\npc_path_brush.h" />
+    <ClCompile Include="..\..\source\npc_path_brush.cpp" />
     <ClInclude Include="..\..\source\client_version.h" />
     <ClCompile Include="..\..\source\client_version.cpp" />
     <ClInclude Include="..\..\source\copybuffer.h" />

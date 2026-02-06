@@ -21,6 +21,7 @@
 #include "settings.h"
 #include "map.h"
 #include "camera_path.h"
+#include "npc_path.h"
 #include "editor.h"
 #include "gui.h"
 
@@ -59,6 +60,14 @@ Change* Change::Create(const CameraPathsSnapshot& snapshot)
 	return change;
 }
 
+Change* Change::Create(const NPCPathsSnapshot& snapshot)
+{
+	Change* change = new Change();
+	change->type = CHANGE_NPC_PATHS;
+	change->data = new NPCPathsSnapshot(snapshot);
+	return change;
+}
+
 Change::~Change()
 {
 	clear();
@@ -82,6 +91,10 @@ void Change::clear()
 		case CHANGE_CAMERA_PATHS:
 			ASSERT(data);
 			delete reinterpret_cast<CameraPathsSnapshot*>(data);
+			break;
+		case CHANGE_NPC_PATHS:
+			ASSERT(data);
+			delete reinterpret_cast<NPCPathsSnapshot*>(data);
 			break;
 		case CHANGE_NONE:
 			break;
@@ -274,6 +287,17 @@ void Action::commit(DirtyList* dirty_list)
 				break;
 			}
 
+			case CHANGE_NPC_PATHS: {
+				NPCPathsSnapshot* data = reinterpret_cast<NPCPathsSnapshot*>(change->data);
+				ASSERT(data);
+
+				map.npc_paths.swapSnapshot(*data);
+				map.doChange();
+				g_gui.RefreshPalettes(&map);
+				g_gui.RefreshView();
+				break;
+			}
+
 			default:
 				break;
 		}
@@ -394,6 +418,16 @@ void Action::undo(DirtyList* dirty_list)
 				ASSERT(data);
 
 				map.camera_paths.swapSnapshot(*data);
+				g_gui.RefreshPalettes(&map);
+				g_gui.RefreshView();
+				break;
+			}
+
+			case CHANGE_NPC_PATHS: {
+				NPCPathsSnapshot* data = reinterpret_cast<NPCPathsSnapshot*>(change->data);
+				ASSERT(data);
+
+				map.npc_paths.swapSnapshot(*data);
 				g_gui.RefreshPalettes(&map);
 				g_gui.RefreshView();
 				break;

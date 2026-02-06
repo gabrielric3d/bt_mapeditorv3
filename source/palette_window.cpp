@@ -28,6 +28,7 @@
 #include "palette_creature.h"
 #include "palette_waypoints.h"
 #include "palette_camera_paths.h"
+#include "palette_npc_paths.h"
 
 #include "house_brush.h"
 #include "map.h"
@@ -53,6 +54,7 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	house_palette(nullptr),
 	waypoint_palette(nullptr),
 	camera_path_palette(nullptr),
+	npc_path_palette(nullptr),
 	raw_palette(nullptr)
 {
 	SetMinSize(wxSize(225, 250));
@@ -77,6 +79,9 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 
 	camera_path_palette = static_cast<CameraPathPalettePanel*>(CreateCameraPathPalette(choicebook, tilesets));
 	choicebook->AddPage(camera_path_palette, camera_path_palette->GetName());
+
+	npc_path_palette = static_cast<NPCPathPalettePanel*>(CreateNPCPathPalette(choicebook, tilesets));
+	choicebook->AddPage(npc_path_palette, npc_path_palette->GetName());
 
 	creature_palette = static_cast<CreaturePalettePanel*>(CreateCreaturePalette(choicebook, tilesets));
 	choicebook->AddPage(creature_palette, creature_palette->GetName());
@@ -164,6 +169,12 @@ PalettePanel* PaletteWindow::CreateCameraPathPalette(wxWindow *parent, const Til
 	return panel;
 }
 
+PalettePanel* PaletteWindow::CreateNPCPathPalette(wxWindow *parent, const TilesetContainer& tilesets)
+{
+	NPCPathPalettePanel* panel = newd NPCPathPalettePanel(parent);
+	return panel;
+}
+
 PalettePanel* PaletteWindow::CreateCreaturePalette(wxWindow *parent, const TilesetContainer& tilesets)
 {
 	CreaturePalettePanel* panel = newd CreaturePalettePanel(parent);
@@ -201,6 +212,9 @@ void PaletteWindow::ReloadSettings(Map* map)
 	}
 	if(camera_path_palette) {
 		camera_path_palette->SetMap(map);
+	}
+	if(npc_path_palette) {
+		npc_path_palette->SetMap(map);
 	}
 	if(item_palette) {
 		item_palette->SetListType(wxstr(g_settings.getString(Config::PALETTE_ITEM_STYLE)));
@@ -242,6 +256,9 @@ void PaletteWindow::InvalidateContents()
 	}
 	if(camera_path_palette) {
 		camera_path_palette->OnUpdate();
+	}
+	if(npc_path_palette) {
+		npc_path_palette->OnUpdate();
 	}
 }
 
@@ -421,6 +438,10 @@ void PaletteWindow::OnUpdate(Map* map)
 	if(camera_path_palette) {
 		camera_path_palette->SetMap(map);
 		camera_path_palette->OnUpdate();
+	}
+	if(npc_path_palette) {
+		npc_path_palette->SetMap(map);
+		npc_path_palette->OnUpdate();
 	}
 }
 

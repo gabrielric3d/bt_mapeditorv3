@@ -173,6 +173,7 @@
             <item name="Show $Mountain Overlay" action="SHOW_MOUNTAIN_OVERLAY" help="Show transparent overlay on mountain tiles."/>
             <item name="Show $Stair Direction" action="SHOW_STAIR_DIRECTION" help="Show directional arrows on stairs and ramps."/>
             <item name="Show Camera $Paths" action="SHOW_CAMERA_PATHS" help="Show camera path overlays."/>
+            <item name="Show $NPC Paths" action="SHOW_NPC_PATHS" help="Show NPC path overlays."/>
         </menu>
     </menu>
     <menu name="$Window">
