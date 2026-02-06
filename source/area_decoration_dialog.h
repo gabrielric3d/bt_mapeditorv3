@@ -204,6 +204,9 @@ public:
 	// Update the engine when editor changes (called when dialog is shown again)
 	void UpdateEngine();
 
+	// Add a rule generated from an external source (e.g., context menu workflow)
+	void AddRuleFromExternal(const AreaDecoration::FloorRule& rule);
+
 private:
 	// UI Controls - Preset Management
 	wxChoice* m_presetChoice;

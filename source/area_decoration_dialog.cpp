@@ -3480,3 +3480,9 @@ void AreaDecorationDialog::OnImportPreset(wxCommandEvent& event) {
 		wxMessageBox("Failed to import preset. The file may be invalid or corrupted.", "Error", wxOK | wxICON_ERROR);
 	}
 }
+
+void AreaDecorationDialog::AddRuleFromExternal(const AreaDecoration::FloorRule& rule) {
+	m_preset.floorRules.push_back(rule);
+	UpdateRulesList();
+	UpdateUI();
+}

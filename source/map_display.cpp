@@ -60,6 +60,8 @@
 #include "table_brush.h"
 #include "gif_recorder.h"
 #include "camera_path.h"
+#include "area_decoration_rule_from_selection_dialog.h"
+#include "area_decoration_dialog.h"
 
 namespace
 {
@@ -187,9 +189,14 @@ BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_MENU(MAP_POPUP_MENU_SELECT_SPAWN_BRUSH, MapCanvas::OnSelectSpawnBrush)
 	EVT_MENU(MAP_POPUP_MENU_SELECT_HOUSE_BRUSH, MapCanvas::OnSelectHouseBrush)
 	// ----
+	EVT_MENU(MAP_POPUP_MENU_TOGGLE_CARPET_ACTIVATED, MapCanvas::OnToggleCarpetActivated)
+	EVT_MENU(MAP_POPUP_MENU_TOGGLE_DOODAD_ACTIVATED, MapCanvas::OnToggleDoodadActivated)
+	// ----
 	EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
 	// ----
 	EVT_MENU(MAP_POPUP_MENU_BROWSE_TILE, MapCanvas::OnBrowseTile)
+	// ----
+	EVT_MENU(MAP_POPUP_MENU_ADD_AREA_DECORATION_RULE, MapCanvas::OnAddAreaDecorationRule)
 END_EVENT_TABLE()
 
 bool MapCanvas::processed[] = {0};
@@ -3211,7 +3218,7 @@ void MapCanvas::OnApplyReplaceBox1(wxCommandEvent& WXUNUSED(event))
 
 	MapWindow* window = GetMapWindow();
 	if(window) {
-		window->ApplyItemToReplaceBox(itemId, 1);
+		window->ApplyItemToReplaceBoxOriginal(itemId);
 	}
 }
 
@@ -3228,7 +3235,7 @@ void MapCanvas::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 
 	MapWindow* window = GetMapWindow();
 	if(window) {
-		window->ApplyItemToReplaceBox(itemId, 2);
+		window->ApplyItemToReplaceBoxReplacement(itemId);
 	}
 }
 
@@ -3543,6 +3550,64 @@ void MapCanvas::OnSelectSpawnBrush(wxCommandEvent& WXUNUSED(event))
 	g_gui.SelectBrush(g_gui.spawn_brush, TILESET_CREATURE);
 }
 
+void MapCanvas::OnToggleCarpetActivated(wxCommandEvent& WXUNUSED(event))
+{
+	if(editor.getSelection().size() != 1) return;
+	Tile* tile = editor.getSelection().getSelectedTile();
+	if(!tile) return;
+
+	Item* carpet = tile->getCarpet();
+	if(!carpet) return;
+
+	CarpetBrush* cb = carpet->getCarpetBrush();
+	if(!cb || !cb->hasSourceFile()) return;
+
+	if(cb->toggleActivatedInXML()) {
+		wxMessageBox(
+			wxString::Format("Brush '%s' has been deactivated in:\n%s\n\nReload brushes to apply changes.",
+				wxString(cb->getName()), wxString(cb->getSourceFile())),
+			"Brush Deactivated",
+			wxOK | wxICON_INFORMATION
+		);
+	} else {
+		wxMessageBox(
+			wxString::Format("Failed to update brush '%s' in XML file.", wxString(cb->getName())),
+			"Error",
+			wxOK | wxICON_ERROR
+		);
+	}
+}
+
+void MapCanvas::OnToggleDoodadActivated(wxCommandEvent& WXUNUSED(event))
+{
+	if(editor.getSelection().size() != 1) return;
+	Tile* tile = editor.getSelection().getSelectedTile();
+	if(!tile) return;
+
+	Item* topSelectedItem = tile->getTopSelectedItem();
+	if(!topSelectedItem) return;
+
+	Brush* brush = topSelectedItem->getDoodadBrush();
+	if(!brush || !brush->hasSourceFile()) return;
+	DoodadBrush* db = brush->asDoodad();
+	if(!db) return;
+
+	if(db->toggleActivatedInXML()) {
+		wxMessageBox(
+			wxString::Format("Brush '%s' has been deactivated in:\n%s\n\nReload brushes to apply changes.",
+				wxString(db->getName()), wxString(db->getSourceFile())),
+			"Brush Deactivated",
+			wxOK | wxICON_INFORMATION
+		);
+	} else {
+		wxMessageBox(
+			wxString::Format("Failed to update brush '%s' in XML file.", wxString(db->getName())),
+			"Error",
+			wxOK | wxICON_ERROR
+		);
+	}
+}
+
 void MapCanvas::OnProperties(wxCommandEvent& WXUNUSED(event))
 {
 	if(editor.getSelection().size() != 1)
@@ -3591,6 +3656,20 @@ void MapCanvas::OnProperties(wxCommandEvent& WXUNUSED(event))
 		delete new_tile;
 	}
 	w->Destroy();
+}
+
+void MapCanvas::OnAddAreaDecorationRule(wxCommandEvent& WXUNUSED(event))
+{
+	if(!editor.hasSelection()) return;
+
+	AreaDecorationRuleFromSelectionDialog dialog(this, editor);
+	if(dialog.ShowModal() == wxID_OK && dialog.WasAccepted()) {
+		// Show the Area Decoration dialog and add the generated rule
+		g_gui.ShowAreaDecorationDialog();
+		if(g_gui.area_decoration_dialog) {
+			g_gui.area_decoration_dialog->AddRuleFromExternal(dialog.GetGeneratedRule());
+		}
+	}
 }
 
 void MapCanvas::ChangeFloor(int new_floor)
@@ -3817,14 +3896,29 @@ void MapPopupMenu::Update()
 				if(hasWall)
 					Append( MAP_POPUP_MENU_SELECT_WALL_BRUSH, "Select Wallbrush", "Uses the current item as a wallbrush");
 
-				if(hasCarpet)
+				if(hasCarpet) {
 					Append( MAP_POPUP_MENU_SELECT_CARPET_BRUSH, "Select Carpetbrush", "Uses the current item as a carpetbrush");
+					// Check if carpet brush has source file for toggle option
+					Item* carpet = tile->getCarpet();
+					if(carpet) {
+						Brush* carpetBrush = carpet->getCarpetBrush();
+						if(carpetBrush && carpetBrush->hasSourceFile()) {
+							Append( MAP_POPUP_MENU_TOGGLE_CARPET_ACTIVATED, "Deactivate Carpetbrush", "Deactivate this carpet brush in XML file");
+						}
+					}
+				}
 
 				if(hasTable)
 					Append( MAP_POPUP_MENU_SELECT_TABLE_BRUSH, "Select Tablebrush", "Uses the current item as a tablebrush");
 
-				if(topSelectedItem && topSelectedItem->getDoodadBrush() && topSelectedItem->getDoodadBrush()->visibleInPalette())
+				if(topSelectedItem && topSelectedItem->getDoodadBrush() && topSelectedItem->getDoodadBrush()->visibleInPalette()) {
 					Append( MAP_POPUP_MENU_SELECT_DOODAD_BRUSH, "Select Doodadbrush", "Use this doodad brush");
+					// Check if doodad brush has source file for toggle option
+					Brush* doodadBrush = topSelectedItem->getDoodadBrush();
+					if(doodadBrush && doodadBrush->hasSourceFile()) {
+						Append( MAP_POPUP_MENU_TOGGLE_DOODAD_ACTIVATED, "Deactivate Doodadbrush", "Deactivate this doodad brush in XML file");
+					}
+				}
 
 				if(topSelectedItem && topSelectedItem->isBrushDoor() && topSelectedItem->getDoorBrush())
 					Append( MAP_POPUP_MENU_SELECT_DOOR_BRUSH, "Select Doorbrush", "Use this door brush");
@@ -3867,6 +3961,11 @@ void MapPopupMenu::Update()
 
 			wxMenuItem* browseTile = Append(MAP_POPUP_MENU_BROWSE_TILE, "Browse Field", "Navigate from tile items");
 			browseTile->Enable(anything_selected);
+
+			AppendSeparator();
+			Append(MAP_POPUP_MENU_ADD_AREA_DECORATION_RULE,
+			       "Add area decoration rule",
+			       "Create an area decoration rule from the selected tiles");
 		} else {
 			AppendSeparator();
 			wxMenu* rotate_menu = new wxMenu();
@@ -3874,6 +3973,11 @@ void MapPopupMenu::Update()
 			rotate_menu->Append(MAP_POPUP_MENU_ROTATE_SELECTION_CCW, "Rotate selection counterclockwise", "Rotate the selection 90 degrees counterclockwise");
 			rotate_menu->Append(MAP_POPUP_MENU_ROTATE_SELECTION_180, "Rotate selection 180", "Rotate the selection 180 degrees");
 			AppendSubMenu(rotate_menu, "Rotate selection");
+
+			AppendSeparator();
+			Append(MAP_POPUP_MENU_ADD_AREA_DECORATION_RULE,
+			       "Add area decoration rule",
+			       "Create an area decoration rule from the selected tiles");
 		}
 	}
 

@@ -120,7 +120,11 @@ public:
 	void OnSelectSpawnBrush(wxCommandEvent& event);
 	void OnSelectHouseBrush(wxCommandEvent& event);
 	// ---
+	void OnToggleCarpetActivated(wxCommandEvent& event);
+	void OnToggleDoodadActivated(wxCommandEvent& event);
+	// ---
 	void OnProperties(wxCommandEvent& event);
+	void OnAddAreaDecorationRule(wxCommandEvent& event);
 
 	void Refresh();
 
