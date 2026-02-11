@@ -54,6 +54,7 @@
 #include "filehandle.h"
 #include "camera_path.h"
 #include "area_decoration_dialog.h"
+#include "area_creature_spawn_dialog.h"
 #include "brush_manager_panel.h"
 
 #include <algorithm>
@@ -129,6 +130,7 @@ GUI::GUI() :
 	window_door_brush(nullptr),
 
 	area_decoration_dialog(nullptr),
+	area_creature_spawn_dialog(nullptr),
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
@@ -175,6 +177,10 @@ GUI::~GUI()
 	if (area_decoration_dialog) {
 		area_decoration_dialog->Destroy();
 		area_decoration_dialog = nullptr;
+	}
+	if (area_creature_spawn_dialog) {
+		area_creature_spawn_dialog->Destroy();
+		area_creature_spawn_dialog = nullptr;
 	}
 
 	delete doodad_buffer_map;
@@ -985,6 +991,9 @@ void GUI::CloseCurrentEditor()
 	if (!IsEditorOpen() && area_decoration_dialog) {
 		area_decoration_dialog->Hide();
 	}
+	if (!IsEditorOpen() && area_creature_spawn_dialog) {
+		area_creature_spawn_dialog->Hide();
+	}
 }
 
 bool GUI::CloseLiveEditors(LiveSocket* sock)
@@ -1063,6 +1072,9 @@ bool GUI::CloseAllEditors()
 	// Hide Area Decoration dialog when all editors are closed
 	if (area_decoration_dialog) {
 		area_decoration_dialog->Hide();
+	}
+	if (area_creature_spawn_dialog) {
+		area_creature_spawn_dialog->Hide();
 	}
 
 	return true;
@@ -1738,6 +1750,30 @@ void GUI::DestroyAreaDecorationDialog()
 	if (area_decoration_dialog) {
 		area_decoration_dialog->Destroy();
 		area_decoration_dialog = nullptr;
+	}
+}
+
+void GUI::ShowAreaCreatureSpawnDialog()
+{
+	if (!IsEditorOpen()) {
+		return;
+	}
+
+	if (area_creature_spawn_dialog) {
+		area_creature_spawn_dialog->UpdateEngine();
+		area_creature_spawn_dialog->Show();
+		area_creature_spawn_dialog->Raise();
+	} else {
+		area_creature_spawn_dialog = newd AreaCreatureSpawnDialog(root);
+		area_creature_spawn_dialog->Show();
+	}
+}
+
+void GUI::DestroyAreaCreatureSpawnDialog()
+{
+	if (area_creature_spawn_dialog) {
+		area_creature_spawn_dialog->Destroy();
+		area_creature_spawn_dialog = nullptr;
 	}
 }
 

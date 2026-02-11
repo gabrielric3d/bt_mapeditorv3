@@ -4,6 +4,8 @@ ${CMAKE_CURRENT_LIST_DIR}/action.h
 ${CMAKE_CURRENT_LIST_DIR}/actions_history_window.h
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration.h
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn.h
+${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_rule_from_selection_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/application.h
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
@@ -135,6 +137,8 @@ ${CMAKE_CURRENT_LIST_DIR}/actions_history_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_rule_from_selection_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn.cpp
+${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/application.cpp
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.cpp
 ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp

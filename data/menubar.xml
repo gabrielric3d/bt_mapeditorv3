@@ -189,6 +189,7 @@
         <separator/>
         <item name="$Terrain Palette" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>
         <item name="$Doodad Palette" hotkey="D" action="SELECT_DOODAD" help="Select the Doodad palette."/>
+        <item name="Auto Creature $Spawn" action="AREA_CREATURE_SPAWN" help="Opens the automatic creature spawn tool for grouped placement by area presets."/>
         <item name="$Item Palette" hotkey="I" action="SELECT_ITEM" help="Select the Item palette."/>
         <item name="$House Palette" hotkey="H" action="SELECT_HOUSE" help="Select the House palette."/>
         <item name="$Creature Palette" hotkey="C" action="SELECT_CREATURE" help="Select the Creature palette."/>

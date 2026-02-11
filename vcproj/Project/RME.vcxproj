@@ -224,6 +224,8 @@
     <ClCompile Include="..\..\source\brush_manager_panel.cpp" />
     <ClCompile Include="..\..\source\brush_tips_window.cpp" />
     <ClCompile Include="..\..\source\structure_manager_window.cpp" />
+    <ClCompile Include="..\..\source\area_creature_spawn.cpp" />
+    <ClCompile Include="..\..\source\area_creature_spawn_dialog.cpp" />
     <ClCompile Include="..\..\source\area_decoration.cpp" />
     <ClCompile Include="..\..\source\area_decoration_dialog.cpp" />
     <ClCompile Include="..\..\source\cluster_preview_window.cpp" />
@@ -247,6 +249,8 @@
     <ClInclude Include="..\..\source\brush_tips_window.h" />
     <ClInclude Include="..\..\source\structure_manager_window.h" />
     <ClInclude Include="..\..\source\area_decoration.h" />
+    <ClInclude Include="..\..\source\area_creature_spawn.h" />
+    <ClInclude Include="..\..\source\area_creature_spawn_dialog.h" />
     <ClInclude Include="..\..\source\area_decoration_dialog.h" />
     <ClInclude Include="..\..\source\cluster_preview_window.h" />
     <ClInclude Include="..\..\source\main_toolbar.h" />

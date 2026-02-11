@@ -72,6 +72,7 @@ class BrushManagerPanel;
 
 class LiveSocket;
 class AreaDecorationDialog;
+class AreaCreatureSpawnDialog;
 
 extern const wxEventType EVT_UPDATE_MENUS;
 extern const wxEventType EVT_UPDATE_ACTIONS;
@@ -479,10 +480,13 @@ public:
 
 	// Persistent dialogs (hidden instead of destroyed)
 	AreaDecorationDialog* area_decoration_dialog;
+	AreaCreatureSpawnDialog* area_creature_spawn_dialog;
 
 	// Area Decoration dialog management
 	void ShowAreaDecorationDialog();
 	void DestroyAreaDecorationDialog();
+	void ShowAreaCreatureSpawnDialog();
+	void DestroyAreaCreatureSpawnDialog();
 
 	//=========================================================================
 	// Brush references

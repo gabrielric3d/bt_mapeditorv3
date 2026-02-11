@@ -313,6 +313,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(STRUCTURE_MANAGER, wxITEM_NORMAL, OnStructureManager);
 	MAKE_ACTION(BRUSH_TIPS, wxITEM_NORMAL, OnBrushTipsWindow);
 	MAKE_ACTION(AREA_DECORATION, wxITEM_NORMAL, OnAreaDecoration);
+	MAKE_ACTION(AREA_CREATURE_SPAWN, wxITEM_NORMAL, OnAreaCreatureSpawn);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 	MAKE_ACTION(TAKE_REGION_SCREENSHOT, wxITEM_NORMAL, OnTakeRegionScreenshot);
@@ -2754,6 +2755,11 @@ void MainMenuBar::OnBrushTipsWindow(wxCommandEvent& WXUNUSED(event))
 void MainMenuBar::OnAreaDecoration(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.ShowAreaDecorationDialog();
+}
+
+void MainMenuBar::OnAreaCreatureSpawn(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.ShowAreaCreatureSpawnDialog();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

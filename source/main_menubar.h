@@ -189,6 +189,7 @@ namespace MenuBar
 		IMPORT_MONSTERSJSON,
 		BRUSH_TIPS,
 		AREA_DECORATION,
+		AREA_CREATURE_SPAWN,
 	};
 }
 
@@ -336,6 +337,7 @@ public:
 	void OnStructureManager(wxCommandEvent& event);
 	void OnBrushTipsWindow(wxCommandEvent& event);
 	void OnAreaDecoration(wxCommandEvent& event);
+	void OnAreaCreatureSpawn(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
 	void OnTakeRegionScreenshot(wxCommandEvent& event);
