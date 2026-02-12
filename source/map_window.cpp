@@ -26,7 +26,7 @@
 MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr),
+	advancedReplaceDialog(nullptr),
 	preview_mode(false),
 	preview_scroll_x(0),
 	preview_scroll_y(0),
@@ -60,7 +60,7 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 
 MapWindow::~MapWindow()
 {
-	////
+	DestroyAdvancedReplaceDialog();
 }
 
 void MapWindow::SetPreviewMode(bool preview)
@@ -90,40 +90,86 @@ void MapWindow::SetPreviewBounds(int widthTiles, int heightTiles)
 	preview_bounds_valid = true;
 }
 
-void MapWindow::ShowReplaceItemsDialog(bool selectionOnly)
+void MapWindow::ShowAdvancedReplaceDialog()
 {
-	if(replaceItemsDialog)
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->Show();
+		advancedReplaceDialog->Raise();
 		return;
+	}
 
-	replaceItemsDialog = new ReplaceItemsDialog(this, selectionOnly);
-	replaceItemsDialog->Connect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), NULL, this);
-	replaceItemsDialog->Show();
+	advancedReplaceDialog = new AdvancedReplaceDialog(this);
+	advancedReplaceDialog->Connect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnAdvancedReplaceDialogClose), NULL, this);
+	advancedReplaceDialog->Show();
 }
 
-void MapWindow::CloseReplaceItemsDialog()
+void MapWindow::CloseAdvancedReplaceDialog()
 {
-	if(replaceItemsDialog)
-		replaceItemsDialog->Close();
+	if(advancedReplaceDialog)
+		advancedReplaceDialog->Close();
 }
 
-void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent& event)
+void MapWindow::DestroyAdvancedReplaceDialog()
 {
-	if(replaceItemsDialog) {
-		replaceItemsDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnReplaceItemsDialogClose), NULL, this);
-		replaceItemsDialog->Destroy();
-		replaceItemsDialog = nullptr;
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->Disconnect(wxEVT_CLOSE_WINDOW, wxCloseEventHandler(MapWindow::OnAdvancedReplaceDialogClose), NULL, this);
+		advancedReplaceDialog->Destroy();
+		advancedReplaceDialog = nullptr;
 	}
 }
 
-void MapWindow::ApplyItemToReplaceBox(uint16_t itemId, int boxNumber)
+void MapWindow::OnAdvancedReplaceDialogClose(wxCloseEvent& event)
+{
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->Hide();
+	}
+}
+
+void MapWindow::ApplyItemToReplaceBoxOriginal(uint16_t itemId)
 {
 	// If dialog doesn't exist, create it first
-	if(!replaceItemsDialog) {
-		ShowReplaceItemsDialog(false);
+	if(!advancedReplaceDialog) {
+		ShowAdvancedReplaceDialog();
 	}
 
-	if(replaceItemsDialog) {
-		replaceItemsDialog->ApplyItemToBox(itemId, boxNumber);
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->ApplyItemToOriginal(itemId);
+	}
+}
+
+void MapWindow::ApplyItemToReplaceBoxReplacement(uint16_t itemId)
+{
+	// If dialog doesn't exist, create it first
+	if(!advancedReplaceDialog) {
+		ShowAdvancedReplaceDialog();
+	}
+
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->ApplyItemToReplacement(itemId);
+	}
+}
+
+void MapWindow::ApplyBrushToReplaceBoxOriginal(Brush* brush)
+{
+	// If dialog doesn't exist, create it first
+	if(!advancedReplaceDialog) {
+		ShowAdvancedReplaceDialog();
+	}
+
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->ApplyBrushToOriginal(brush);
+	}
+}
+
+void MapWindow::ApplyBrushToReplaceBoxReplacement(Brush* brush)
+{
+	// If dialog doesn't exist, create it first
+	if(!advancedReplaceDialog) {
+		ShowAdvancedReplaceDialog();
+	}
+
+	if(advancedReplaceDialog) {
+		advancedReplaceDialog->ApplyBrushToReplacement(brush);
 	}
 }
 
@@ -150,8 +196,8 @@ void MapWindow::UpdateScrollbars(int nx, int ny)
 
 void MapWindow::UpdateDialogs(bool show)
 {
-	if(replaceItemsDialog)
-		replaceItemsDialog->Show(show);
+	if(advancedReplaceDialog)
+		advancedReplaceDialog->Show(show);
 }
 
 void MapWindow::GetViewStart(int* x, int* y)

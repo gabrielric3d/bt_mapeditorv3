@@ -19,10 +19,11 @@
 #define RME_MAP_WINDOW_H_
 
 #include "position.h"
-#include "replace_items_window.h"
+#include "advanced_replace_window.h"
 
 class MapCanvas;
 class DCButton;
+class Brush;
 
 // Map window, a window displaying a map, complete with scrollbars
 // and everything. This is the window that's inside each tab in the
@@ -77,11 +78,15 @@ public:
 	// Return the containing canvas
 	MapCanvas* GetCanvas() const noexcept { return canvas; }
 
-	void ShowReplaceItemsDialog(bool selectionOnly);
-	void CloseReplaceItemsDialog();
-	void OnReplaceItemsDialogClose(wxCloseEvent& event);
-	ReplaceItemsDialog* GetReplaceItemsDialog() const { return replaceItemsDialog; }
-	void ApplyItemToReplaceBox(uint16_t itemId, int boxNumber);
+	void ShowAdvancedReplaceDialog();
+	void CloseAdvancedReplaceDialog();
+	void DestroyAdvancedReplaceDialog();
+	void OnAdvancedReplaceDialogClose(wxCloseEvent& event);
+	AdvancedReplaceDialog* GetAdvancedReplaceDialog() const { return advancedReplaceDialog; }
+	void ApplyItemToReplaceBoxOriginal(uint16_t itemId);
+	void ApplyItemToReplaceBoxReplacement(uint16_t itemId);
+	void ApplyBrushToReplaceBoxOriginal(Brush* brush);
+	void ApplyBrushToReplaceBoxReplacement(Brush* brush);
 
 protected:
 	// For internal use, call to resize the scrollbars with
@@ -103,7 +108,7 @@ protected:
 	bool preview_bounds_valid;
 
 private:
-	ReplaceItemsDialog* replaceItemsDialog;
+	AdvancedReplaceDialog* advancedReplaceDialog;
 	Position previous_position;
 
 	friend class MainFrame;
