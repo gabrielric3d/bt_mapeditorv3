@@ -25,9 +25,14 @@
 #include "waypoint_brush.h"
 #include "map.h"
 
+#include <wx/wfstream.h>
+#include <wx/txtstrm.h>
+#include <wx/tokenzr.h>
+
 BEGIN_EVENT_TABLE(WaypointPalettePanel, PalettePanel)
 	EVT_BUTTON(PALETTE_WAYPOINT_ADD_WAYPOINT, WaypointPalettePanel::OnClickAddWaypoint)
 	EVT_BUTTON(PALETTE_WAYPOINT_REMOVE_WAYPOINT, WaypointPalettePanel::OnClickRemoveWaypoint)
+	EVT_BUTTON(PALETTE_WAYPOINT_IMPORT, WaypointPalettePanel::OnClickImportWaypoints)
 
 	EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnBeginEditWaypointLabel)
 	EVT_LIST_END_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnEditWaypointLabel)
@@ -49,6 +54,7 @@ WaypointPalettePanel::WaypointPalettePanel(wxWindow* parent, wxWindowID id) :
 	wxSizer* tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
 	tmpsizer->Add(add_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_ADD_WAYPOINT, "Add", wxDefaultPosition, wxSize(50, -1)), 1, wxEXPAND);
 	tmpsizer->Add(remove_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_REMOVE_WAYPOINT, "Remove", wxDefaultPosition, wxSize(70, -1)), 1, wxEXPAND);
+	tmpsizer->Add(import_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_IMPORT, "Import", wxDefaultPosition, wxSize(60, -1)), 1, wxEXPAND);
 	sidesizer->Add(tmpsizer, 0, wxEXPAND);
 
 	SetSizerAndFit(sidesizer);
@@ -129,10 +135,12 @@ void WaypointPalettePanel::OnUpdate()
 		waypoint_list->Enable(false);
 		add_waypoint_button->Enable(false);
 		remove_waypoint_button->Enable(false);
+		import_waypoint_button->Enable(false);
 	} else {
 		waypoint_list->Enable(true);
 		add_waypoint_button->Enable(true);
 		remove_waypoint_button->Enable(true);
+		import_waypoint_button->Enable(true);
 
 		Waypoints& waypoints = map->waypoints;
 
@@ -236,4 +244,84 @@ void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& event)
 		waypoint_list->DeleteItem(item);
 		refresh_timer.Start(300, true);
 	}
+}
+
+void WaypointPalettePanel::OnClickImportWaypoints(wxCommandEvent& event)
+{
+	if(!map)
+		return;
+
+	wxFileDialog dlg(this, "Import Waypoints", "", "",
+		"Text files (*.txt)|*.txt|All files (*.*)|*.*",
+		wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+
+	if(dlg.ShowModal() != wxID_OK)
+		return;
+
+	wxFileInputStream input(dlg.GetPath());
+	if(!input.IsOk()) {
+		g_gui.SetStatusText("Failed to open waypoint file.");
+		return;
+	}
+
+	wxTextInputStream text(input);
+	int imported = 0;
+	int skipped = 0;
+
+	// Format: name - (x, y, z)
+	// Example: sorcerer dungeon - (231, 102, 7)
+	while(!input.Eof()) {
+		wxString line = text.ReadLine();
+		line.Trim(true).Trim(false);
+
+		if(line.IsEmpty() || line.StartsWith("#"))
+			continue;
+
+		// Split on " - (" to get name and coordinates
+		int sepPos = line.Find(" - (");
+		if(sepPos == wxNOT_FOUND) {
+			skipped++;
+			continue;
+		}
+
+		std::string name = nstr(line.Left(sepPos).Trim(true).Trim(false));
+
+		// Extract the part inside parentheses: "x, y, z)"
+		wxString coordStr = line.Mid(sepPos + 4); // skip " - ("
+		coordStr.Replace(")", "");
+		coordStr.Trim(true).Trim(false);
+
+		wxStringTokenizer tokenizer(coordStr, ",");
+		if(tokenizer.CountTokens() < 3) {
+			skipped++;
+			continue;
+		}
+
+		long x = 0, y = 0, z = 0;
+		if(!tokenizer.GetNextToken().Trim(true).Trim(false).ToLong(&x) ||
+		   !tokenizer.GetNextToken().Trim(true).Trim(false).ToLong(&y) ||
+		   !tokenizer.GetNextToken().Trim(true).Trim(false).ToLong(&z)) {
+			skipped++;
+			continue;
+		}
+
+		if(name.empty() || x <= 0 || y <= 0 || z < 0 || z > rme::MapMaxLayer) {
+			skipped++;
+			continue;
+		}
+
+		Waypoint* wp = newd Waypoint();
+		wp->name = name;
+		wp->pos = Position((uint16_t)x, (uint16_t)y, (uint8_t)z);
+		map->waypoints.addWaypoint(wp);
+		imported++;
+	}
+
+	g_gui.RefreshPalettes();
+
+	wxString msg;
+	msg.Printf("Imported %d waypoints.", imported);
+	if(skipped > 0)
+		msg.Append(wxString::Format(" Skipped %d invalid lines.", skipped));
+	g_gui.SetStatusText(msg);
 }
