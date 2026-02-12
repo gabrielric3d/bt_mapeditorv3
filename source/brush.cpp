@@ -112,11 +112,11 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings, con
 		return false;
 	}
 
-	// Check if brush is deactivated
+	// Check if brush is deactivated - load it but mark inactive
+	bool brushDeactivated = false;
 	if((attribute = node.attribute("activated"))) {
 		if(!attribute.as_bool(true)) {
-			// Brush is deactivated, skip loading it
-			return true;
+			brushDeactivated = true;
 		}
 	}
 
@@ -156,6 +156,9 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings, con
 
 	if(!node.first_child()) {
 		brushes.insert(std::make_pair(brush->getName(), brush));
+		if(brushDeactivated) {
+			brush->setActivated(false);
+		}
 		return true;
 	}
 
@@ -184,6 +187,12 @@ bool Brushes::unserializeBrush(pugi::xml_node node, wxArrayString& warnings, con
 	}
 
 	brushes.insert(std::make_pair(brush->getName(), brush));
+
+	// Mark brush as deactivated after loading (subclass load() methods don't call base Brush::load())
+	if(brushDeactivated) {
+		brush->setActivated(false);
+	}
+
 	return true;
 }
 
@@ -361,7 +370,11 @@ bool Brush::toggleActivatedInXML()
 	}
 
 	// Save the modified XML back to file
-	return doc.save_file(source_file.c_str(), "\t", pugi::format_default | pugi::format_indent, pugi::encoding_utf8);
+	bool saved = doc.save_file(source_file.c_str(), "\t", pugi::format_default | pugi::format_indent, pugi::encoding_utf8);
+	if(saved) {
+		runtime_activated = !runtime_activated;
+	}
+	return saved;
 }
 
 BrushType Brush::getBrushType() const

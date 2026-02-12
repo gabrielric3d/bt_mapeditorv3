@@ -190,17 +190,20 @@ void TilesetCategory::loadBrush(pugi::xml_node node, wxArrayString& warnings)
 
 		Brush* brush = tileset.brushes.getBrush(attribute.as_string());
 		if(brush) {
-			auto insertPosition = brushlist.end();
-			if(!brushName.empty()) {
-				for(auto itt = brushlist.begin(); itt != brushlist.end(); ++itt) {
-					if((*itt)->getName() == brushName) {
-						insertPosition = ++itt;
-						break;
+			if(brush->isActivated()) {
+				auto insertPosition = brushlist.end();
+				if(!brushName.empty()) {
+					for(auto itt = brushlist.begin(); itt != brushlist.end(); ++itt) {
+						if((*itt)->getName() == brushName) {
+							insertPosition = ++itt;
+							break;
+						}
 					}
 				}
+				brush->flagAsVisible();
+				brushlist.insert(insertPosition, brush);
 			}
-			brush->flagAsVisible();
-			brushlist.insert(insertPosition, brush);
+			// Inactive brushes are silently skipped from palette
 		} else {
 			warnings.push_back("Brush \"" + wxString(attribute.as_string(), wxConvUTF8) + "\" doesn't exist.");
 		}
