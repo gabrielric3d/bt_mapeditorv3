@@ -85,6 +85,33 @@ CreatureBrush* Creature::getBrush() const
 	return nullptr;
 }
 
+int Creature::getWanderRadius() const
+{
+	const CreatureType* type = g_creatures[type_name];
+	if(type) {
+		return type->wander_radius;
+	}
+	return 0;
+}
+
+int Creature::getWalkSpeed() const
+{
+	const CreatureType* type = g_creatures[type_name];
+	if(type) {
+		return type->walk_speed;
+	}
+	return 0;
+}
+
+bool Creature::hasWanderBehavior() const
+{
+	const CreatureType* type = g_creatures[type_name];
+	if(type) {
+		return type->hasWanderBehavior();
+	}
+	return false;
+}
+
 std::string Creature::DirID2Name(uint16_t id)
 {
 	switch (id) {

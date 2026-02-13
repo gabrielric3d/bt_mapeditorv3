@@ -556,6 +556,14 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings)
 		g_creatures.loadFromXML(cdb, false, nerr, nwarn);
 	}
 
+	// Load creature behaviors (wander radius, etc.) after all creatures are loaded
+	{
+		wxString bhvErr;
+		wxArrayString bhvWarn;
+		g_creatures.loadBehaviors(g_gui.GetDataDirectory() + "creature_behaviors.xml", bhvErr, bhvWarn);
+		// Silently ignore if file doesn't exist yet (first run)
+	}
+
 	g_gui.SetLoadDone(50, "Loading materials.xml ...");
 	stats.current_file = "materials.xml";
 	g_gui.SetLoadingStats(stats);

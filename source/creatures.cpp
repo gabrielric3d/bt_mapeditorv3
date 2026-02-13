@@ -35,7 +35,9 @@ CreatureType::CreatureType() :
 	in_other_tileset(false),
 	standard(false),
 	name(""),
-	brush(nullptr)
+	brush(nullptr),
+	wander_radius(0),
+	walk_speed(0)
 {
 	////
 }
@@ -47,7 +49,9 @@ CreatureType::CreatureType(const CreatureType& ct) :
 	standard(ct.standard),
 	name(ct.name),
 	outfit(ct.outfit),
-	brush(ct.brush)
+	brush(ct.brush),
+	wander_radius(ct.wander_radius),
+	walk_speed(ct.walk_speed)
 {
 	////
 }
@@ -61,6 +65,8 @@ CreatureType& CreatureType::operator=(const CreatureType& ct)
 	name = ct.name;
 	outfit = ct.outfit;
 	brush = ct.brush;
+	wander_radius = ct.wander_radius;
+	walk_speed = ct.walk_speed;
 	return *this;
 }
 
@@ -413,6 +419,68 @@ bool CreatureDatabase::saveToXML(const FileName& filename)
 		}
 	}
 	return doc.save_file(filename.GetFullPath().mb_str(), "\t", pugi::format_default, pugi::encoding_utf8);
+}
+
+bool CreatureDatabase::loadBehaviors(const FileName& filename, wxString& error, wxArrayString& warnings)
+{
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(filename.GetFullPath().mb_str());
+	if(!result) {
+		// File doesn't exist yet - that's OK, no behaviors configured
+		return true;
+	}
+
+	pugi::xml_node root = doc.child("creature_behaviors");
+	if(!root) {
+		error = "Invalid creature_behaviors.xml format.";
+		return false;
+	}
+
+	for(pugi::xml_node node = root.first_child(); node; node = node.next_sibling()) {
+		if(as_lower_str(node.name()) != "creature")
+			continue;
+
+		std::string name = node.attribute("name").as_string();
+		if(name.empty())
+			continue;
+
+		CreatureType* type = (*this)[name];
+		if(!type) {
+			warnings.push_back("Creature behavior for unknown creature: " + wxString(name));
+			continue;
+		}
+
+		type->wander_radius = node.attribute("wanderradius").as_int(0);
+		type->walk_speed = node.attribute("walkspeed").as_int(0);
+	}
+	return true;
+}
+
+bool CreatureDatabase::saveBehaviors(const FileName& filename, wxString& error)
+{
+	pugi::xml_document doc;
+	pugi::xml_node decl = doc.prepend_child(pugi::node_declaration);
+	decl.append_attribute("version") = "1.0";
+	decl.append_attribute("encoding") = "UTF-8";
+
+	pugi::xml_node root = doc.append_child("creature_behaviors");
+
+	for(const auto& pair : creature_map) {
+		CreatureType* type = pair.second;
+		if(!type->hasWanderBehavior() && type->walk_speed == 0)
+			continue;
+
+		pugi::xml_node node = root.append_child("creature");
+		node.append_attribute("name") = type->name.c_str();
+		node.append_attribute("wanderradius") = type->wander_radius;
+		node.append_attribute("walkspeed") = type->walk_speed;
+	}
+
+	if(!doc.save_file(filename.GetFullPath().mb_str())) {
+		error = "Failed to save creature_behaviors.xml";
+		return false;
+	}
+	return true;
 }
 
 bool CreatureDatabase::loadFromJSON(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings)

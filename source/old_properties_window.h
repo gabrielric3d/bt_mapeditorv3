@@ -51,6 +51,8 @@ protected:
 	wxChoice* splash_type_field;
 	wxTextCtrl* text_field;
 	wxTextCtrl* description_field;
+	wxSpinCtrl* wander_radius_field;
+	wxSpinCtrl* walk_speed_field;
 	std::vector<ContainerItemButton*> container_items;
 
 	friend class ContainerItemButton;

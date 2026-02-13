@@ -56,6 +56,10 @@ public:
 	std::string getName() const;
 	CreatureBrush* getBrush() const;
 
+	int getWanderRadius() const;
+	int getWalkSpeed() const;
+	bool hasWanderBehavior() const;
+
 	int getSpawnTime() const noexcept { return spawntime; }
 	void setSpawnTime(int time) noexcept { spawntime = time; }
 

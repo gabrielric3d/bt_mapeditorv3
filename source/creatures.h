@@ -55,6 +55,9 @@ public:
 
 	bool saveToXML(const FileName& filename);
 
+	bool loadBehaviors(const FileName& filename, wxString& error, wxArrayString& warnings);
+	bool saveBehaviors(const FileName& filename, wxString& error);
+
 	bool loadFromJSON(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings);
 };
 
@@ -73,6 +76,11 @@ public:
 	std::string name;
 	Outfit outfit;
 	CreatureBrush* brush;
+
+	int wander_radius = 0;   // 0 = no wander (default), 1-15 tiles radius
+	int walk_speed = 0;       // 0 = use default, 1-100 speed value
+
+	bool hasWanderBehavior() const { return wander_radius > 0; }
 
 	static CreatureType* loadFromXML(pugi::xml_node node, wxArrayString& warnings);
 	static CreatureType* loadFromOTXML(const FileName& filename, pugi::xml_document& node, wxArrayString& warnings);

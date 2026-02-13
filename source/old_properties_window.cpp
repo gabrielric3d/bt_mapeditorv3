@@ -53,7 +53,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	splash_type_field(nullptr),
 	text_field(nullptr),
 	description_field(nullptr),
-	destination_field(nullptr)
+	destination_field(nullptr),
+	wander_radius_field(nullptr),
+	walk_speed_field(nullptr)
 {
 	ASSERT(edit_item);
 
@@ -355,7 +357,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	splash_type_field(nullptr),
 	text_field(nullptr),
 	description_field(nullptr),
-	destination_field(nullptr)
+	destination_field(nullptr),
+	wander_radius_field(nullptr),
+	walk_speed_field(nullptr)
 {
 	ASSERT(edit_creature);
 
@@ -387,6 +391,29 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	topsizer->Add(boxsizer, wxSizerFlags(3).Expand().Border(wxALL, 20));
 	//SetSize(220, 0);
 
+	// -- Behavior section (per creature type) --
+	wxStaticBoxSizer* behaviorSizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Behavior (applies to all " + wxString(edit_creature->getName()) + ")");
+
+	wxFlexGridSizer* bhvGrid = newd wxFlexGridSizer(2, 5, 5);
+	bhvGrid->AddGrowableCol(1);
+
+	CreatureType* cType = g_creatures[edit_creature->getName()];
+
+	bhvGrid->Add(newd wxStaticText(this, wxID_ANY, "Wander Radius (0-15):"));
+	wander_radius_field = newd wxSpinCtrl(this, wxID_ANY, wxEmptyString,
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 15,
+		cType ? cType->wander_radius : 0);
+	bhvGrid->Add(wander_radius_field, wxSizerFlags(1).Expand());
+
+	bhvGrid->Add(newd wxStaticText(this, wxID_ANY, "Walk Speed (0-100):"));
+	walk_speed_field = newd wxSpinCtrl(this, wxID_ANY, wxEmptyString,
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100,
+		cType ? cType->walk_speed : 0);
+	bhvGrid->Add(walk_speed_field, wxSizerFlags(1).Expand());
+
+	behaviorSizer->Add(bhvGrid, wxSizerFlags(1).Expand().Border(wxALL, 5));
+	topsizer->Add(behaviorSizer, wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT, 20));
+
 	wxSizer* std_sizer = newd wxBoxSizer(wxHORIZONTAL);
 	std_sizer->Add(newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(1).Center());
 	std_sizer->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), wxSizerFlags(1).Center());
@@ -407,7 +434,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	splash_type_field(nullptr),
 	text_field(nullptr),
 	description_field(nullptr),
-	destination_field(nullptr)
+	destination_field(nullptr),
+	wander_radius_field(nullptr),
+	walk_speed_field(nullptr)
 {
 	ASSERT(edit_spawn);
 
@@ -603,6 +632,24 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 
 		if(new_dir) {
 			edit_creature->setDirection((Direction)*new_dir);
+		}
+
+		// Update creature type behavior
+		CreatureType* cType = g_creatures[edit_creature->getName()];
+		if(cType && wander_radius_field && walk_speed_field) {
+			int newRadius = wander_radius_field->GetValue();
+			int newSpeed = walk_speed_field->GetValue();
+			if(newRadius != cType->wander_radius || newSpeed != cType->walk_speed) {
+				int answer = wxMessageBox(
+					wxString::Format("This will change wander behavior for ALL '%s' creatures on the map.\n\nWander Radius: %d -> %d\nWalk Speed: %d -> %d\n\nThis change cannot be undone. Continue?",
+						edit_creature->getName(), cType->wander_radius, newRadius, cType->walk_speed, newSpeed),
+					"Confirm Behavior Change",
+					wxYES_NO | wxICON_QUESTION, this);
+				if(answer == wxYES) {
+					cType->wander_radius = newRadius;
+					cType->walk_speed = newSpeed;
+				}
+			}
 		}
 	} else if(edit_spawn) {
 		int new_spawnsize = count_field->GetValue();
