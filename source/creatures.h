@@ -79,6 +79,8 @@ public:
 
 	int wander_radius = 0;   // 0 = no wander (default), 1-15 tiles radius
 	int walk_speed = 0;       // 0 = use default, 1-100 speed value
+	int rest_ticks = 120;    // Frames to rest between walk bursts (0-600, ~60fps)
+	int walk_steps = 2;      // Tiles to walk before resting (1-10)
 
 	bool hasWanderBehavior() const { return wander_radius > 0; }
 

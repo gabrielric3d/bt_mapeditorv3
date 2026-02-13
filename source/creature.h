@@ -58,6 +58,8 @@ public:
 
 	int getWanderRadius() const;
 	int getWalkSpeed() const;
+	int getRestTicks() const;
+	int getWalkSteps() const;
 	bool hasWanderBehavior() const;
 
 	int getSpawnTime() const noexcept { return spawntime; }

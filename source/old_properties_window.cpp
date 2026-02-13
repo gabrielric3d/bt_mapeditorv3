@@ -55,7 +55,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	description_field(nullptr),
 	destination_field(nullptr),
 	wander_radius_field(nullptr),
-	walk_speed_field(nullptr)
+	walk_speed_field(nullptr),
+	rest_ticks_field(nullptr),
+	walk_steps_field(nullptr)
 {
 	ASSERT(edit_item);
 
@@ -359,7 +361,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	description_field(nullptr),
 	destination_field(nullptr),
 	wander_radius_field(nullptr),
-	walk_speed_field(nullptr)
+	walk_speed_field(nullptr),
+	rest_ticks_field(nullptr),
+	walk_steps_field(nullptr)
 {
 	ASSERT(edit_creature);
 
@@ -411,6 +415,18 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 		cType ? cType->walk_speed : 0);
 	bhvGrid->Add(walk_speed_field, wxSizerFlags(1).Expand());
 
+	bhvGrid->Add(newd wxStaticText(this, wxID_ANY, "Walk Steps (1-10):"));
+	walk_steps_field = newd wxSpinCtrl(this, wxID_ANY, wxEmptyString,
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 10,
+		cType ? cType->walk_steps : 2);
+	bhvGrid->Add(walk_steps_field, wxSizerFlags(1).Expand());
+
+	bhvGrid->Add(newd wxStaticText(this, wxID_ANY, "Rest Duration (0-600):"));
+	rest_ticks_field = newd wxSpinCtrl(this, wxID_ANY, wxEmptyString,
+		wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 600,
+		cType ? cType->rest_ticks : 120);
+	bhvGrid->Add(rest_ticks_field, wxSizerFlags(1).Expand());
+
 	behaviorSizer->Add(bhvGrid, wxSizerFlags(1).Expand().Border(wxALL, 5));
 	topsizer->Add(behaviorSizer, wxSizerFlags(0).Expand().Border(wxLEFT | wxRIGHT, 20));
 
@@ -436,7 +452,9 @@ OldPropertiesWindow::OldPropertiesWindow(wxWindow* win_parent, const Map* map, c
 	description_field(nullptr),
 	destination_field(nullptr),
 	wander_radius_field(nullptr),
-	walk_speed_field(nullptr)
+	walk_speed_field(nullptr),
+	rest_ticks_field(nullptr),
+	walk_steps_field(nullptr)
 {
 	ASSERT(edit_spawn);
 
@@ -639,15 +657,21 @@ void OldPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 		if(cType && wander_radius_field && walk_speed_field) {
 			int newRadius = wander_radius_field->GetValue();
 			int newSpeed = walk_speed_field->GetValue();
-			if(newRadius != cType->wander_radius || newSpeed != cType->walk_speed) {
+			int newWalkSteps = walk_steps_field ? walk_steps_field->GetValue() : cType->walk_steps;
+			int newRestTicks = rest_ticks_field ? rest_ticks_field->GetValue() : cType->rest_ticks;
+			if(newRadius != cType->wander_radius || newSpeed != cType->walk_speed ||
+			   newWalkSteps != cType->walk_steps || newRestTicks != cType->rest_ticks) {
 				int answer = wxMessageBox(
-					wxString::Format("This will change wander behavior for ALL '%s' creatures on the map.\n\nWander Radius: %d -> %d\nWalk Speed: %d -> %d\n\nThis change cannot be undone. Continue?",
-						edit_creature->getName(), cType->wander_radius, newRadius, cType->walk_speed, newSpeed),
+					wxString::Format("This will change wander behavior for ALL '%s' creatures on the map.\n\nWander Radius: %d -> %d\nWalk Speed: %d -> %d\nWalk Steps: %d -> %d\nRest Duration: %d -> %d\n\nThis change cannot be undone. Continue?",
+						edit_creature->getName(), cType->wander_radius, newRadius, cType->walk_speed, newSpeed,
+						cType->walk_steps, newWalkSteps, cType->rest_ticks, newRestTicks),
 					"Confirm Behavior Change",
 					wxYES_NO | wxICON_QUESTION, this);
 				if(answer == wxYES) {
 					cType->wander_radius = newRadius;
 					cType->walk_speed = newSpeed;
+					cType->walk_steps = newWalkSteps;
+					cType->rest_ticks = newRestTicks;
 				}
 			}
 		}

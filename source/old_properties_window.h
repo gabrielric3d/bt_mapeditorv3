@@ -53,6 +53,8 @@ protected:
 	wxTextCtrl* description_field;
 	wxSpinCtrl* wander_radius_field;
 	wxSpinCtrl* walk_speed_field;
+	wxSpinCtrl* rest_ticks_field;
+	wxSpinCtrl* walk_steps_field;
 	std::vector<ContainerItemButton*> container_items;
 
 	friend class ContainerItemButton;

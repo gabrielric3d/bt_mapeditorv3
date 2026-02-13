@@ -37,7 +37,9 @@ CreatureType::CreatureType() :
 	name(""),
 	brush(nullptr),
 	wander_radius(0),
-	walk_speed(0)
+	walk_speed(0),
+	rest_ticks(120),
+	walk_steps(2)
 {
 	////
 }
@@ -51,7 +53,9 @@ CreatureType::CreatureType(const CreatureType& ct) :
 	outfit(ct.outfit),
 	brush(ct.brush),
 	wander_radius(ct.wander_radius),
-	walk_speed(ct.walk_speed)
+	walk_speed(ct.walk_speed),
+	rest_ticks(ct.rest_ticks),
+	walk_steps(ct.walk_steps)
 {
 	////
 }
@@ -67,6 +71,8 @@ CreatureType& CreatureType::operator=(const CreatureType& ct)
 	brush = ct.brush;
 	wander_radius = ct.wander_radius;
 	walk_speed = ct.walk_speed;
+	rest_ticks = ct.rest_ticks;
+	walk_steps = ct.walk_steps;
 	return *this;
 }
 
@@ -452,6 +458,8 @@ bool CreatureDatabase::loadBehaviors(const FileName& filename, wxString& error, 
 
 		type->wander_radius = node.attribute("wanderradius").as_int(0);
 		type->walk_speed = node.attribute("walkspeed").as_int(0);
+		type->rest_ticks = node.attribute("restticks").as_int(120);
+		type->walk_steps = node.attribute("walksteps").as_int(2);
 	}
 	return true;
 }
@@ -467,13 +475,15 @@ bool CreatureDatabase::saveBehaviors(const FileName& filename, wxString& error)
 
 	for(const auto& pair : creature_map) {
 		CreatureType* type = pair.second;
-		if(!type->hasWanderBehavior() && type->walk_speed == 0)
+		if(!type->hasWanderBehavior() && type->walk_speed == 0 && type->rest_ticks == 120 && type->walk_steps == 2)
 			continue;
 
 		pugi::xml_node node = root.append_child("creature");
 		node.append_attribute("name") = type->name.c_str();
 		node.append_attribute("wanderradius") = type->wander_radius;
 		node.append_attribute("walkspeed") = type->walk_speed;
+		node.append_attribute("restticks") = type->rest_ticks;
+		node.append_attribute("walksteps") = type->walk_steps;
 	}
 
 	if(!doc.save_file(filename.GetFullPath().mb_str())) {

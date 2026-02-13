@@ -103,6 +103,24 @@ int Creature::getWalkSpeed() const
 	return 0;
 }
 
+int Creature::getRestTicks() const
+{
+	const CreatureType* type = g_creatures[type_name];
+	if(type) {
+		return type->rest_ticks;
+	}
+	return 120;
+}
+
+int Creature::getWalkSteps() const
+{
+	const CreatureType* type = g_creatures[type_name];
+	if(type) {
+		return type->walk_steps;
+	}
+	return 2;
+}
+
 bool Creature::hasWanderBehavior() const
 {
 	const CreatureType* type = g_creatures[type_name];
