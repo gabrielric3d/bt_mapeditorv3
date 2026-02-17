@@ -5,6 +5,7 @@
         <item name="$Open..." hotkey="Ctrl+O" action="OPEN" help="Open another map."/>
         <item name="$Save" hotkey="Ctrl+S" action="SAVE" help="Save the current map."/>
         <item name="Save $As..." hotkey="Ctrl+Alt+S" action="SAVE_AS" help="Save the current map as a new file."/>
+        <item name="Save As $BTMap..." action="SAVE_AS_BTMAP" help="Save the current map as a BTMap directory for fast incremental saving."/>
         <item name="$Generate Map" action="GENERATE_MAP" help="Generate a new map."/>
         <item name="$Close" hotkey="Ctrl+Q" action="CLOSE" help="Closes the currently open map."/>
         <separator/>
@@ -16,6 +17,7 @@
         </menu>
         <menu name="$Export">
             <item name="$Export Minimap..." action="EXPORT_MINIMAP" help="Export minimap to an image file."/>
+            <item name="Export to $OTBM..." action="EXPORT_TO_OTBM" help="Export the current map to a single OTBM file for server use."/>
         </menu>
         <menu name="$Reload">
             <item name="Reload $All" hotkey="F5" action="RELOAD_DATA" help="Reloads all data files (sprites, items, brushes)."/>
@@ -33,6 +35,7 @@
         <separator/>
         <item name="Find $Item..." hotkey="Ctrl+F" action="FIND_ITEM" help="Find all instances of an item type the map."/>
         <item name="R$eplace Items..." hotkey="Ctrl+Shift+F" action="REPLACE_ITEMS" help="Replaces all occurrences of one item with another."/>
+        <item name="Set Action ID on Selection..." action="SET_ACTION_ID_ON_SELECTION" help="Set an Action ID on selected items, selected grounds, or both."/>
         <menu name="$Find on Map">
             <item name="Find $Everything" action="SEARCH_ON_MAP_EVERYTHING" help="Find all unique/action/text/container items."/>
             <separator/>
@@ -86,6 +89,7 @@
         <item name="$Cleanup..." action="MAP_CLEANUP" help="Removes all unknown items from the map."/>
         <item name="$Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
         <item name="$Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
+        <item name="Scan $Region..." action="SCAN_REGION" help="Scan a region for any content (items, ground, borders, etc)."/>
     </menu>
     <menu name="$Select">
         <item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
@@ -174,6 +178,9 @@
             <item name="Show $Stair Direction" action="SHOW_STAIR_DIRECTION" help="Show directional arrows on stairs and ramps."/>
             <item name="Show Camera $Paths" action="SHOW_CAMERA_PATHS" help="Show camera path overlays."/>
             <item name="Show $NPC Paths" action="SHOW_NPC_PATHS" help="Show NPC path overlays."/>
+            <item name="Show Creature $Wander Radius" action="SHOW_CREATURE_WANDER_RADIUS" help="Show wander radius overlays around creatures."/>
+            <item name="$Animate Creature Walk" action="ANIMATE_CREATURE_WALK" help="Animate creatures walking within their wander radius."/>
+            <item name="Show C$hunk Boundaries" action="SHOW_CHUNK_BOUNDARIES" help="Show grid lines at 256-tile chunk boundaries."/>
         </menu>
     </menu>
     <menu name="$Window">
@@ -185,11 +192,11 @@
         <item name="$Structure Manager" action="STRUCTURE_MANAGER" help="Save and place reusable structures."/>
         <item name="Brush $Tips" action="BRUSH_TIPS" help="Shows brush tips and shortcuts."/>
         <item name="$Area Decoration" action="AREA_DECORATION" help="Opens the area decoration tool for placing decorative items in regions."/>
+        <item name="Auto Creature $Spawn" action="AREA_CREATURE_SPAWN" help="Opens the automatic creature spawn tool for grouped placement by area presets."/>
         <item name="$New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
         <separator/>
         <item name="$Terrain Palette" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>
         <item name="$Doodad Palette" hotkey="D" action="SELECT_DOODAD" help="Select the Doodad palette."/>
-        <item name="Auto Creature $Spawn" action="AREA_CREATURE_SPAWN" help="Opens the automatic creature spawn tool for grouped placement by area presets."/>
         <item name="$Item Palette" hotkey="I" action="SELECT_ITEM" help="Select the Item palette."/>
         <item name="$House Palette" hotkey="H" action="SELECT_HOUSE" help="Select the House palette."/>
         <item name="$Creature Palette" hotkey="C" action="SELECT_CREATURE" help="Select the Creature palette."/>
@@ -210,6 +217,9 @@
     </menu>
     -->
     <menu name="F$loor">
+        <item name="Floor $Fading" action="FLOOR_FADING" help="Smooth fade transition when changing floors."/>
+        <item name="Floor Fading $Settings..." action="FLOOR_FADING_SETTINGS" help="Configure floor fading transition."/>
+        <separator/>
         <item name="Floor 0" action="FLOOR_0" help=""/>
         <item name="Floor 1" action="FLOOR_1" help=""/>
         <item name="Floor 2" action="FLOOR_2" help=""/>
