@@ -28,10 +28,12 @@
 #include <wx/wfstream.h>
 #include <wx/txtstrm.h>
 #include <wx/tokenzr.h>
+#include <vector>
 
 BEGIN_EVENT_TABLE(WaypointPalettePanel, PalettePanel)
 	EVT_BUTTON(PALETTE_WAYPOINT_ADD_WAYPOINT, WaypointPalettePanel::OnClickAddWaypoint)
 	EVT_BUTTON(PALETTE_WAYPOINT_REMOVE_WAYPOINT, WaypointPalettePanel::OnClickRemoveWaypoint)
+	EVT_BUTTON(PALETTE_WAYPOINT_CLEAR_WAYPOINTS, WaypointPalettePanel::OnClickClearWaypoints)
 	EVT_BUTTON(PALETTE_WAYPOINT_IMPORT, WaypointPalettePanel::OnClickImportWaypoints)
 
 	EVT_LIST_BEGIN_LABEL_EDIT(PALETTE_WAYPOINT_LISTBOX, WaypointPalettePanel::OnBeginEditWaypointLabel)
@@ -54,6 +56,7 @@ WaypointPalettePanel::WaypointPalettePanel(wxWindow* parent, wxWindowID id) :
 	wxSizer* tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
 	tmpsizer->Add(add_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_ADD_WAYPOINT, "Add", wxDefaultPosition, wxSize(50, -1)), 1, wxEXPAND);
 	tmpsizer->Add(remove_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_REMOVE_WAYPOINT, "Remove", wxDefaultPosition, wxSize(70, -1)), 1, wxEXPAND);
+	tmpsizer->Add(clear_waypoints_button = newd wxButton(this, PALETTE_WAYPOINT_CLEAR_WAYPOINTS, "Clear", wxDefaultPosition, wxSize(60, -1)), 1, wxEXPAND);
 	tmpsizer->Add(import_waypoint_button = newd wxButton(this, PALETTE_WAYPOINT_IMPORT, "Import", wxDefaultPosition, wxSize(60, -1)), 1, wxEXPAND);
 	sidesizer->Add(tmpsizer, 0, wxEXPAND);
 
@@ -135,11 +138,13 @@ void WaypointPalettePanel::OnUpdate()
 		waypoint_list->Enable(false);
 		add_waypoint_button->Enable(false);
 		remove_waypoint_button->Enable(false);
+		clear_waypoints_button->Enable(false);
 		import_waypoint_button->Enable(false);
 	} else {
 		waypoint_list->Enable(true);
 		add_waypoint_button->Enable(true);
 		remove_waypoint_button->Enable(true);
+		clear_waypoints_button->Enable(true);
 		import_waypoint_button->Enable(true);
 
 		Waypoints& waypoints = map->waypoints;
@@ -244,6 +249,36 @@ void WaypointPalettePanel::OnClickRemoveWaypoint(wxCommandEvent& event)
 		waypoint_list->DeleteItem(item);
 		refresh_timer.Start(300, true);
 	}
+}
+
+void WaypointPalettePanel::OnClickClearWaypoints(wxCommandEvent& WXUNUSED(event))
+{
+	if(!map || map->waypoints.begin() == map->waypoints.end())
+		return;
+
+	if(g_gui.PopupDialog(this, "Clear Waypoints",
+		"Are you sure you want to remove all waypoints?",
+		wxYES | wxNO | wxICON_WARNING) != wxID_YES) {
+		return;
+	}
+
+	std::vector<std::string> waypoint_names;
+
+	for(WaypointMap::const_iterator iter = map->waypoints.begin(); iter != map->waypoints.end(); ++iter) {
+		Waypoint* waypoint = iter->second;
+		if(waypoint) {
+			if(map->getTile(waypoint->pos))
+				map->getTileL(waypoint->pos)->decreaseWaypointCount();
+			waypoint_names.push_back(waypoint->name);
+		}
+	}
+
+	for(const std::string& waypoint_name : waypoint_names)
+		map->waypoints.removeWaypoint(waypoint_name);
+
+	g_gui.waypoint_brush->setWaypoint(nullptr);
+	waypoint_list->DeleteAllItems();
+	refresh_timer.Start(300, true);
 }
 
 void WaypointPalettePanel::OnClickImportWaypoints(wxCommandEvent& event)

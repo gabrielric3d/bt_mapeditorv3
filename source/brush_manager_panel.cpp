@@ -369,6 +369,16 @@ void BrushManagerPanel::CreateFilterBar()
 	search_box = newd wxTextCtrl(this, BRUSH_MANAGER_SEARCH, wxEmptyString,
 		wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	search_box->SetHint("Search brushes...");
+
+	// Disable global hotkeys when search box has focus to prevent interference while typing
+	search_box->Bind(wxEVT_SET_FOCUS, [](wxFocusEvent& event) {
+		g_gui.DisableHotkeys();
+		event.Skip();
+	});
+	search_box->Bind(wxEVT_KILL_FOCUS, [](wxFocusEvent& event) {
+		g_gui.EnableHotkeys();
+		event.Skip();
+	});
 }
 
 void BrushManagerPanel::CreateBrushList()

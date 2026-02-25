@@ -26,6 +26,48 @@
 #include "application.h"
 #include "palette_waypoints.h"
 
+namespace {
+
+enum class TechnicalTileKind {
+	None,
+	Stairs,
+	Walkable,
+	NotWalkable,
+};
+
+TechnicalTileKind GetTechnicalTileKind(Brush* brush)
+{
+	if(!brush) {
+		return TechnicalTileKind::None;
+	}
+
+	if(brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			switch(raw->getItemID()) {
+				case 459: return TechnicalTileKind::Stairs;
+				case 460: return TechnicalTileKind::Walkable;
+				case 1548: return TechnicalTileKind::NotWalkable;
+				default: break;
+			}
+		}
+	}
+
+	const std::string brush_name = as_lower_str(brush->getName());
+	if(brush_name.find("invisible walkable") != std::string::npos ||
+	   brush_name.find("transparent walkable") != std::string::npos) {
+		return TechnicalTileKind::Walkable;
+	}
+	if(brush_name.find("transparent not walkable") != std::string::npos ||
+	   brush_name.find("transparency tile") != std::string::npos) {
+		return TechnicalTileKind::NotWalkable;
+	}
+
+	return TechnicalTileKind::None;
+}
+
+}
+
 // ============================================================================
 // Palette Panel
 
@@ -851,19 +893,13 @@ BrushButton::BrushButton(wxWindow* parent, Brush* _brush, RenderSize sz, uint32_
 	SetSprite(look_id);
 	SetToolTip(wxstr(brush->getName()));
 
-	// Set fallback color for technical tiles (invisible walkable/blocking tiles)
-	// Check by server ID for RAWBrush or by name for other brush types
-	std::string brush_name = brush->getName();
-	bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
-	bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
-	bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
-
-	if (is_stairs) {
-		SetFallbackColor(wxColor(200, 200, 0)); // Yellow for stairs
-	} else if (is_walkable) {
-		SetFallbackColor(wxColor(200, 0, 0)); // Red for transparent walkable
-	} else if (is_not_walkable) {
-		SetFallbackColor(wxColor(0, 200, 200)); // Cyan for transparent not walkable
+	TechnicalTileKind technical_kind = GetTechnicalTileKind(brush);
+	if(technical_kind == TechnicalTileKind::Stairs) {
+		SetFallbackColor(wxColor(200, 200, 0));
+	} else if(technical_kind == TechnicalTileKind::Walkable) {
+		SetFallbackColor(wxColor(200, 0, 0));
+	} else if(technical_kind == TechnicalTileKind::NotWalkable) {
+		SetFallbackColor(wxColor(0, 200, 200));
 	}
 }
 

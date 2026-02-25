@@ -15,44 +15,32 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
-#ifndef RME_COPYBUFFER_H_
-#define RME_COPYBUFFER_H_
+#ifndef RME_FLOOR_FADING_DIALOG_H_
+#define RME_FLOOR_FADING_DIALOG_H_
 
-#include <wx/dataobj.h>
-
-#include "position.h"
-#include "basemap.h"
-
-class Editor;
-
-class CopyBuffer
+class FloorFadingDialog : public wxDialog
 {
 public:
-	CopyBuffer();
-	virtual ~CopyBuffer();
-
-	// In-editor implantation
-	void copy(Editor& editor, int floor, bool silent = false);
-	void cut(Editor& editor, int floor);
-	void paste(Editor& editor, const Position& toPosition);
-	// Rotate the copybuffer (clockwise), expressed in 90-degree steps.
-	// quarterTurns: 1 = 90 CW, 2 = 180, 3 = 90 CCW (-1), etc.
-	void rotate(int quarterTurns);
-	bool canPaste() const;
-	// Returns the upper-left corner of the copybuffer
-	Position getPosition() const;
-
-	// Clears the copybuffer (eg. resets it)
-	void clear();
-
-	size_t GetTileCount();
-
-	BaseMap& getBufferMap();
-	void setBuffer(BaseMap* newTiles, const Position& newCopyPos);
+	explicit FloorFadingDialog(wxWindow* parent);
 
 private:
-	Position copyPos;
-	BaseMap* tiles;
+	void CreateControls();
+	void Apply();
+
+	void OnOK(wxCommandEvent& event);
+	void OnCancel(wxCommandEvent& event);
+	void OnDurationSlider(wxCommandEvent& event);
+	void OnOpacitySlider(wxCommandEvent& event);
+
+	wxCheckBox* m_enabledCheck;
+	wxRadioBox* m_modeRadio;
+	wxSlider* m_durationSlider;
+	wxStaticText* m_durationLabel;
+	wxChoice* m_easingChoice;
+	wxSlider* m_opacitySlider;
+	wxStaticText* m_opacityLabel;
+
+	DECLARE_EVENT_TABLE()
 };
 
-#endif
+#endif // RME_FLOOR_FADING_DIALOG_H_

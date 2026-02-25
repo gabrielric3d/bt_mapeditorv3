@@ -341,16 +341,18 @@ void Map::setMapDescription(const std::string& new_description)
 	description = new_description;
 }
 
-void Map::setHouseFilename(const std::string&  new_housefile)
+void Map::setHouseFilename(const std::string&  new_housefile, bool keep_unnamed)
 {
 	housefile = new_housefile;
-	unnamed = false;
+	if(!keep_unnamed)
+		unnamed = false;
 }
 
-void Map::setSpawnFilename(const std::string&  new_spawnfile)
+void Map::setSpawnFilename(const std::string&  new_spawnfile, bool keep_unnamed)
 {
 	spawnfile = new_spawnfile;
-	unnamed = false;
+	if(!keep_unnamed)
+		unnamed = false;
 }
 
 bool Map::addSpawn(Tile* tile)

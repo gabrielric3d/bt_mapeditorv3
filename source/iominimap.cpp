@@ -42,7 +42,7 @@ IOMinimap::IOMinimap(Editor* editor, MinimapExportFormat format, MinimapExportMo
 
 bool IOMinimap::saveMinimap(const std::string& directory, const std::string& name, int floor)
 {
-	if(m_mode == MinimapExportMode::AllFloors || m_mode == MinimapExportMode::SelectedArea) {
+	if(m_mode == MinimapExportMode::AllFloors || m_mode == MinimapExportMode::SelectedArea || m_mode == MinimapExportMode::AreaView) {
 		floor = -1;
 	} else if(m_mode == MinimapExportMode::GroundFloor) {
 		floor = rme::MapGroundLayer;
@@ -139,11 +139,15 @@ bool IOMinimap::saveImage(const std::string& directory, const std::string& name)
 			case MinimapExportMode::AllFloors:
 			case MinimapExportMode::GroundFloor:
 			case MinimapExportMode::SpecificFloor: {
-				exportMinimap(directory);
+				exportMinimap(directory, name);
 				break;
 			}
 			case MinimapExportMode::SelectedArea: {
 				exportSelection(directory, name);
+				break;
+			}
+			case MinimapExportMode::AreaView: {
+				exportAreaView(directory, name);
 				break;
 			}
 		}
@@ -156,24 +160,28 @@ bool IOMinimap::saveImage(const std::string& directory, const std::string& name)
 	return true;
 }
 
-bool IOMinimap::exportMinimap(const std::string& directory)
+bool IOMinimap::exportMinimap(const std::string& directory, const std::string& name)
 {
 	auto& map = m_editor->getMap();
 	if(map.size() == 0) {
 		return true;
 	}
 
-	wxRect bounds[rme::MapLayers];
 	int min_z = m_floor == -1 ? 0 : m_floor;
 	int max_z = m_floor == -1 ? rme::MapMaxLayer : m_floor;
 
-	for (size_t z = min_z; z <= max_z; z++) {
-		auto& rect = bounds[z];
-		rect.x = rme::MapMaxWidth + 1;
-		rect.y = rme::MapMaxHeight + 1;
-		rect.width = 0;
-		rect.height = 0;
-	}
+	// Find bounds per floor
+	struct FloorBounds {
+		int min_x = rme::MapMaxWidth + 1;
+		int min_y = rme::MapMaxHeight + 1;
+		int max_x = 0;
+		int max_y = 0;
+		bool valid() const { return max_x >= min_x && max_y >= min_y; }
+	};
+	FloorBounds bounds[rme::MapLayers];
+
+	int tiles_iterated = 0;
+	int total_tiles = static_cast<int>(map.size());
 
 	for(auto it = map.begin(); it != map.end(); ++it) {
 		auto tile = (*it)->get();
@@ -182,72 +190,213 @@ bool IOMinimap::exportMinimap(const std::string& directory)
 		}
 
 		const auto& position = tile->getPosition();
-		auto& rect = bounds[position.z];
-		if(position.x < rect.x) {
-			rect.x = position.x;
-		}
-		if(position.y < rect.y) {
-			rect.y = position.y;
-		}
-		if (position.x > rect.width) {
-			rect.width = position.x;
-		}
-		if (position.y > rect.height) {
-			rect.height = position.y;
-		}
-	}
-
-	constexpr int image_size = 1024;
-	constexpr int pixels_size = image_size * image_size * rme::PixelFormatRGB;
-	uint8_t* pixels = new uint8_t[pixels_size];
-	auto image = new wxImage(image_size, image_size, pixels, true);
-
-	for(size_t z = min_z; z <= max_z; z++) {
-		auto& rect = bounds[z];
-		if(rect.IsEmpty()) {
+		if(position.z < min_z || position.z > max_z) {
 			continue;
 		}
 
-		for (int h = 0; h < rme::MapMaxHeight; h += image_size) {
-			for (int w = 0; w < rme::MapMaxWidth; w += image_size) {
-				if (w < rect.x || w > rect.width || h < rect.y || h > rect.height) {
+		auto& b = bounds[position.z];
+		if(position.x < b.min_x) b.min_x = position.x;
+		if(position.y < b.min_y) b.min_y = position.y;
+		if(position.x > b.max_x) b.max_x = position.x;
+		if(position.y > b.max_y) b.max_y = position.y;
+	}
+
+	wxString extension = m_format == MinimapExportFormat::Png ? "png" : "bmp";
+	wxBitmapType type = m_format == MinimapExportFormat::Png ? wxBITMAP_TYPE_PNG : wxBITMAP_TYPE_BMP;
+
+	for(int z = min_z; z <= max_z; z++) {
+		auto& b = bounds[z];
+		if(!b.valid()) {
+			continue;
+		}
+
+		int image_width = b.max_x - b.min_x + 1;
+		int image_height = b.max_y - b.min_y + 1;
+		size_t pixels_size = static_cast<size_t>(image_width) * image_height * rme::PixelFormatRGB;
+
+		uint8_t* pixels = new uint8_t[pixels_size];
+		memset(pixels, 0, pixels_size);
+
+		bool empty = true;
+		for(auto it = map.begin(); it != map.end(); ++it) {
+			auto tile = (*it)->get();
+			if(!tile || (!tile->ground && tile->items.empty())) {
+				continue;
+			}
+
+			const auto& position = tile->getPosition();
+			if(position.z != z) {
+				continue;
+			}
+
+			if (m_updateLoadbar) {
+				++tiles_iterated;
+				if(tiles_iterated % 8192 == 0) {
+					g_gui.SetLoadDone(int(tiles_iterated / double(total_tiles) * 90.0));
+				}
+			}
+
+			uint8_t color = tile->getMiniMapColor();
+			size_t index = (static_cast<size_t>(position.y - b.min_y) * image_width + (position.x - b.min_x)) * rme::PixelFormatRGB;
+			pixels[index  ] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
+			pixels[index+1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);  // green
+			pixels[index+2] = (uint8_t)(color % 6 * 51);                        // blue
+			empty = false;
+		}
+
+		if (!empty) {
+			wxImage image(image_width, image_height, pixels, true);
+			wxFileName file = wxString::Format("%s-%d.%s", name, z, extension);
+			file.Normalize(wxPATH_NORM_ALL, directory);
+			image.SaveFile(file.GetFullPath(), type);
+		}
+
+		delete[] pixels;
+	}
+
+	return true;
+}
+
+bool IOMinimap::exportAreaView(const std::string& directory, const std::string& name)
+{
+	auto& map = m_editor->getMap();
+	if(map.size() == 0) {
+		return true;
+	}
+
+	int from_x = std::min(m_fromPos.x, m_toPos.x);
+	int from_y = std::min(m_fromPos.y, m_toPos.y);
+	int to_x = std::max(m_fromPos.x, m_toPos.x);
+	int to_y = std::max(m_fromPos.y, m_toPos.y);
+
+	int base_width = to_x - from_x + 1;
+	int base_height = to_y - from_y + 1;
+	int ground_z = rme::MapGroundLayer; // 7
+
+	wxString extension = m_format == MinimapExportFormat::Png ? "png" : "bmp";
+	wxBitmapType type = m_format == MinimapExportFormat::Png ? wxBITMAP_TYPE_PNG : wxBITMAP_TYPE_BMP;
+
+	int tiles_iterated = 0;
+	int total_tiles = static_cast<int>(map.size());
+
+	if(m_mergeFloors) {
+		// Merged: single image with all floors composited
+		// Upper floors shift by -1x, -1y per level above ground
+		int total_offset = ground_z;
+		int image_width = base_width + total_offset;
+		int image_height = base_height + total_offset;
+		size_t pixels_size = static_cast<size_t>(image_width) * image_height * rme::PixelFormatRGB;
+
+		uint8_t* pixels = new uint8_t[pixels_size];
+		memset(pixels, 0, pixels_size);
+
+		// Render order: floor 7 (base), then 6 on top, 5 on top, ... 0 on top
+		for(int z = ground_z; z >= 0; z--) {
+			int offset = ground_z - z; // z=7 -> 0, z=6 -> 1, z=0 -> 7
+			int area_from_x = from_x - offset;
+			int area_from_y = from_y - offset;
+			int area_to_x = to_x - offset;
+			int area_to_y = to_y - offset;
+
+			for(auto it = map.begin(); it != map.end(); ++it) {
+				auto tile = (*it)->get();
+				if(!tile || (!tile->ground && tile->items.empty())) {
 					continue;
 				}
 
-				bool empty = true;
-				memset(pixels, 0, pixels_size);
+				const auto& position = tile->getPosition();
+				if(position.z != z) {
+					continue;
+				}
 
-				int index = 0;
-				for (int y = 0; y < image_size; y++) {
-					for (int x = 0; x < image_size; x++) {
-						auto tile = map.getTile(w + x, h + y, z);
-						if(!tile || (!tile->ground && tile->items.empty())) {
-							index += rme::PixelFormatRGB;
-							continue;
-						}
-						uint8_t color = tile->getMiniMapColor();
-						pixels[index  ] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51); // red
-						pixels[index+1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);  // green
-						pixels[index+2] = (uint8_t)(color % 6 * 51);                        // blue
-						index += rme::PixelFormatRGB;
-						empty = false;
+				if(position.x < area_from_x || position.x > area_to_x ||
+				   position.y < area_from_y || position.y > area_to_y) {
+					continue;
+				}
+
+				if (m_updateLoadbar) {
+					++tiles_iterated;
+					if(tiles_iterated % 8192 == 0) {
+						g_gui.SetLoadDone(int(tiles_iterated / double(total_tiles) * 90.0));
 					}
 				}
 
-				if (!empty) {
-					image->SetData(pixels, true);
-					wxString extension = m_format == MinimapExportFormat::Png ? "png" : "bmp";
-					wxBitmapType type = m_format == MinimapExportFormat::Png ? wxBITMAP_TYPE_PNG : wxBITMAP_TYPE_BMP; 
-					wxFileName file = wxString::Format("%d-%d-%d.%s", h, w, z, extension);
-					file.Normalize(wxPATH_NORM_ALL, directory);
-					image->SaveFile(file.GetFullPath(), type);
-				}
+				int img_x = position.x - area_from_x;
+				int img_y = position.y - area_from_y;
+
+				uint8_t color = tile->getMiniMapColor();
+				size_t index = (static_cast<size_t>(img_y) * image_width + img_x) * rme::PixelFormatRGB;
+				pixels[index  ] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51);
+				pixels[index+1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);
+				pixels[index+2] = (uint8_t)(color % 6 * 51);
 			}
+		}
+
+		wxImage image(image_width, image_height, pixels, true);
+		wxFileName file = wxString::Format("%s-areaview.%s", name, extension);
+		file.Normalize(wxPATH_NORM_ALL, directory);
+		image.SaveFile(file.GetFullPath(), type);
+		delete[] pixels;
+	} else {
+		// Separate: one image per floor
+		for(int z = 0; z <= ground_z; z++) {
+			int offset = ground_z - z;
+			int area_from_x = from_x - offset;
+			int area_from_y = from_y - offset;
+			int area_to_x = to_x - offset;
+			int area_to_y = to_y - offset;
+			int image_width = area_to_x - area_from_x + 1;
+			int image_height = area_to_y - area_from_y + 1;
+			size_t pixels_size = static_cast<size_t>(image_width) * image_height * rme::PixelFormatRGB;
+
+			uint8_t* pixels = new uint8_t[pixels_size];
+			memset(pixels, 0, pixels_size);
+
+			bool empty = true;
+			for(auto it = map.begin(); it != map.end(); ++it) {
+				auto tile = (*it)->get();
+				if(!tile || (!tile->ground && tile->items.empty())) {
+					continue;
+				}
+
+				const auto& position = tile->getPosition();
+				if(position.z != z) {
+					continue;
+				}
+
+				if(position.x < area_from_x || position.x > area_to_x ||
+				   position.y < area_from_y || position.y > area_to_y) {
+					continue;
+				}
+
+				if (m_updateLoadbar) {
+					++tiles_iterated;
+					if(tiles_iterated % 8192 == 0) {
+						g_gui.SetLoadDone(int(tiles_iterated / double(total_tiles) * 90.0));
+					}
+				}
+
+				int img_x = position.x - area_from_x;
+				int img_y = position.y - area_from_y;
+
+				uint8_t color = tile->getMiniMapColor();
+				size_t index = (static_cast<size_t>(img_y) * image_width + img_x) * rme::PixelFormatRGB;
+				pixels[index  ] = (uint8_t)(static_cast<int>(color / 36) % 6 * 51);
+				pixels[index+1] = (uint8_t)(static_cast<int>(color / 6) % 6 * 51);
+				pixels[index+2] = (uint8_t)(color % 6 * 51);
+				empty = false;
+			}
+
+			if(!empty) {
+				wxImage image(image_width, image_height, pixels, true);
+				wxFileName file = wxString::Format("%s-%d.%s", name, z, extension);
+				file.Normalize(wxPATH_NORM_ALL, directory);
+				image.SaveFile(file.GetFullPath(), type);
+			}
+			delete[] pixels;
 		}
 	}
 
-	image->Destroy();
-	delete[] pixels;
 	return true;
 }
 

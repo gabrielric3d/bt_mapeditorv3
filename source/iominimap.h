@@ -30,7 +30,8 @@ enum class MinimapExportMode {
 	AllFloors,
 	GroundFloor,
 	SpecificFloor,
-	SelectedArea
+	SelectedArea,
+	AreaView
 };
 
 enum {
@@ -73,13 +74,17 @@ public:
 
 	bool saveMinimap(const std::string& directory, const std::string& name, int floor = -1);
 
+	void setArea(const Position& from, const Position& to) { m_fromPos = from; m_toPos = to; }
+	void setMergeFloors(bool merge) { m_mergeFloors = merge; }
+
 	const std::string& getError() const noexcept { return m_error; }
 
 private:
 	bool saveOtmm(const wxFileName& file);
 	bool saveImage(const std::string& directory, const std::string& name);
-	bool exportMinimap(const std::string& directory);
+	bool exportMinimap(const std::string& directory, const std::string& name);
 	bool exportSelection(const std::string& directory, const std::string& name);
+	bool exportAreaView(const std::string& directory, const std::string& name);
 	void readBlocks();
 	inline uint32_t getBlockIndex(const Position& pos) {
 		return ((pos.y / MMBLOCK_SIZE) * (65536 / MMBLOCK_SIZE)) + (pos.x / MMBLOCK_SIZE);
@@ -89,7 +94,10 @@ private:
 	MinimapExportFormat m_format;
 	MinimapExportMode m_mode;
 	bool m_updateLoadbar = false;
+	bool m_mergeFloors = false;
 	int m_floor = -1;
+	Position m_fromPos;
+	Position m_toPos;
 	std::unordered_map<uint32_t, MinimapBlock> m_blocks[rme::MapLayers];
 	std::string m_error;
 };

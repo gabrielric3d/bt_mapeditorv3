@@ -50,6 +50,55 @@ int GetConfiguredListIconSize()
 	return size;
 }
 
+enum class TechnicalTileKind {
+	None,
+	Stairs,
+	Walkable,
+	NotWalkable,
+};
+
+TechnicalTileKind GetTechnicalTileKind(Brush* brush)
+{
+	if(!brush) {
+		return TechnicalTileKind::None;
+	}
+
+	if(brush->isRaw()) {
+		RAWBrush* raw = brush->asRaw();
+		if(raw) {
+			switch(raw->getItemID()) {
+				case 459: return TechnicalTileKind::Stairs;
+				case 460: return TechnicalTileKind::Walkable;
+				case 1548: return TechnicalTileKind::NotWalkable;
+				default: break;
+			}
+		}
+	}
+
+	const std::string brush_name = as_lower_str(brush->getName());
+	if(brush_name.find("invisible walkable") != std::string::npos ||
+	   brush_name.find("transparent walkable") != std::string::npos) {
+		return TechnicalTileKind::Walkable;
+	}
+	if(brush_name.find("transparent not walkable") != std::string::npos ||
+	   brush_name.find("transparency tile") != std::string::npos) {
+		return TechnicalTileKind::NotWalkable;
+	}
+
+	return TechnicalTileKind::None;
+}
+
+wxColor GetTechnicalTileColor(TechnicalTileKind kind)
+{
+	switch(kind) {
+		case TechnicalTileKind::Stairs: return wxColor(200, 200, 0);
+		case TechnicalTileKind::Walkable: return wxColor(200, 0, 0);
+		case TechnicalTileKind::NotWalkable: return wxColor(0, 200, 200);
+		case TechnicalTileKind::None: break;
+	}
+	return wxColor();
+}
+
 }
 
 // ============================================================================
@@ -584,6 +633,8 @@ BEGIN_EVENT_TABLE(BrushIconBox, wxScrolledWindow)
 	EVT_RIGHT_DOWN(BrushIconBox::OnRightClick)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushIconBox::OnApplyReplaceBox1)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushIconBox::OnApplyReplaceBox2)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX1, BrushIconBox::OnApplyBrushReplaceBox1)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX2, BrushIconBox::OnApplyBrushReplaceBox2)
 	EVT_MENU(PALETTE_POPUP_MENU_COPY_SERVER_ID, BrushIconBox::OnCopyServerID)
 	EVT_MENU(PALETTE_POPUP_MENU_COPY_CLIENT_ID, BrushIconBox::OnCopyClientID)
 END_EVENT_TABLE()
@@ -765,17 +816,24 @@ void BrushIconBox::OnMouseMotion(wxMouseEvent& event)
 void BrushIconBox::OnRightClick(wxMouseEvent& event)
 {
 	Brush* brush = GetSelectedBrush();
-	if(brush && brush->isRaw()) {
+	if(!brush) return;
+
+	wxMenu menu;
+
+	if(brush->isRaw()) {
 		RAWBrush* raw = brush->asRaw();
 		if(raw) {
-			wxMenu menu;
 			menu.Append(PALETTE_POPUP_MENU_COPY_SERVER_ID, wxString::Format("Copy Server ID (%d)", raw->getItemID()));
 			menu.Append(PALETTE_POPUP_MENU_COPY_CLIENT_ID, wxString::Format("Copy Client ID (%d)", raw->getLookID()));
 			menu.AppendSeparator();
-			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
-			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1 (Original)");
+			menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2 (Replacement)");
 			PopupMenu(&menu, event.GetPosition());
 		}
+	} else if(brush->isGround() || brush->isCarpet()) {
+		menu.Append(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX1, "Apply to Replace Box 1 (Original)");
+		menu.Append(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX2, "Apply to Replace Box 2 (Replacement)");
+		PopupMenu(&menu, event.GetPosition());
 	}
 }
 
@@ -790,7 +848,7 @@ void BrushIconBox::OnApplyReplaceBox1(wxCommandEvent& WXUNUSED(event))
 			if(tab) {
 				MapWindow* window = dynamic_cast<MapWindow*>(tab);
 				if(window) {
-					window->ApplyItemToReplaceBox(itemId, 1);
+					window->ApplyItemToReplaceBoxOriginal(itemId);
 				}
 			}
 		}
@@ -808,8 +866,36 @@ void BrushIconBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 			if(tab) {
 				MapWindow* window = dynamic_cast<MapWindow*>(tab);
 				if(window) {
-					window->ApplyItemToReplaceBox(itemId, 2);
+					window->ApplyItemToReplaceBoxReplacement(itemId);
 				}
+			}
+		}
+	}
+}
+
+void BrushIconBox::OnApplyBrushReplaceBox1(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && (brush->isGround() || brush->isCarpet())) {
+		MapTab* tab = g_gui.GetCurrentMapTab();
+		if(tab) {
+			MapWindow* window = dynamic_cast<MapWindow*>(tab);
+			if(window) {
+				window->ApplyBrushToReplaceBoxOriginal(brush);
+			}
+		}
+	}
+}
+
+void BrushIconBox::OnApplyBrushReplaceBox2(wxCommandEvent& WXUNUSED(event))
+{
+	Brush* brush = GetSelectedBrush();
+	if(brush && (brush->isGround() || brush->isCarpet())) {
+		MapTab* tab = g_gui.GetCurrentMapTab();
+		if(tab) {
+			MapWindow* window = dynamic_cast<MapWindow*>(tab);
+			if(window) {
+				window->ApplyBrushToReplaceBoxReplacement(brush);
 			}
 		}
 	}
@@ -853,6 +939,8 @@ BEGIN_EVENT_TABLE(BrushListBox, wxVListBox)
 	EVT_RIGHT_DOWN(BrushListBox::OnRightClick)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, BrushListBox::OnApplyReplaceBox1)
 	EVT_MENU(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, BrushListBox::OnApplyReplaceBox2)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX1, BrushListBox::OnApplyBrushReplaceBox1)
+	EVT_MENU(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX2, BrushListBox::OnApplyBrushReplaceBox2)
 	EVT_MENU(PALETTE_POPUP_MENU_COPY_SERVER_ID, BrushListBox::OnCopyServerID)
 	EVT_MENU(PALETTE_POPUP_MENU_COPY_CLIENT_ID, BrushListBox::OnCopyClientID)
 END_EVENT_TABLE()
@@ -923,22 +1011,9 @@ void BrushListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t n) const
 	Brush* brush = tileset->brushlist[n];
 	int look_id = brush->getLookID();
 
-	// Check for technical tiles (invisible walkable/blocking tiles) by name
-	std::string brush_name = brush->getName();
-	bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
-	bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
-	bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
-
-	if (is_stairs || is_walkable || is_not_walkable) {
-		// Draw colored square for technical tiles
-		wxColor techColor;
-		if (is_stairs) {
-			techColor = wxColor(200, 200, 0); // Yellow for stairs
-		} else if (is_walkable) {
-			techColor = wxColor(200, 0, 0); // Red for transparent walkable
-		} else if (is_not_walkable) {
-			techColor = wxColor(0, 200, 200); // Cyan for transparent not walkable
-		}
+	TechnicalTileKind technical_kind = GetTechnicalTileKind(brush);
+	if(technical_kind != TechnicalTileKind::None) {
+		wxColor techColor = GetTechnicalTileColor(technical_kind);
 		dc.SetBrush(wxBrush(techColor));
 		dc.SetPen(wxPen(techColor, 1));
 		dc.DrawRectangle(icon_x + 2, icon_y + 2, icon_pixel_size - 4, icon_pixel_size - 4);
@@ -1033,17 +1108,24 @@ void BrushListBox::OnRightClick(wxMouseEvent& event)
 	int n = GetSelection();
 	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
 		Brush* brush = tileset->brushlist[n];
-		if(brush && brush->isRaw()) {
+		if(!brush) return;
+
+		wxMenu menu;
+
+		if(brush->isRaw()) {
 			RAWBrush* raw = brush->asRaw();
 			if(raw) {
-				wxMenu menu;
 				menu.Append(PALETTE_POPUP_MENU_COPY_SERVER_ID, wxString::Format("Copy Server ID (%d)", raw->getItemID()));
 				menu.Append(PALETTE_POPUP_MENU_COPY_CLIENT_ID, wxString::Format("Copy Client ID (%d)", raw->getLookID()));
 				menu.AppendSeparator();
-				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1");
-				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2");
+				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX1, "Apply to Replace Box 1 (Original)");
+				menu.Append(PALETTE_POPUP_MENU_APPLY_REPLACE_BOX2, "Apply to Replace Box 2 (Replacement)");
 				PopupMenu(&menu, event.GetPosition());
 			}
+		} else if(brush->isGround() || brush->isCarpet()) {
+			menu.Append(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX1, "Apply to Replace Box 1 (Original)");
+			menu.Append(PALETTE_POPUP_MENU_APPLY_BRUSH_REPLACE_BOX2, "Apply to Replace Box 2 (Replacement)");
+			PopupMenu(&menu, event.GetPosition());
 		}
 	}
 }
@@ -1061,7 +1143,7 @@ void BrushListBox::OnApplyReplaceBox1(wxCommandEvent& WXUNUSED(event))
 				if(tab) {
 					MapWindow* window = dynamic_cast<MapWindow*>(tab);
 					if(window) {
-						window->ApplyItemToReplaceBox(itemId, 1);
+						window->ApplyItemToReplaceBoxOriginal(itemId);
 					}
 				}
 			}
@@ -1082,8 +1164,42 @@ void BrushListBox::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 				if(tab) {
 					MapWindow* window = dynamic_cast<MapWindow*>(tab);
 					if(window) {
-						window->ApplyItemToReplaceBox(itemId, 2);
+						window->ApplyItemToReplaceBoxReplacement(itemId);
 					}
+				}
+			}
+		}
+	}
+}
+
+void BrushListBox::OnApplyBrushReplaceBox1(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && (brush->isGround() || brush->isCarpet())) {
+			MapTab* tab = g_gui.GetCurrentMapTab();
+			if(tab) {
+				MapWindow* window = dynamic_cast<MapWindow*>(tab);
+				if(window) {
+					window->ApplyBrushToReplaceBoxOriginal(brush);
+				}
+			}
+		}
+	}
+}
+
+void BrushListBox::OnApplyBrushReplaceBox2(wxCommandEvent& WXUNUSED(event))
+{
+	int n = GetSelection();
+	if(n != wxNOT_FOUND && tileset && (size_t)n < tileset->size()) {
+		Brush* brush = tileset->brushlist[n];
+		if(brush && (brush->isGround() || brush->isCarpet())) {
+			MapTab* tab = g_gui.GetCurrentMapTab();
+			if(tab) {
+				MapWindow* window = dynamic_cast<MapWindow*>(tab);
+				if(window) {
+					window->ApplyBrushToReplaceBoxReplacement(brush);
 				}
 			}
 		}
@@ -1435,23 +1551,9 @@ void SeamlessGridPanel::DrawSpriteAt(wxDC& dc, int x, int y, int index) {
 		int look_id = brush->getLookID();
 		Sprite* sprite = g_gui.gfx.getSprite(look_id);
 
-		// Check for technical tiles (invisible walkable/blocking tiles) by name
-		std::string brush_name = brush->getName();
-		bool is_stairs = (brush_name.find("459") != std::string::npos && brush_name.find("stairs") != std::string::npos);
-		bool is_walkable = (brush_name.find("460") != std::string::npos || brush_name.find("invisible walkable") != std::string::npos || brush_name.find("transparent walkable") != std::string::npos);
-		bool is_not_walkable = (brush_name.find("1548") != std::string::npos || brush_name.find("transparent not walkable") != std::string::npos || brush_name.find("transparency tile") != std::string::npos);
-
-		if (is_stairs || is_walkable || is_not_walkable) {
-			// Draw colored square for technical tiles
-			wxColor techColor;
-			if (is_stairs) {
-				techColor = wxColor(200, 200, 0); // Yellow for stairs
-			} else if (is_walkable) {
-				techColor = wxColor(200, 0, 0); // Red for transparent walkable
-			} else if (is_not_walkable) {
-				techColor = wxColor(0, 200, 200); // Cyan for transparent not walkable
-			}
-
+		TechnicalTileKind technical_kind = GetTechnicalTileKind(brush);
+		if(technical_kind != TechnicalTileKind::None) {
+			wxColor techColor = GetTechnicalTileColor(technical_kind);
 			dc.SetBrush(wxBrush(techColor));
 			dc.SetPen(wxPen(techColor.IsOk() ? techColor : *wxBLACK, 1));
 			dc.DrawRectangle(x + 2, y + 2, sprite_size - 4, sprite_size - 4);

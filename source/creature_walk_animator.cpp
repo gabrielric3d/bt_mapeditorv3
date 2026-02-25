@@ -189,8 +189,7 @@ void CreatureWalkAnimator::ensureRegistered(int map_x, int map_y, int map_z,
 			it->second.last_update_tick = current_tick;
 			return;
 		}
-		// Normal update
-		it->second.last_update_tick = current_tick;
+		// Normal update - let updateCreature() handle last_update_tick internally
 		updateCreature(it->second, creature, current_tick);
 		return;
 	}

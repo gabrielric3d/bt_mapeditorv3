@@ -28,6 +28,7 @@
 #include "camera_path.h"
 #include "npc_path.h"
 #include "templates.h"
+#include "chunk_tracker.h"
 
 class Map : public BaseMap
 {
@@ -75,6 +76,7 @@ public:
 	bool hasFile() const noexcept { return !filename.empty(); }
 	const std::string& getFilename() const noexcept { return filename; }
 	const std::string& getName() const noexcept { return name; }
+	void setFilename(const std::string& new_filename) noexcept { filename = new_filename; }
 	void setName(const std::string& _name) noexcept { name = _name; }
 
 	// Get map data
@@ -88,8 +90,8 @@ public:
 	void setWidth(int new_width);
 	void setHeight(int new_height);
 	void setMapDescription(const std::string& new_description);
-	void setHouseFilename(const std::string& new_housefile);
-	void setSpawnFilename(const std::string& new_spawnfile);
+	void setHouseFilename(const std::string& new_housefile, bool keep_unnamed = false);
+	void setSpawnFilename(const std::string& new_spawnfile, bool keep_unnamed = false);
 
 	void flagAsNamed() noexcept { unnamed = false; }
 
@@ -132,12 +134,24 @@ protected:
 
 	friend class IOMapOTBM;
 	friend class IOMapOTMM;
+	friend class IOMapBTMap;
 	friend class Editor;
 
 public:
 	Waypoints waypoints;
 	CameraPaths camera_paths;
 	NPCPaths npc_paths;
+	ChunkTracker chunk_tracker;
+
+	// BTMap format support
+	bool isBTMapFormat() const noexcept { return btmap_active; }
+	void setBTMapFormat(bool active) noexcept { btmap_active = active; }
+	const std::string& getBTMapPath() const noexcept { return btmap_path; }
+	void setBTMapPath(const std::string& path) { btmap_path = path; }
+
+private:
+	bool btmap_active = false;
+	std::string btmap_path; // Path to .btmap directory when active
 
 private:
 	std::vector<uint16_t> uniqueIds;

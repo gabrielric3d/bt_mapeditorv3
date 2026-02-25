@@ -181,6 +181,9 @@ void Action::commit(DirtyList* dirty_list)
 				Tile* old_tile = map.swapTile(pos, new_tile);
 				TileLocation* location = new_tile->getLocation();
 
+				// Track dirty chunks for incremental save
+				map.chunk_tracker.markDirty(pos.x, pos.y, pos.z);
+
 				// Update other nodes in the network
 				if(editor.IsLiveServer() && dirty_list)
 					dirty_list->AddPosition(pos.x, pos.y, pos.z);
@@ -333,6 +336,9 @@ void Action::undo(DirtyList* dirty_list)
 				}
 
 				Tile* new_tile = map.swapTile(pos, old_tile);
+
+				// Track dirty chunks for incremental save
+				map.chunk_tracker.markDirty(pos.x, pos.y, pos.z);
 
 				// Update server side change list (for broadcast)
 				if(editor.IsLiveServer() && dirty_list)

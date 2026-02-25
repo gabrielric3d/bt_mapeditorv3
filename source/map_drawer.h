@@ -98,7 +98,10 @@ public:
 	bool show_stair_direction;
 	bool show_camera_paths;
 	bool show_npc_paths;
+	bool show_creature_wander_radius;
+	bool animate_creature_walk;
 	bool show_only_grounds;
+	bool show_chunk_boundaries;
 	bool hide_items_when_zoomed;
 	bool full_detail_zoom_out;
 	bool show_selected_tile_indicator;
@@ -135,6 +138,8 @@ protected:
 	std::vector<MapTooltip*> tooltips;
 	std::ostringstream tooltip;
 	std::vector<std::tuple<int, int, int, int, int, bool>> spawn_overlays;
+	// Wander radius overlays: start_x, start_y, end_x, end_y, radius, selected
+	std::vector<std::tuple<int, int, int, int, int, bool>> wander_overlays;
 
 	wxStopWatch pos_indicator_timer;
 	wxStopWatch selection_indicator_timer;
@@ -180,6 +185,10 @@ public:
 	void DrawStairDirections();
 	void DrawCameraPaths();
 	void DrawNPCPaths();
+	void DrawChunkBoundaries();
+	void DrawFloorFadeOverlay();
+	void DrawFloorTilesWithAlpha(int target_floor, int alpha);
+	void DrawBoundboxRegion();
 
 	void TakeScreenshot(uint8_t* screenshot_buffer);
 
@@ -212,6 +221,8 @@ protected:
 	void DrawSpawnAreaOverlay(int start_map_x, int start_map_y, int end_map_x, int end_map_y, int radius, bool full_visibility);
 	void DrawSpawnAreaFill(int start_map_x, int start_map_y, int end_map_x, int end_map_y);
 	void DrawSpawnOverlays();
+	void DrawWanderRadiusOverlays();
+	void DrawWanderRadiusOverlay(int start_map_x, int start_map_y, int end_map_x, int end_map_y, int radius, bool selected);
 	void DrawPositionIndicator(int z);
 	void DrawSelectedTileIndicator(int x, int y);
 	void WriteTooltip(const Item* item, std::ostringstream& stream);

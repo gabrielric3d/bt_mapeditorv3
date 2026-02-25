@@ -44,6 +44,8 @@
 #include "live_client.h"
 #include "live_action.h"
 
+#include "iomap_btmap.h"
+
 #include <algorithm>
 #include <random>
 
@@ -51,16 +53,17 @@ namespace {
 
 bool CanPlaceSpawnGroupCreature(const Tile* tile, const CreatureType* type)
 {
-	if(tile) {
-		if(tile->isBlocking()) {
-			return false;
-		}
-		if(tile->creature) {
-			return false;
-		}
-		if(tile->isPZ() && !type->isNpc) {
-			return false;
-		}
+	if(!tile || !tile->ground) {
+		return false;
+	}
+	if(tile->isBlocking()) {
+		return false;
+	}
+	if(tile->creature) {
+		return false;
+	}
+	if(tile->isPZ() && !type->isNpc) {
+		return false;
 	}
 	return true;
 }
@@ -214,21 +217,24 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 	copybuffer(copybuffer),
 	replace_brush(nullptr)
 {
-	MapVersion ver;
-	if(!IOMapOTBM::getVersionInfo(fn, ver)) {
-		// g_gui.PopupDialog("Error", "Could not open file \"" + fn.GetFullPath() + "\".", wxOK);
-		throw std::runtime_error("Could not open file \"" + nstr(fn.GetFullPath()) + "\".\nThis is not a valid OTBM file or it does not exist.");
-	}
+	bool is_btmap = IOMapBTMap::isBTMapDirectory(fn);
 
-	/*
-	if(ver < CLIENT_VERSION_760) {
-		long b = g_gui.PopupDialog("Error", "Unsupported Client Version (pre 7.6), do you want to try to load the map anyways?", wxYES | wxNO);
-		if(b == wxID_NO) {
-			valid_state = false;
-			return;
+	MapVersion ver;
+	if(is_btmap) {
+		// For BTMap, load manifest to get version info
+		IOMapBTMap btmapLoader{MapVersion()};
+		std::string dirPath = nstr(fn.GetFullPath());
+		if(!dirPath.empty() && dirPath.back() != '/' && dirPath.back() != '\\')
+			dirPath += '/';
+		if(!btmapLoader.loadManifest(map, dirPath)) {
+			throw std::runtime_error("Could not open BTMap directory \"" + nstr(fn.GetFullPath()) + "\".\nInvalid manifest.");
+		}
+		ver = btmapLoader.version;
+	} else {
+		if(!IOMapOTBM::getVersionInfo(fn, ver)) {
+			throw std::runtime_error("Could not open file \"" + nstr(fn.GetFullPath()) + "\".\nThis is not a valid OTBM file or it does not exist.");
 		}
 	}
-	*/
 
 	bool success = true;
 	if(g_gui.GetCurrentVersionID() != ver.client) {
@@ -246,20 +252,32 @@ Editor::Editor(CopyBuffer& copybuffer, const FileName& fn) :
 	}
 
 	if(success) {
-		ScopedLoadingBar LoadingBar("Loading OTBM map...");
-		success = map.open(nstr(fn.GetFullPath()));
-		/* TODO
-		if(success && ver.client == CLIENT_VERSION_854_BAD) {
-			int ok = g_gui.PopupDialog("Incorrect OTB", "This map has been saved with an incorrect OTB version, do you want to convert it to the new OTB version?\n\nIf you are not sure, click Yes.", wxYES | wxNO);
+		if(is_btmap) {
+			ScopedLoadingBar LoadingBar("Loading BTMap...");
+			IOMapBTMap btmapLoader(ver);
+			success = btmapLoader.loadMap(map, fn);
 
-			if(ok == wxID_YES){
-				ver.client = CLIENT_VERSION_854;
-				map.convert(ver);
+			if(success) {
+				map.setBTMapFormat(true);
+				map.setBTMapPath(nstr(fn.GetFullPath()));
+				map.chunk_tracker.clearDirty();
+				map.chunk_tracker.clearFullSaveNeeded();
+
+				wxFileName mapFn = fn.GetFullPath();
+				map.filename = mapFn.GetFullPath().mb_str(wxConvUTF8);
+				map.name = mapFn.GetFullName().mb_str(wxConvUTF8);
+				map.has_changed = false;
+
+				map.camera_paths.loadFromFile(fn);
+			} else {
+				throw std::runtime_error("Failed to load BTMap: " + nstr(btmapLoader.getError()));
 			}
-		}
-		*/
-		if(success) {
-			map.camera_paths.loadFromFile(fn);
+		} else {
+			ScopedLoadingBar LoadingBar("Loading OTBM map...");
+			success = map.open(nstr(fn.GetFullPath()));
+			if(success) {
+				map.camera_paths.loadFromFile(fn);
+			}
 		}
 	}
 }
@@ -448,6 +466,54 @@ void Editor::saveMap(FileName filename, bool showdialog)
 		}
 	}
 
+	// Check if saving in BTMap chunk format
+	bool save_btmap = false;
+	{
+		FileName checkExt(wxstr(savefile));
+		if(checkExt.GetExt() == "btmap" || IOMapBTMap::isBTMapDirectory(checkExt)) {
+			save_btmap = true;
+		}
+	}
+
+	if(save_btmap) {
+		// === BTMap incremental save path ===
+		wxFileName fn = wxstr(savefile);
+		map.filename = fn.GetFullPath().mb_str(wxConvUTF8);
+		map.name = fn.GetFullName().mb_str(wxConvUTF8);
+		map.setBTMapFormat(true);
+		map.setBTMapPath(savefile);
+
+		if(showdialog)
+			g_gui.CreateLoadBar("Saving BTMap...");
+
+		IOMapBTMap btmapSaver(map.getVersion());
+		bool success = btmapSaver.saveIncremental(map, fn, map.chunk_tracker);
+
+		if(showdialog)
+			g_gui.DestroyLoadBar();
+
+		if(!success) {
+			g_gui.PopupDialog("Error", "Could not save BTMap: " + btmapSaver.getError(), wxOK);
+			return;
+		}
+
+		// Save camera paths sidecar
+		map.camera_paths.saveToFile(wxFileName(wxstr(savefile)));
+
+		// Save creature behaviors
+		{
+			wxString bhvError;
+			if(!g_creatures.saveBehaviors(g_gui.GetDataDirectory() + "creature_behaviors.xml", bhvError)) {
+				wxLogWarning("Failed to save creature behaviors: %s", bhvError);
+			}
+		}
+
+		clearChanges();
+		return;
+	}
+
+	// === Standard OTBM save path ===
+
 	// Save the map
 	{
 		std::string n = nstr(g_gui.GetLocalDataDirectory()) + ".saving.txt";
@@ -513,6 +579,14 @@ void Editor::saveMap(FileName filename, bool showdialog)
 
 	// Save camera paths sidecar
 	map.camera_paths.saveToFile(wxFileName(wxstr(savefile)));
+
+	// Save creature behaviors
+	{
+		wxString bhvError;
+		if(!g_creatures.saveBehaviors(g_gui.GetDataDirectory() + "creature_behaviors.xml", bhvError)) {
+			wxLogWarning("Failed to save creature behaviors: %s", bhvError);
+		}
+	}
 
 	// Move to permanent backup
 	if(!save_as && g_settings.getInteger(Config::ALWAYS_MAKE_BACKUP)) {

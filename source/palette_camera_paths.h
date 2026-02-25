@@ -71,6 +71,8 @@ public:
 	void OnKeyframeDown(wxCommandEvent& event);
 	void OnApplyKeyframeProps(wxCommandEvent& event);
 	void OnToggleShowPaths(wxCommandEvent& event);
+	void OnToggleHidePreviewMouse(wxCommandEvent& event);
+	void OnGetZoom(wxCommandEvent& event);
 
 protected:
 	void RefreshPathList();
@@ -89,6 +91,7 @@ protected:
 	wxButton* play_pause_button;
 	wxCheckBox* loop_checkbox;
 	wxCheckBox* show_paths_checkbox;
+	wxCheckBox* hide_preview_mouse_checkbox;
 
 	wxButton* add_keyframe_button;
 	wxButton* remove_keyframe_button;
@@ -101,6 +104,7 @@ protected:
 	wxTextCtrl* duration_ctrl;
 	wxTextCtrl* speed_ctrl;
 	wxTextCtrl* zoom_ctrl;
+	wxButton* get_zoom_button;
 	wxTextCtrl* z_ctrl;
 	wxChoice* easing_ctrl;
 

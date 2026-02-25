@@ -55,6 +55,7 @@
 #include "camera_path.h"
 #include "area_decoration_dialog.h"
 #include "area_creature_spawn_dialog.h"
+#include "instance_layout_dialog.h"
 #include "brush_manager_panel.h"
 
 #include <algorithm>
@@ -131,6 +132,7 @@ GUI::GUI() :
 
 	area_decoration_dialog(nullptr),
 	area_creature_spawn_dialog(nullptr),
+	instance_layout_dialog(nullptr),
 
 	OGLContext(nullptr),
 	loaded_version(CLIENT_VERSION_NONE),
@@ -181,6 +183,10 @@ GUI::~GUI()
 	if (area_creature_spawn_dialog) {
 		area_creature_spawn_dialog->Destroy();
 		area_creature_spawn_dialog = nullptr;
+	}
+	if(instance_layout_dialog) {
+		instance_layout_dialog->Destroy();
+		instance_layout_dialog = nullptr;
 	}
 
 	delete doodad_buffer_map;
@@ -617,6 +623,9 @@ bool GUI::ReloadBrushes(wxString& error, wxArrayString& warnings)
 	hatch_door_brush = nullptr;
 	window_door_brush = nullptr;
 
+	// Recent brushes store raw brush pointers; clear them before destroying brushes.
+	ClearRecentBrushes();
+
 	// Clear materials and brushes
 	g_materials.clear();
 	g_brushes.clear();
@@ -670,6 +679,10 @@ bool GUI::ReloadBrushes(wxString& error, wxArrayString& warnings)
 
 	// Restore palettes
 	LoadPerspective();
+
+	if(brush_manager_panel) {
+		brush_manager_panel->RefreshBrushList();
+	}
 
 	// Refresh view
 	RefreshView();
@@ -786,6 +799,19 @@ bool GUI::NewMap()
 {
     FinishWelcomeDialog();
 
+	Editor* source_editor = GetCurrentEditor();
+	std::unique_ptr<CopyBuffer> selection_snapshot;
+	bool has_selection_snapshot = false;
+	if(source_editor && source_editor->hasSelection()) {
+		Position selection_min = source_editor->getSelection().minPosition();
+		selection_snapshot = std::unique_ptr<CopyBuffer>(newd CopyBuffer());
+		selection_snapshot->copy(*source_editor, selection_min.z, true);
+		has_selection_snapshot = selection_snapshot->canPaste();
+		if(!has_selection_snapshot) {
+			selection_snapshot.reset();
+		}
+	}
+
 	Editor* editor;
 	try
 	{
@@ -797,9 +823,23 @@ bool GUI::NewMap()
 		return false;
 	}
 
+	MapPropertiesWindow* properties = newd MapPropertiesWindow(root, nullptr, *editor, has_selection_snapshot);
+	int properties_result = properties->ShowModal();
+	bool create_from_selection = properties->ShouldCreateFromSelection();
+	properties->Destroy();
+
+	if(properties_result != wxID_OK) {
+		delete editor;
+		return false;
+	}
+
 	auto *mapTab = newd MapTab(tabbook, editor);
 	mapTab->OnSwitchEditorMode(mode);
-    editor->clearChanges();
+	if(create_from_selection && selection_snapshot && selection_snapshot->canPaste()) {
+		selection_snapshot->paste(*editor, Position(0, 0, 7));
+	} else {
+		editor->clearChanges();
+	}
 
 	SetStatusText("Created new map");
 	UpdateTitle();
@@ -1002,6 +1042,9 @@ void GUI::CloseCurrentEditor()
 	if (!IsEditorOpen() && area_creature_spawn_dialog) {
 		area_creature_spawn_dialog->Hide();
 	}
+	if(!IsEditorOpen() && instance_layout_dialog) {
+		instance_layout_dialog->Hide();
+	}
 }
 
 bool GUI::CloseLiveEditors(LiveSocket* sock)
@@ -1083,6 +1126,9 @@ bool GUI::CloseAllEditors()
 	}
 	if (area_creature_spawn_dialog) {
 		area_creature_spawn_dialog->Hide();
+	}
+	if(instance_layout_dialog) {
+		instance_layout_dialog->Hide();
 	}
 
 	return true;
@@ -1785,6 +1831,30 @@ void GUI::DestroyAreaCreatureSpawnDialog()
 	}
 }
 
+void GUI::ShowInstanceLayoutDialog()
+{
+	if(!IsEditorOpen()) {
+		return;
+	}
+
+	if(instance_layout_dialog) {
+		instance_layout_dialog->UpdateEditor();
+		instance_layout_dialog->Show();
+		instance_layout_dialog->Raise();
+	} else {
+		instance_layout_dialog = newd InstanceLayoutDialog(root);
+		instance_layout_dialog->Show();
+	}
+}
+
+void GUI::DestroyInstanceLayoutDialog()
+{
+	if(instance_layout_dialog) {
+		instance_layout_dialog->Destroy();
+		instance_layout_dialog = nullptr;
+	}
+}
+
 // Palette Window Interface implementation
 
 PaletteWindow* GUI::GetPalette()
@@ -2466,6 +2536,7 @@ void GUI::ClearRecentBrushes()
 	recent_brushes.clear();
 	if(recent_brushes_window) {
 		recent_brushes_window->UpdateBrushes(recent_brushes);
+		recent_brushes_window->SetSelectedBrush(nullptr);
 	}
 }
 

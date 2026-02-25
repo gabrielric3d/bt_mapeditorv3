@@ -55,26 +55,45 @@ public:
 class MapPropertiesWindow : public wxDialog
 {
 public:
-	MapPropertiesWindow(wxWindow* parent, MapTab* tab, Editor& editor);
+	MapPropertiesWindow(wxWindow* parent, MapTab* tab, Editor& editor, bool allow_create_from_selection = false);
 	virtual ~MapPropertiesWindow();
+	bool ShouldCreateFromSelection() const;
 
 	void OnChangeVersion(wxCommandEvent&);
+	void OnToggleSyncExternalFiles(wxCommandEvent&);
+	void OnMapNameChanged(wxCommandEvent&);
+	void OnBrowseSaveLocation(wxCommandEvent&);
+	void OnSizePresetChanged(wxCommandEvent&);
+	void OnDimensionsChanged(wxCommandEvent&);
+	void OnDimensionsChangedSpin(wxSpinEvent&);
 
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
 
 protected:
 	void UpdateProtocolList();
+	void UpdateExternalFilenameControls();
+	void UpdateAutoExternalFilenames();
+	void SyncSizePresetSelectionFromDimensions();
 
 	MapTab* view;
 	Editor& editor;
 	wxSpinCtrl* height_spin;
 	wxSpinCtrl* width_spin;
+	wxTextCtrl* map_name_ctrl;
+	wxTextCtrl* save_location_ctrl;
+	wxChoice* size_preset_choice;
 	wxChoice* version_choice;
 	wxChoice* protocol_choice;
+	wxCheckBox* sync_external_files_checkbox;
+	wxCheckBox* create_from_selection_checkbox;
+	wxCheckBox* remember_save_location_checkbox;
 	wxTextCtrl* description_ctrl;
 	wxTextCtrl* house_filename_ctrl;
 	wxTextCtrl* spawn_filename_ctrl;
+	std::string default_house_filename;
+	std::string default_spawn_filename;
+	bool updating_dimensions;
 
 	DECLARE_EVENT_TABLE();
 };
@@ -134,6 +153,10 @@ protected:
 	wxChoice* floor_options;
 	wxSpinCtrl* floor_number;
 	wxButton* ok_button;
+
+	PositionCtrl* from_pos_ctrl;
+	PositionCtrl* to_pos_ctrl;
+	wxCheckBox* merge_floors_checkbox;
 
 	DECLARE_EVENT_TABLE();
 };

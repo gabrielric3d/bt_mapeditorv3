@@ -32,6 +32,7 @@ namespace MenuBar
 		OPEN,
 		SAVE,
 		SAVE_AS,
+		DEPLOY_MAP,
 		GENERATE_MAP,
 		CLOSE,
 		IMPORT_MAP,
@@ -48,6 +49,7 @@ namespace MenuBar
 		REDO,
 		FIND_ITEM,
 		REPLACE_ITEMS,
+		SET_ACTION_ID_ON_SELECTION,
 		SEARCH_ON_MAP_EVERYTHING,
 		SEARCH_ON_MAP_UNIQUE,
 		SEARCH_ON_MAP_ACTION,
@@ -98,6 +100,7 @@ namespace MenuBar
 		MAP_CLEAN_HOUSE_ITEMS,
 		MAP_PROPERTIES,
 		MAP_STATISTICS,
+		SCAN_REGION,
 		VIEW_TOOLBARS_BRUSHES,
 		VIEW_TOOLBARS_POSITION,
 		VIEW_TOOLBARS_SIZES,
@@ -141,6 +144,8 @@ namespace MenuBar
 		SHOW_STAIR_DIRECTION,
 		SHOW_CAMERA_PATHS,
 		SHOW_NPC_PATHS,
+		SHOW_CREATURE_WANDER_RADIUS,
+		ANIMATE_CREATURE_WALK,
 		SHOW_ONLY_GROUNDS,
 		CAMERA_PLAY_PAUSE,
 		CAMERA_ADD_KEYFRAME,
@@ -189,7 +194,15 @@ namespace MenuBar
 		IMPORT_MONSTERSJSON,
 		BRUSH_TIPS,
 		AREA_DECORATION,
+		SAVE_AS_BTMAP,
+		EXPORT_TO_OTBM,
+		SHOW_CHUNK_BOUNDARIES,
+		FLOOR_FADING,
+		FLOOR_FADING_SETTINGS,
 		AREA_CREATURE_SPAWN,
+		INSTANCE_LAYOUT_GENERATOR,
+		SELECTION_ITEM_SCANNER,
+		SPAWN_DENSITY_ADJUSTER,
 	};
 }
 
@@ -240,6 +253,9 @@ public:
 	void OnOpenRecent(wxCommandEvent& event);
 	void OnSave(wxCommandEvent& event);
 	void OnSaveAs(wxCommandEvent& event);
+	void OnDeployMap(wxCommandEvent& event);
+	void OnSaveAsBTMap(wxCommandEvent& event);
+	void OnExportToOTBM(wxCommandEvent& event);
 	void OnClose(wxCommandEvent& event);
 	void OnPreferences(wxCommandEvent& event);
 	void OnConfigureHotkeys(wxCommandEvent& event);
@@ -285,6 +301,7 @@ public:
 	void OnRotateSelection180(wxCommandEvent& event);
 	void OnSearchForItem(wxCommandEvent& event);
 	void OnReplaceItems(wxCommandEvent& event);
+	void OnSetActionIdOnSelection(wxCommandEvent& event);
 	void OnSearchForStuffOnMap(wxCommandEvent& event);
 	void OnSearchForUniqueOnMap(wxCommandEvent& event);
 	void OnSearchForActionOnMap(wxCommandEvent& event);
@@ -311,6 +328,9 @@ public:
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
 	void OnMapStatistics(wxCommandEvent& event);
+	void OnScanRegion(wxCommandEvent& event);
+	void OnSelectionItemScanner(wxCommandEvent& event);
+	void OnSpawnDensityAdjuster(wxCommandEvent& event);
 
 	// View Menu
 	void OnToolbars(wxCommandEvent& event);
@@ -338,6 +358,8 @@ public:
 	void OnBrushTipsWindow(wxCommandEvent& event);
 	void OnAreaDecoration(wxCommandEvent& event);
 	void OnAreaCreatureSpawn(wxCommandEvent& event);
+	void OnInstanceLayoutGenerator(wxCommandEvent& event);
+	void OnFloorFadingSettings(wxCommandEvent& event);
 	void OnNewPalette(wxCommandEvent& event);
 	void OnTakeScreenshot(wxCommandEvent& event);
 	void OnTakeRegionScreenshot(wxCommandEvent& event);

@@ -157,7 +157,7 @@ private:
 class ReplaceItemsDialog : public wxDialog
 {
 public:
-	ReplaceItemsDialog(wxWindow* parent, bool selectionOnly);
+	ReplaceItemsDialog(wxWindow* parent);
 	~ReplaceItemsDialog();
 
 	void OnListSelected(wxCommandEvent& event);
@@ -170,6 +170,7 @@ public:
 	void OnExecuteButtonClicked(wxCommandEvent& event);
 	void OnCancelButtonClicked(wxCommandEvent& event);
 	void OnItemDropped(wxCommandEvent& event);
+	void OnScopeChanged(wxCommandEvent& event);
 	void OnLockSelectionToggled(wxCommandEvent& event);
 
 	void UpdateWidgets();
@@ -190,10 +191,12 @@ private:
 	wxButton* execute_button;
 	wxButton* close_button;
 	wxCheckBox* auto_add_checkbox;
+	wxRadioButton* scope_entire_map;
+	wxRadioButton* scope_selection;
 	wxCheckBox* lock_selection_checkbox;
-	bool selectionOnly;
 	std::vector<Position> selectionSnapshot;
 
+	bool IsSelectionMode() const;
 	// Try to auto-add when both boxes are filled
 	void TryAutoAdd();
 	Editor* GetParentEditor() const;

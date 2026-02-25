@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+class CreaturePaletteListBox;
+
 class CreaturePalettePanel : public PalettePanel {
 public:
 	CreaturePalettePanel(wxWindow* parent, wxWindowID id = wxID_ANY);
@@ -64,12 +66,28 @@ public:
 	void OnClickGroupRemove(wxCommandEvent& event);
 	void OnClickGroupClear(wxCommandEvent& event);
 	void OnGroupListChange(wxCommandEvent& event);
+	void OnGroupListDoubleClick(wxCommandEvent& event);
+	void OnFavoriteListChange(wxCommandEvent& event);
+	void OnFavoriteListDoubleClick(wxCommandEvent& event);
+	void OnClickFavoriteAdd(wxCommandEvent& event);
+	void OnClickFavoriteRemove(wxCommandEvent& event);
+	void OnClickPreviousPage(wxCommandEvent& event);
+	void OnClickNextPage(wxCommandEvent& event);
+	void OnToggleCreaturePreview(wxCommandEvent& event);
 protected:
 	void SelectCreatureBrush();
 	void SelectSpawnBrush();
 	void SyncSpawnGroupToGUI();
 	void UpdateSpawnGroupList();
 	void ApplyCreatureFilter(bool preserve_selection);
+	void UpdateCreaturePage(const std::string& preferred_selection = std::string());
+	void UpdateCreaturePaginationControls();
+	Brush* GetSelectedCreatureBrush() const;
+	size_t GetCreaturePageCount() const;
+	void LoadFavoriteCreaturesFromSettings();
+	void SaveFavoriteCreaturesToSettings() const;
+	void UpdateFavoriteList(const std::string& preferred_selection = std::string());
+	void AddFavoriteCreature(const std::string& name);
 
 	struct SpawnGroupEntry {
 		std::string name;
@@ -78,11 +96,18 @@ protected:
 
 	wxChoice* tileset_choice;
 	KeyForwardingTextCtrl* creature_filter_text;
-	SortableListBox* creature_list;
+	CreaturePaletteListBox* creature_list;
+	wxCheckBox* creature_preview_checkbox;
+	wxButton* creature_page_previous_button;
+	wxButton* creature_page_next_button;
+	wxStaticText* creature_page_label;
 	wxToggleButton* creature_brush_button;
 	wxToggleButton* spawn_brush_button;
 	wxSpinCtrl* creature_spawntime_spin;
 	wxSpinCtrl* spawn_size_spin;
+	wxListBox* favorite_creature_list;
+	wxButton* favorite_creature_add_button;
+	wxButton* favorite_creature_remove_button;
 	wxListBox* spawn_group_list;
 	wxSpinCtrl* spawn_group_count_spin;
 	wxButton* spawn_group_add_button;
@@ -90,8 +115,14 @@ protected:
 	wxButton* spawn_group_clear_button;
 
 	bool handling_event;
+	bool prefer_favorite_for_group_add;
 	std::vector<SpawnGroupEntry> spawn_group;
 	std::vector<Brush*> creature_brushes;
+	std::vector<Brush*> filtered_creature_brushes;
+	std::vector<std::string> favorite_creatures;
+	size_t current_creature_page;
+
+	static const size_t CREATURES_PER_PAGE = 64;
 
 	DECLARE_EVENT_TABLE();
 };

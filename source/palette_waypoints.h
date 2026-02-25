@@ -53,6 +53,7 @@ public:
 	void OnEditWaypointLabel(wxListEvent& event);
 	void OnClickAddWaypoint(wxCommandEvent& event);
 	void OnClickRemoveWaypoint(wxCommandEvent& event);
+	void OnClickClearWaypoints(wxCommandEvent& event);
 	void OnClickImportWaypoints(wxCommandEvent& event);
 
 	void SetMap(Map* map);
@@ -61,6 +62,7 @@ protected:
 	wxListCtrl* waypoint_list;
 	wxButton* add_waypoint_button;
 	wxButton* remove_waypoint_button;
+	wxButton* clear_waypoints_button;
 	wxButton* import_waypoint_button;
 
 	DECLARE_EVENT_TABLE()

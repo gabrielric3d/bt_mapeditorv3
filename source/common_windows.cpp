@@ -35,32 +35,165 @@
 
 #include "iominimap.h"
 #include "theme.h"
+#include <wx/dirdlg.h>
 
 #ifdef _MSC_VER
 	#pragma warning(disable:4018) // signed/unsigned mismatch
 #endif
+
+namespace {
+
+const int kMapSizePresets[] = {128, 256, 512, 1024, 2048, 4096, 8192};
+constexpr int kMapSizePresetCount = sizeof(kMapSizePresets) / sizeof(kMapSizePresets[0]);
+
+int GetPresetSizeFromChoiceSelection(int selection)
+{
+	if(selection <= 0 || selection > kMapSizePresetCount) {
+		return -1;
+	}
+	return kMapSizePresets[selection - 1];
+}
+
+int GetChoiceSelectionFromDimensions(int width, int height)
+{
+	if(width != height) {
+		return 0; // Custom
+	}
+
+	for(int i = 0; i < kMapSizePresetCount; ++i) {
+		if(width == kMapSizePresets[i]) {
+			return i + 1;
+		}
+	}
+	return 0; // Custom
+}
+
+std::string BuildMapBaseName(const std::string& map_name)
+{
+	FileName map_file(wxstr(map_name));
+	std::string base_name = nstr(map_file.GetName());
+	if(base_name.empty()) {
+		base_name = "map";
+	}
+	return base_name;
+}
+
+std::string BuildAutoHouseFilename(const std::string& map_name)
+{
+	return BuildMapBaseName(map_name) + "-house.xml";
+}
+
+std::string BuildAutoSpawnFilename(const std::string& map_name)
+{
+	return BuildMapBaseName(map_name) + "-spawn.xml";
+}
+
+std::string GetDefaultMapExtension()
+{
+	return "otbm";
+}
+
+std::string BuildMapFilenameFromInput(const wxString& map_name_input, const std::string& fallback_extension)
+{
+	wxString name = map_name_input;
+	name.Trim(true);
+	name.Trim(false);
+
+	FileName map_name(name);
+	std::string base_name = nstr(map_name.GetName());
+	if(base_name.empty()) {
+		base_name = nstr(name);
+	}
+	if(base_name.empty()) {
+		base_name = "map";
+	}
+
+	std::string extension = nstr(map_name.GetExt());
+	if(extension.empty()) {
+		extension = fallback_extension;
+	}
+	if(extension.empty()) {
+		return base_name;
+	}
+	return base_name + "." + extension;
+}
+
+}
 
 // ============================================================================
 // Map Properties Window
 
 BEGIN_EVENT_TABLE(MapPropertiesWindow, wxDialog)
 	EVT_CHOICE(MAP_PROPERTIES_VERSION, MapPropertiesWindow::OnChangeVersion)
+	EVT_CHECKBOX(MAP_PROPERTIES_SYNC_EXTERNAL_FILES, MapPropertiesWindow::OnToggleSyncExternalFiles)
+	EVT_BUTTON(MAP_PROPERTIES_BROWSE_SAVE_LOCATION, MapPropertiesWindow::OnBrowseSaveLocation)
 	EVT_BUTTON(wxID_OK, MapPropertiesWindow::OnClickOK)
 	EVT_BUTTON(wxID_CANCEL, MapPropertiesWindow::OnClickCancel)
 END_EVENT_TABLE()
 
-MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor& editor) :
+MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor& editor, bool allow_create_from_selection) :
 	wxDialog(parent, wxID_ANY, "Map Properties", wxDefaultPosition, wxSize(300, 200), wxRESIZE_BORDER | wxCAPTION),
 	view(view),
-	editor(editor)
+	editor(editor),
+	map_name_ctrl(nullptr),
+	save_location_ctrl(nullptr),
+	size_preset_choice(nullptr),
+	sync_external_files_checkbox(nullptr),
+	create_from_selection_checkbox(nullptr),
+	remember_save_location_checkbox(nullptr),
+	updating_dimensions(false)
 {
 	// Setup data variabels
 	const Map& map = editor.getMap();
+	std::string initial_map_name = map.getName();
+	if(initial_map_name.empty() && map.hasFile()) {
+		FileName map_file(wxstr(map.getFilename()));
+		initial_map_name = nstr(map_file.GetFullName());
+	}
+	const std::string initial_map_base_name = BuildMapBaseName(initial_map_name);
+
+	std::string initial_save_location;
+	const bool remember_save_location = g_settings.getBoolean(Config::MAP_PROPERTIES_REMEMBER_SAVE_LOCATION);
+	if(map.hasFile()) {
+		FileName map_file(wxstr(map.getFilename()));
+		initial_save_location = nstr(map_file.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR));
+	} else if(remember_save_location) {
+		initial_save_location = g_settings.getString(Config::MAP_PROPERTIES_DEFAULT_SAVE_LOCATION);
+	}
+
+	default_house_filename = BuildAutoHouseFilename(initial_map_base_name);
+	default_spawn_filename = BuildAutoSpawnFilename(initial_map_base_name);
 
 	wxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 
 	wxFlexGridSizer* grid_sizer = newd wxFlexGridSizer(2, 10, 10);
 	grid_sizer->AddGrowableCol(1);
+
+	// Name
+	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Map Name"));
+	map_name_ctrl = newd wxTextCtrl(this, wxID_ANY, wxstr(initial_map_base_name));
+	grid_sizer->Add(map_name_ctrl, wxSizerFlags(1).Expand());
+
+	// Save location
+	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Save Location"));
+	{
+		wxSizer* save_location_sizer = newd wxBoxSizer(wxHORIZONTAL);
+		save_location_sizer->Add(
+			save_location_ctrl = newd wxTextCtrl(this, wxID_ANY, wxstr(initial_save_location)),
+			wxSizerFlags(1).Expand()
+		);
+		save_location_sizer->Add(
+			newd wxButton(this, MAP_PROPERTIES_BROWSE_SAVE_LOCATION, "Browse..."),
+			wxSizerFlags(0).Border(wxLEFT, 6)
+		);
+		grid_sizer->Add(save_location_sizer, 1, wxEXPAND);
+	}
+
+	// Save location persistence
+	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Remember Save Location"));
+	remember_save_location_checkbox = newd wxCheckBox(this, wxID_ANY, "Keep this directory");
+	remember_save_location_checkbox->SetValue(remember_save_location);
+	grid_sizer->Add(remember_save_location_checkbox, wxSizerFlags(1).Expand());
 
 	// Description
 	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Map Description"));
@@ -102,6 +235,15 @@ MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor&
 
 	grid_sizer->Add(protocol_choice, wxSizerFlags(1).Expand());
 
+	// Size preset
+	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Map Size Preset"));
+	size_preset_choice = newd wxChoice(this, wxID_ANY);
+	size_preset_choice->Append("Custom");
+	for(int i = 0; i < kMapSizePresetCount; ++i) {
+		size_preset_choice->Append(wxString::Format("%d x %d", kMapSizePresets[i], kMapSizePresets[i]));
+	}
+	grid_sizer->Add(size_preset_choice, wxSizerFlags(1).Expand());
+
 	// Dimensions
 	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Map Dimensions"));
 	{
@@ -119,7 +261,28 @@ MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor&
 		grid_sizer->Add(subsizer, 1, wxEXPAND);
 	}
 
+	size_preset_choice->Bind(wxEVT_CHOICE, &MapPropertiesWindow::OnSizePresetChanged, this);
+	map_name_ctrl->Bind(wxEVT_TEXT, &MapPropertiesWindow::OnMapNameChanged, this);
+	width_spin->Bind(wxEVT_TEXT, &MapPropertiesWindow::OnDimensionsChanged, this);
+	height_spin->Bind(wxEVT_TEXT, &MapPropertiesWindow::OnDimensionsChanged, this);
+	width_spin->Bind(wxEVT_SPINCTRL, &MapPropertiesWindow::OnDimensionsChangedSpin, this);
+	height_spin->Bind(wxEVT_SPINCTRL, &MapPropertiesWindow::OnDimensionsChangedSpin, this);
+
+	if(allow_create_from_selection) {
+		grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Create From Selection"));
+		create_from_selection_checkbox = newd wxCheckBox(this, wxID_ANY, "Copy current selection to (0, 0, 7)");
+		grid_sizer->Add(create_from_selection_checkbox, wxSizerFlags(1).Expand());
+	}
+
 	// External files
+	grid_sizer->Add(newd wxStaticText(this, wxID_ANY, "Auto External Files"));
+	sync_external_files_checkbox = newd wxCheckBox(this, MAP_PROPERTIES_SYNC_EXTERNAL_FILES, "Use map name");
+	sync_external_files_checkbox->SetValue(
+		map.getHouseFilename() == default_house_filename &&
+		map.getSpawnFilename() == default_spawn_filename
+	);
+	grid_sizer->Add(sync_external_files_checkbox, wxSizerFlags(1).Expand());
+
 	grid_sizer->Add(
 		newd wxStaticText(this, wxID_ANY, "External Housefile")
 		);
@@ -151,6 +314,8 @@ MapPropertiesWindow::MapPropertiesWindow(wxWindow* parent, MapTab* view, Editor&
 
 	ClientVersion* current_version = ClientVersion::get(map.getVersion().client);
 	protocol_choice->SetStringSelection(wxstr(current_version->getName()));
+	SyncSizePresetSelectionFromDimensions();
+	UpdateExternalFilenameControls();
 }
 
 void MapPropertiesWindow::UpdateProtocolList()
@@ -185,6 +350,102 @@ void MapPropertiesWindow::UpdateProtocolList()
 void MapPropertiesWindow::OnChangeVersion(wxCommandEvent&)
 {
 	UpdateProtocolList();
+}
+
+void MapPropertiesWindow::OnToggleSyncExternalFiles(wxCommandEvent&)
+{
+	UpdateExternalFilenameControls();
+}
+
+void MapPropertiesWindow::OnMapNameChanged(wxCommandEvent& event)
+{
+	UpdateAutoExternalFilenames();
+	UpdateExternalFilenameControls();
+	event.Skip();
+}
+
+void MapPropertiesWindow::OnBrowseSaveLocation(wxCommandEvent& WXUNUSED(event))
+{
+	wxString initial_path;
+	if(save_location_ctrl) {
+		initial_path = save_location_ctrl->GetValue();
+	}
+
+	wxDirDialog dialog(this, "Select save location", initial_path, wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+	if(dialog.ShowModal() == wxID_OK && save_location_ctrl) {
+		save_location_ctrl->ChangeValue(dialog.GetPath());
+	}
+}
+
+void MapPropertiesWindow::UpdateAutoExternalFilenames()
+{
+	std::string map_name = editor.getMap().getName();
+	if(map_name_ctrl) {
+		wxString map_name_value = map_name_ctrl->GetValue();
+		map_name_value.Trim(true);
+		map_name_value.Trim(false);
+		if(!map_name_value.empty()) {
+			map_name = nstr(map_name_value);
+		}
+	}
+
+	default_house_filename = BuildAutoHouseFilename(map_name);
+	default_spawn_filename = BuildAutoSpawnFilename(map_name);
+}
+
+void MapPropertiesWindow::OnSizePresetChanged(wxCommandEvent&)
+{
+	if(!size_preset_choice || !width_spin || !height_spin) {
+		return;
+	}
+
+	int preset_size = GetPresetSizeFromChoiceSelection(size_preset_choice->GetSelection());
+	if(preset_size < 0) {
+		return;
+	}
+
+	updating_dimensions = true;
+	width_spin->SetValue(preset_size);
+	height_spin->SetValue(preset_size);
+	updating_dimensions = false;
+}
+
+void MapPropertiesWindow::OnDimensionsChanged(wxCommandEvent& event)
+{
+	SyncSizePresetSelectionFromDimensions();
+	event.Skip();
+}
+
+void MapPropertiesWindow::OnDimensionsChangedSpin(wxSpinEvent& event)
+{
+	SyncSizePresetSelectionFromDimensions();
+	event.Skip();
+}
+
+void MapPropertiesWindow::SyncSizePresetSelectionFromDimensions()
+{
+	if(updating_dimensions || !size_preset_choice || !width_spin || !height_spin) {
+		return;
+	}
+
+	int selection = GetChoiceSelectionFromDimensions(width_spin->GetValue(), height_spin->GetValue());
+	size_preset_choice->SetSelection(selection);
+}
+
+void MapPropertiesWindow::UpdateExternalFilenameControls()
+{
+	if(!sync_external_files_checkbox || !house_filename_ctrl || !spawn_filename_ctrl) {
+		return;
+	}
+
+	const bool use_map_name = sync_external_files_checkbox->GetValue();
+	if(use_map_name) {
+		house_filename_ctrl->ChangeValue(wxstr(default_house_filename));
+		spawn_filename_ctrl->ChangeValue(wxstr(default_spawn_filename));
+	}
+
+	house_filename_ctrl->Enable(!use_map_name);
+	spawn_filename_ctrl->Enable(!use_map_name);
 }
 
 struct MapConversionContext
@@ -243,8 +504,8 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 		wxArrayString warnings;
 
 		// Switch version
-		g_gui.GetCurrentEditor()->getSelection().clear();
-		g_gui.GetCurrentEditor()->clearActions();
+		editor.getSelection().clear();
+		editor.clearActions();
 
 		if(new_ver.client < old_ver.client) {
 			int ret = g_gui.PopupDialog(this, "Notice",
@@ -306,9 +567,63 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 		map.convert(new_ver, true);
 	}
 
+	UpdateAutoExternalFilenames();
+
+	std::string map_name_fallback_extension = GetDefaultMapExtension();
+	if(map.hasFile()) {
+		FileName current_map_file(wxstr(map.getFilename()));
+		const std::string current_extension = nstr(current_map_file.GetExt());
+		if(!current_extension.empty()) {
+			map_name_fallback_extension = current_extension;
+		}
+	}
+
+	wxString map_name_value = map_name_ctrl ? map_name_ctrl->GetValue() : wxString();
+	map_name_value.Trim(true);
+	map_name_value.Trim(false);
+	if(map_name_value.empty()) {
+		map_name_value = wxstr(BuildMapBaseName(map.getName()));
+	}
+
+	const std::string map_filename = BuildMapFilenameFromInput(map_name_value, map_name_fallback_extension);
+	map.setName(map_filename);
+
+	wxString save_location_value = save_location_ctrl ? save_location_ctrl->GetValue() : wxString();
+	save_location_value.Trim(true);
+	save_location_value.Trim(false);
+
+	std::string save_location = nstr(save_location_value);
+	if(save_location.empty() && map.hasFile()) {
+		FileName current_map_file(wxstr(map.getFilename()));
+		save_location = nstr(current_map_file.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR));
+	}
+
+	const bool remember_save_location = remember_save_location_checkbox && remember_save_location_checkbox->GetValue();
+	g_settings.setInteger(Config::MAP_PROPERTIES_REMEMBER_SAVE_LOCATION, remember_save_location ? 1 : 0);
+	if(remember_save_location && !save_location.empty()) {
+		g_settings.setString(Config::MAP_PROPERTIES_DEFAULT_SAVE_LOCATION, save_location);
+	} else if(!remember_save_location) {
+		g_settings.setString(Config::MAP_PROPERTIES_DEFAULT_SAVE_LOCATION, "");
+	}
+	g_settings.save();
+
+	if(!save_location.empty()) {
+		FileName target_map_file;
+		target_map_file.AssignDir(wxstr(save_location));
+		target_map_file.SetFullName(wxstr(map_filename));
+		map.setFilename(nstr(target_map_file.GetFullPath()));
+		map.setName(nstr(target_map_file.GetFullName()));
+	}
+
+	const bool use_map_name_for_external_files =
+		sync_external_files_checkbox && sync_external_files_checkbox->GetValue();
+	const bool keep_unnamed_map =
+		use_map_name_for_external_files &&
+		!map.hasFile();
+
 	map.setMapDescription(nstr(description_ctrl->GetValue()));
-	map.setHouseFilename(nstr(house_filename_ctrl->GetValue()));
-	map.setSpawnFilename(nstr(spawn_filename_ctrl->GetValue()));
+	map.setHouseFilename(nstr(house_filename_ctrl->GetValue()), keep_unnamed_map);
+	map.setSpawnFilename(nstr(spawn_filename_ctrl->GetValue()), keep_unnamed_map);
 
 	// Only resize if we have to
 	int new_map_width = width_spin->GetValue();
@@ -316,20 +631,27 @@ void MapPropertiesWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 	if(new_map_width != map.getWidth() || new_map_height != map.getHeight()) {
 		map.setWidth(new_map_width);
 		map.setHeight(new_map_height);
-		g_gui.FitViewToMap(view);
+		if(view) {
+			g_gui.FitViewToMap(view);
+		}
 	}
 	g_gui.RefreshPalettes();
 
-	EndModal(1);
+	EndModal(wxID_OK);
 }
 
 void MapPropertiesWindow::OnClickCancel(wxCommandEvent& WXUNUSED(event))
 {
 	// Just close this window
-	EndModal(1);
+	EndModal(wxID_CANCEL);
 }
 
 MapPropertiesWindow::~MapPropertiesWindow() = default;
+
+bool MapPropertiesWindow::ShouldCreateFromSelection() const
+{
+	return create_from_selection_checkbox && create_from_selection_checkbox->GetValue();
+}
 
 // ============================================================================
 // Map Import Window
@@ -464,7 +786,7 @@ BEGIN_EVENT_TABLE(ExportMiniMapWindow, wxDialog)
 END_EVENT_TABLE()
 
 ExportMiniMapWindow::ExportMiniMapWindow(wxWindow* parent, Editor& editor) :
-	wxDialog(parent, wxID_ANY, "Export Minimap", wxDefaultPosition, wxSize(400, 300)),
+	wxDialog(parent, wxID_ANY, "Export Minimap", wxDefaultPosition, wxSize(400, 440)),
 	editor(editor)
 {
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
@@ -512,6 +834,8 @@ ExportMiniMapWindow::ExportMiniMapWindow(wxWindow* parent, Editor& editor) :
 	if(editor.hasSelection())
 		choices.Add("Selected Area");
 
+	choices.Add("Area View");
+
 	// Area options
 	tmpsizer = newd wxStaticBoxSizer(wxHORIZONTAL, this, "Area Options");
 	floor_options = newd wxChoice(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, choices);
@@ -522,7 +846,22 @@ ExportMiniMapWindow::ExportMiniMapWindow(wxWindow* parent, Editor& editor) :
 	tmpsizer->Add(floor_number, 0, wxALL, 5);
 	sizer->Add(tmpsizer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
 
-	// OK/Cancel buttons
+	// Area View position controls
+	auto& map = editor.getMap();
+	from_pos_ctrl = newd PositionCtrl(this, "From Position", 0, 0, rme::MapGroundLayer, map.getWidth(), map.getHeight());
+	sizer->Add(from_pos_ctrl, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+
+	to_pos_ctrl = newd PositionCtrl(this, "To Position", map.getWidth(), map.getHeight(), rme::MapGroundLayer, map.getWidth(), map.getHeight());
+	sizer->Add(to_pos_ctrl, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+
+	merge_floors_checkbox = newd wxCheckBox(this, wxID_ANY, "Merge floors into single image");
+	merge_floors_checkbox->Enable(false);
+	sizer->Add(merge_floors_checkbox, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
+
+	from_pos_ctrl->Enable(false);
+	to_pos_ctrl->Enable(false);
+
+	// OK/Cancel
 	tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
 	tmpsizer->Add(ok_button = newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(1).Center());
 	tmpsizer->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), wxSizerFlags(1).Center());
@@ -538,7 +877,15 @@ ExportMiniMapWindow::~ExportMiniMapWindow() = default;
 
 void ExportMiniMapWindow::OnExportTypeChange(wxCommandEvent& event)
 {
-	floor_number->Enable(event.GetSelection() == 2);
+	wxString selected = floor_options->GetStringSelection();
+	floor_number->Enable(selected == "Specific Floor");
+	bool isAreaView = selected == "Area View";
+	from_pos_ctrl->Enable(isAreaView);
+	to_pos_ctrl->Enable(isAreaView);
+	merge_floors_checkbox->Enable(isAreaView);
+	if(!isAreaView) {
+		merge_floors_checkbox->SetValue(false);
+	}
 }
 
 void ExportMiniMapWindow::OnClickBrowse(wxCommandEvent& WXUNUSED(event))
@@ -568,14 +915,32 @@ void ExportMiniMapWindow::OnClickOK(wxCommandEvent& WXUNUSED(event))
 	g_gui.CreateLoadBar("Exporting minimap...");
 
 	auto format = static_cast<MinimapExportFormat>(format_options->GetSelection());
-	auto mode = static_cast<MinimapExportMode>(floor_options->GetSelection());
 	std::string directory = directory_text_field->GetValue().ToStdString();
 	std::string file_name = file_name_text_field->GetValue().ToStdString();
 	int floor = floor_number->GetValue();
 
+	// Map string selection to mode since SelectedArea is conditional
+	wxString selected = floor_options->GetStringSelection();
+	MinimapExportMode mode;
+	if(selected == "All Floors") {
+		mode = MinimapExportMode::AllFloors;
+	} else if(selected == "Ground Floor") {
+		mode = MinimapExportMode::GroundFloor;
+	} else if(selected == "Specific Floor") {
+		mode = MinimapExportMode::SpecificFloor;
+	} else if(selected == "Selected Area") {
+		mode = MinimapExportMode::SelectedArea;
+	} else {
+		mode = MinimapExportMode::AreaView;
+	}
+
 	g_settings.setString(Config::MINIMAP_EXPORT_DIR, directory);
 
 	IOMinimap io(&editor, format, mode, true);
+	if(mode == MinimapExportMode::AreaView) {
+		io.setArea(from_pos_ctrl->GetPosition(), to_pos_ctrl->GetPosition());
+		io.setMergeFloors(merge_floors_checkbox->GetValue());
+	}
 	if (!io.saveMinimap(directory, file_name, floor)) {
 		g_gui.PopupDialog("Error", io.getError(), wxOK);
 	}

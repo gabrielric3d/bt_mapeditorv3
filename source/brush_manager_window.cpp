@@ -187,6 +187,17 @@ BrushManagerDialog::BrushManagerDialog(wxWindow* parent) :
 	brushFilterCtrl->SetHint("Filter brushes...");
 	brushFilterCtrl->SetForegroundColour(*wxBLACK);
 	brushFilterCtrl->SetBackgroundColour(*wxWHITE);
+
+	// Disable global hotkeys when filter has focus to prevent interference while typing
+	brushFilterCtrl->Bind(wxEVT_SET_FOCUS, [](wxFocusEvent& event) {
+		g_gui.DisableHotkeys();
+		event.Skip();
+	});
+	brushFilterCtrl->Bind(wxEVT_KILL_FOCUS, [](wxFocusEvent& event) {
+		g_gui.EnableHotkeys();
+		event.Skip();
+	});
+
 	rightPane->Add(brushFilterCtrl, 0, wxEXPAND | wxBOTTOM, 2);
 
 	brushListCtrl = newd wxDataViewListCtrl(this, ID_BRUSH_SELECTION, wxDefaultPosition, wxDefaultSize,

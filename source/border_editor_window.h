@@ -10,6 +10,7 @@
 #include <wx/textctrl.h>
 #include <wx/button.h>
 #include <wx/listbox.h>
+#include <wx/listctrl.h>
 #include <wx/spinctrl.h>
 #include <wx/grid.h>
 #include <wx/panel.h>
@@ -89,7 +90,7 @@ struct GroundItem {
 
 class BorderEditorDialog : public wxDialog {
 public:
-    BorderEditorDialog(wxWindow* parent, const wxString& title);
+    BorderEditorDialog(wxWindow* parent, const wxString& title, bool modifyGroundBordersOnly = false, const wxString& initialGroundBrushName = wxString());
     virtual ~BorderEditorDialog();
 
     // Event handlers - made public so they can be accessed by other components
@@ -122,6 +123,17 @@ protected:
     void ClearItems();
     void ClearGroundItems();
     void UpdateGroundItemsList();
+    void ConfigureModifyGroundBordersMode();
+    void SelectGroundBrushByName(const wxString& brushName);
+    void RefreshBorderListIdsUI();
+    void OnBorderListTextChanged(wxCommandEvent& event);
+    void OnPromoteBorderListId(wxCommandEvent& event);
+    void OnSearchBorderListId(wxCommandEvent& event);
+    void RefreshInlineBorderIdPreviews();
+    bool EnsureBorderPreviewCatalogLoaded();
+    void OnBorderIdsPreviewSelected(wxListEvent& event);
+    void OnToNoneIdsPreviewSelected(wxListEvent& event);
+    void OnBorderListIdsPreviewSelected(wxListEvent& event);
 
 public:
     // UI Elements - made public so they can be accessed by other components
@@ -146,11 +158,31 @@ public:
     wxSpinCtrl* m_groundItemIdCtrl;
     wxSpinCtrl* m_groundItemChanceCtrl;
     wxListBox* m_groundItemsList;
+    wxListBox* m_groundBorderRefsList;
+    wxButton* m_addGroundItemButton;
+    wxButton* m_removeGroundItemButton;
+    wxButton* m_clearGroundButton;
+    wxButton* m_saveGroundButton;
     
     // Border alignment for ground brushes
     wxChoice* m_borderAlignmentChoice;
     wxCheckBox* m_includeToNoneCheck;
     wxCheckBox* m_includeInnerCheck;
+    wxTextCtrl* m_borderIdsCtrl;
+    wxTextCtrl* m_borderToNoneIdsCtrl;
+    wxTextCtrl* m_borderListCtrl;
+    wxListCtrl* m_borderIdsPreviewCtrl;
+    wxListCtrl* m_borderToNoneIdsPreviewCtrl;
+    wxListCtrl* m_borderListIdsPreviewCtrl;
+    wxImageList* m_borderIdsPreviewImages;
+    wxImageList* m_borderToNoneIdsPreviewImages;
+    wxImageList* m_borderListIdsPreviewImages;
+    wxButton* m_searchBorderListButton;
+    wxListBox* m_borderListIdsList;
+    wxButton* m_promoteBorderListIdButton;
+    wxCheckBox* m_promoteAlsoToNoneCheck;
+    std::map<int, uint16_t> m_borderPreviewItemById;
+    bool m_borderPreviewCatalogLoaded;
     
     // Tileset selector for ground brushes
     wxChoice* m_tilesetChoice;
@@ -179,6 +211,8 @@ private:
     
     // Current active tab (0 = border, 1 = ground)
     int m_activeTab;
+    bool m_modifyGroundBordersOnly;
+    wxString m_initialGroundBrushName;
     
     DECLARE_EVENT_TABLE()
 };

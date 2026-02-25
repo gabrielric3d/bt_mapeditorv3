@@ -5,6 +5,7 @@
         <item name="$Open..." hotkey="Ctrl+O" action="OPEN" help="Open another map."/>
         <item name="$Save" hotkey="Ctrl+S" action="SAVE" help="Save the current map."/>
         <item name="Save $As..." hotkey="Ctrl+Alt+S" action="SAVE_AS" help="Save the current map as a new file."/>
+        <item name="$DEPLOY" action="DEPLOY_MAP" help="Deploy map to git (commit + push)."/>
         <item name="Save As $BTMap..." action="SAVE_AS_BTMAP" help="Save the current map as a BTMap directory for fast incremental saving."/>
         <item name="$Generate Map" action="GENERATE_MAP" help="Generate a new map."/>
         <item name="$Close" hotkey="Ctrl+Q" action="CLOSE" help="Closes the currently open map."/>
@@ -90,11 +91,13 @@
         <item name="$Properties..." hotkey="Ctrl+P" action="MAP_PROPERTIES" help="Show and change the map properties."/>
         <item name="$Statistics" hotkey="F8" action="MAP_STATISTICS" help="Show map statistics."/>
         <item name="Scan $Region..." action="SCAN_REGION" help="Scan a region for any content (items, ground, borders, etc)."/>
+        <item name="Spawn $Density Adjuster..." action="SPAWN_DENSITY_ADJUSTER" help="Adjust creature density in spawns by adding or removing creatures."/>
     </menu>
     <menu name="$Select">
         <item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
         <item name="Find Item on Selection" action="SEARCH_ON_SELECTION_ITEM" help="Find items on selected area."/>
         <item name="Remove Item on Selection" action="REMOVE_ON_SELECTION_ITEM" help="Remove item on selected area."/>
+        <item name="Scan Selection Items to XML" action="SELECTION_ITEM_SCANNER" help="Scan all items on selected tiles and export as XML with relative offsets."/>
         <separator/>
         <menu name="$Find on Selection">
             <item name="Find $Everything" action="SEARCH_ON_SELECTION_EVERYTHING" help="Find all unique/action/text/container items."/>
@@ -193,6 +196,7 @@
         <item name="Brush $Tips" action="BRUSH_TIPS" help="Shows brush tips and shortcuts."/>
         <item name="$Area Decoration" action="AREA_DECORATION" help="Opens the area decoration tool for placing decorative items in regions."/>
         <item name="Auto Creature $Spawn" action="AREA_CREATURE_SPAWN" help="Opens the automatic creature spawn tool for grouped placement by area presets."/>
+        <item name="$Instance Layout Generator" action="INSTANCE_LAYOUT_GENERATOR" help="Duplicate a selected room into instance rows/columns and export Lua position text."/>
         <item name="$New Palette" action="NEW_PALETTE" help="Creates a new palette."/>
         <separator/>
         <item name="$Terrain Palette" hotkey="T" action="SELECT_TERRAIN" help="Select the Terrain palette."/>

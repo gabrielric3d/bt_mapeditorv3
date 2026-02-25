@@ -32,8 +32,12 @@
 #include <wx/statline.h>
 #include <wx/tglbtn.h>
 #include <wx/dcbuffer.h>
+#include <wx/dcmemory.h>
 #include <wx/filepicker.h>
 #include <wx/dnd.h>
+#include <wx/listctrl.h>
+#include <sstream>
+#include <algorithm>
 
 #define BORDER_GRID_SIZE 32
 #define BORDER_PREVIEW_SIZE 192
@@ -81,6 +85,656 @@ wxString GetVersionDataDirectory() {
     FileName data_path = version.getDataPath();
     return data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR);
 }
+
+static std::string TrimAscii(const std::string& value) {
+    size_t start = value.find_first_not_of(" \t\r\n");
+    if(start == std::string::npos) {
+        return std::string();
+    }
+
+    size_t end = value.find_last_not_of(" \t\r\n");
+    return value.substr(start, end - start + 1);
+}
+
+static bool ParseBorderIdList(const wxString& text, std::vector<int>& outIds) {
+    outIds.clear();
+    std::stringstream ss(nstr(text));
+    std::string token;
+    while(std::getline(ss, token, ',')) {
+        token = TrimAscii(token);
+        if(token.empty()) {
+            continue;
+        }
+
+        try {
+            size_t consumed = 0;
+            int id = std::stoi(token, &consumed);
+            if(consumed != token.size() || id <= 0 || id > 65535) {
+                return false;
+            }
+            outIds.push_back(id);
+        } catch(...) {
+            return false;
+        }
+    }
+
+    return !outIds.empty();
+}
+
+static void AppendUniqueBorderId(std::vector<int>& ids, int id) {
+    if(id <= 0) {
+        return;
+    }
+    if(std::find(ids.begin(), ids.end(), id) != ids.end()) {
+        return;
+    }
+    ids.push_back(id);
+}
+
+static wxString JoinBorderIdList(const std::vector<int>& ids) {
+    wxString out;
+    for(size_t i = 0; i < ids.size(); ++i) {
+        if(i > 0) {
+            out += ", ";
+        }
+        out += wxString::Format("%d", ids[i]);
+    }
+    return out;
+}
+
+static std::vector<int> ReorderBorderIdsWithPrimary(const std::vector<int>& ids, int primaryId) {
+    std::vector<int> reordered;
+    if(primaryId > 0) {
+        reordered.push_back(primaryId);
+    }
+    for(size_t i = 0; i < ids.size(); ++i) {
+        if(ids[i] > 0 && ids[i] != primaryId) {
+            AppendUniqueBorderId(reordered, ids[i]);
+        }
+    }
+    return reordered;
+}
+
+static wxBitmap BuildSmallBorderPreviewBitmap(uint16_t previewItemId, int width = 32, int height = 32) {
+    wxBitmap bitmap(width, height, 32);
+    wxMemoryDC dc(bitmap);
+    dc.SetBackground(wxBrush(wxColour(24, 28, 34)));
+    dc.Clear();
+    dc.SetPen(wxPen(wxColour(70, 80, 95)));
+    dc.SetBrush(*wxTRANSPARENT_BRUSH);
+    dc.DrawRectangle(0, 0, width, height);
+
+    bool drewSprite = false;
+    if(previewItemId > 0) {
+        const ItemType& type = g_items.getItemType(previewItemId);
+        if(type.id != 0) {
+            Sprite* sprite = g_gui.gfx.getSprite(type.clientID);
+            if(sprite) {
+                sprite->DrawTo(&dc, SPRITE_SIZE_32x32, 0, 0, width, height);
+                drewSprite = true;
+            }
+        }
+    }
+
+    if(!drewSprite) {
+        dc.SetPen(wxPen(wxColour(115, 130, 150)));
+        dc.DrawLine(4, 4, width - 4, height - 4);
+        dc.DrawLine(width - 4, 4, 4, height - 4);
+    }
+
+    dc.SelectObject(wxNullBitmap);
+    return bitmap;
+}
+
+static wxString BuildBorderReferenceLabel(const pugi::xml_node& borderNode) {
+    wxString align = "outer";
+    wxString toValue = "default";
+    wxString ids = "";
+    wxString borderlist = "";
+
+    if(borderNode.attribute("align")) {
+        align = wxString(borderNode.attribute("align").as_string());
+    }
+    if(borderNode.attribute("to")) {
+        toValue = wxString(borderNode.attribute("to").as_string());
+    }
+    if(borderNode.attribute("id")) {
+        ids = wxString(borderNode.attribute("id").as_string());
+    }
+    if(borderNode.attribute("borderlist")) {
+        borderlist = wxString(borderNode.attribute("borderlist").as_string());
+    }
+
+    if(!borderlist.IsEmpty()) {
+        return wxString::Format("align=%s  to=%s  id=%s  borderlist=%s", align.c_str(), toValue.c_str(), ids.c_str(), borderlist.c_str());
+    }
+
+    return wxString::Format("align=%s  to=%s  id=%s", align.c_str(), toValue.c_str(), ids.c_str());
+}
+
+static wxString NormalizeSingleLine(wxString text) {
+    text.Replace("\r", " ");
+    text.Replace("\n", " ");
+    text.Replace("\t", " ");
+    while(text.Find("  ") != wxNOT_FOUND) {
+        text.Replace("  ", " ");
+    }
+    text.Trim(true).Trim(false);
+    return text;
+}
+
+static wxString ExtractBorderCommentDescription(const pugi::xml_node& borderNode) {
+    std::string description;
+    pugi::xml_node commentNode = borderNode.previous_sibling();
+    if(commentNode && commentNode.type() == pugi::node_comment) {
+        description = commentNode.value();
+        description = description.c_str();
+
+        size_t first = description.find_first_not_of(" \t\n\r");
+        if(first == std::string::npos) {
+            description.clear();
+        } else {
+            description.erase(0, first);
+            size_t last = description.find_last_not_of(" \t\n\r");
+            if(last != std::string::npos) {
+                description.erase(last + 1);
+            }
+        }
+
+        if(description.substr(0, 4) == "<!--") {
+            description.erase(0, 4);
+            size_t trimLeft = description.find_first_not_of(" \t\n\r");
+            if(trimLeft == std::string::npos) {
+                description.clear();
+            } else {
+                description.erase(0, trimLeft);
+            }
+        }
+
+        if(description.length() >= 3 && description.substr(description.length() - 3) == "-->") {
+            description.erase(description.length() - 3);
+            size_t trimRight = description.find_last_not_of(" \t\n\r");
+            if(trimRight != std::string::npos) {
+                description.erase(trimRight + 1);
+            } else {
+                description.clear();
+            }
+        }
+    }
+
+    return NormalizeSingleLine(wxstr(description));
+}
+
+class BorderListSlotEditorDialog : public wxDialog {
+public:
+    struct BorderEntry {
+        int id;
+        wxString description;
+        wxString label;
+        uint16_t previewItemId;
+    };
+
+    BorderListSlotEditorDialog(wxWindow* parent, const std::vector<int>& currentSlots, const std::vector<BorderEntry>& entries) :
+        wxDialog(parent, wxID_ANY, "Border List Slot Editor", wxDefaultPosition, wxSize(880, 520), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+        m_slots(currentSlots),
+        m_entries(entries),
+        m_filterCtrl(nullptr),
+        m_slotList(nullptr),
+        m_availableList(nullptr),
+        m_availableImageList(nullptr),
+        m_prevPageButton(nullptr),
+        m_nextPageButton(nullptr),
+        m_pageInfoLabel(nullptr),
+        m_totalPages(1),
+        m_currentPage(0),
+        m_pageSize(100) {
+
+        wxBoxSizer* rootSizer = new wxBoxSizer(wxVERTICAL);
+
+        wxStaticText* header = new wxStaticText(
+            this,
+            wxID_ANY,
+            "Left: click a slot to type/edit ID. Right: available borders from borders.xml with search + pagination."
+        );
+        rootSizer->Add(header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 10);
+
+        wxBoxSizer* contentSizer = new wxBoxSizer(wxHORIZONTAL);
+
+        wxStaticBoxSizer* slotsSizer = new wxStaticBoxSizer(wxVERTICAL, this, "Border List Slots");
+        m_slotList = new wxListBox(this, wxID_ANY);
+        m_slotList->SetMinSize(wxSize(280, 320));
+        m_slotList->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+        slotsSizer->Add(m_slotList, 1, wxEXPAND | wxALL, 8);
+
+        wxBoxSizer* slotButtonsSizer = new wxBoxSizer(wxHORIZONTAL);
+        wxButton* addSlotButton = new wxButton(this, wxID_ANY, "Add Slot", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        wxButton* editSlotButton = new wxButton(this, wxID_ANY, "Edit Slot", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        wxButton* removeSlotButton = new wxButton(this, wxID_ANY, "Remove Slot", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        slotButtonsSizer->Add(addSlotButton, 0, wxRIGHT, 6);
+        slotButtonsSizer->Add(editSlotButton, 0, wxRIGHT, 6);
+        slotButtonsSizer->Add(removeSlotButton, 0);
+        slotsSizer->Add(slotButtonsSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+        contentSizer->Add(slotsSizer, 0, wxEXPAND | wxALL, 8);
+
+        wxStaticBoxSizer* catalogSizer = new wxStaticBoxSizer(wxVERTICAL, this, "Available Borders (borders.xml)");
+        m_filterCtrl = new wxTextCtrl(this, wxID_ANY);
+        m_filterCtrl->SetHint("Filter by border id or description...");
+        catalogSizer->Add(m_filterCtrl, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+
+        m_availableList = new wxListCtrl(
+            this,
+            wxID_ANY,
+            wxDefaultPosition,
+            wxDefaultSize,
+            wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_HRULES | wxBORDER_SUNKEN
+        );
+        m_availableList->SetMinSize(wxSize(430, 320));
+        m_availableList->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+        m_availableList->AppendColumn("Border Preview / ID", wxLIST_FORMAT_LEFT, 420);
+        m_availableImageList = new wxImageList(32, 32, true);
+        m_availableList->AssignImageList(m_availableImageList, wxIMAGE_LIST_SMALL);
+        catalogSizer->Add(m_availableList, 1, wxEXPAND | wxALL, 8);
+
+        wxBoxSizer* paginationSizer = new wxBoxSizer(wxHORIZONTAL);
+        m_prevPageButton = new wxButton(this, wxID_ANY, "< Prev", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        m_nextPageButton = new wxButton(this, wxID_ANY, "Next >", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        m_pageInfoLabel = new wxStaticText(this, wxID_ANY, "Page 1/1");
+        paginationSizer->Add(m_prevPageButton, 0, wxRIGHT, 8);
+        paginationSizer->Add(m_pageInfoLabel, 1, wxALIGN_CENTER_VERTICAL);
+        paginationSizer->Add(m_nextPageButton, 0, wxLEFT, 8);
+        catalogSizer->Add(paginationSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
+
+        wxBoxSizer* applySizer = new wxBoxSizer(wxHORIZONTAL);
+        wxButton* applyToSlotButton = new wxButton(this, wxID_ANY, "Apply To Selected Slot");
+        wxButton* appendSlotButton = new wxButton(this, wxID_ANY, "Append As New Slot");
+        applySizer->Add(applyToSlotButton, 0, wxRIGHT, 8);
+        applySizer->Add(appendSlotButton, 0);
+        catalogSizer->Add(applySizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+        contentSizer->Add(catalogSizer, 1, wxEXPAND | wxALL, 8);
+
+        rootSizer->Add(contentSizer, 1, wxEXPAND);
+
+        wxStdDialogButtonSizer* dialogButtons = new wxStdDialogButtonSizer();
+        wxButton* okButton = new wxButton(this, wxID_OK, "Use Slots");
+        wxButton* cancelButton = new wxButton(this, wxID_CANCEL, "Cancel");
+        dialogButtons->AddButton(okButton);
+        dialogButtons->AddButton(cancelButton);
+        dialogButtons->Realize();
+        rootSizer->Add(dialogButtons, 0, wxEXPAND | wxALL, 10);
+
+        SetSizer(rootSizer);
+
+        if(m_slotList) {
+            m_slotList->Bind(wxEVT_LISTBOX_DCLICK, &BorderListSlotEditorDialog::OnEditSelectedSlot, this);
+        }
+        if(m_filterCtrl) {
+            m_filterCtrl->Bind(wxEVT_TEXT, &BorderListSlotEditorDialog::OnFilterChanged, this);
+        }
+        if(m_availableList) {
+            m_availableList->Bind(wxEVT_LIST_ITEM_ACTIVATED, &BorderListSlotEditorDialog::OnAvailableItemActivated, this);
+            m_availableList->Bind(wxEVT_LIST_ITEM_SELECTED, &BorderListSlotEditorDialog::OnAvailableItemSelected, this);
+        }
+        if(addSlotButton) {
+            addSlotButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnAddSlot, this);
+        }
+        if(editSlotButton) {
+            editSlotButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnEditSelectedSlot, this);
+        }
+        if(removeSlotButton) {
+            removeSlotButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnRemoveSelectedSlot, this);
+        }
+        if(m_prevPageButton) {
+            m_prevPageButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnPrevPage, this);
+        }
+        if(m_nextPageButton) {
+            m_nextPageButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnNextPage, this);
+        }
+        if(applyToSlotButton) {
+            applyToSlotButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnApplyToSlot, this);
+        }
+        if(appendSlotButton) {
+            appendSlotButton->Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnAppendSlotFromAvailable, this);
+        }
+        Bind(wxEVT_BUTTON, &BorderListSlotEditorDialog::OnConfirm, this, wxID_OK);
+
+        RefreshSlotsList();
+        RebuildAvailableList();
+        if(m_filterCtrl) {
+            m_filterCtrl->SetFocus();
+        }
+        CenterOnParent();
+    }
+
+    std::vector<int> GetSlotIds() const {
+        std::vector<int> clean;
+        for(size_t i = 0; i < m_slots.size(); ++i) {
+            if(m_slots[i] > 0) {
+                clean.push_back(m_slots[i]);
+            }
+        }
+        return clean;
+    }
+
+private:
+    bool TryParsePositiveId(const wxString& text, int& outId) const {
+        wxString trimmed = text;
+        trimmed.Trim(true).Trim(false);
+        if(trimmed.IsEmpty()) {
+            outId = 0;
+            return false;
+        }
+        long value = 0;
+        if(!trimmed.ToLong(&value) || value <= 0 || value > 65535) {
+            outId = 0;
+            return false;
+        }
+        outId = static_cast<int>(value);
+        return true;
+    }
+
+    int GetSelectedSlotIndex() const {
+        if(!m_slotList || m_slots.empty()) {
+            return -1;
+        }
+        int idx = m_slotList->GetSelection();
+        if(idx == wxNOT_FOUND || idx < 0 || idx >= static_cast<int>(m_slots.size())) {
+            return -1;
+        }
+        return idx;
+    }
+
+    int GetSelectedAvailableBorderId() const {
+        if(!m_availableList) {
+            return 0;
+        }
+        long selection = m_availableList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+        if(selection == wxNOT_FOUND || selection < 0 || selection >= static_cast<long>(m_visibleEntryIndices.size())) {
+            return 0;
+        }
+        int entryIndex = m_visibleEntryIndices[static_cast<size_t>(selection)];
+        if(entryIndex < 0 || entryIndex >= static_cast<int>(m_entries.size())) {
+            return 0;
+        }
+        return m_entries[entryIndex].id;
+    }
+
+    void RefreshSlotsList(int preferredSelection = -1) {
+        if(!m_slotList) {
+            return;
+        }
+
+        int oldSelection = m_slotList->GetSelection();
+        m_slotList->Clear();
+
+        for(size_t i = 0; i < m_slots.size(); ++i) {
+            m_slotList->Append(wxString::Format("Slot %03d | Border ID %d", static_cast<int>(i + 1), m_slots[i]));
+        }
+
+        if(m_slots.empty()) {
+            m_slotList->Append("<no slots>");
+            m_slotList->Enable(false);
+        } else {
+            m_slotList->Enable(true);
+            int selectionToSet = preferredSelection;
+            if(selectionToSet < 0 || selectionToSet >= static_cast<int>(m_slots.size())) {
+                selectionToSet = oldSelection;
+            }
+            if(selectionToSet < 0 || selectionToSet >= static_cast<int>(m_slots.size())) {
+                selectionToSet = 0;
+            }
+            m_slotList->SetSelection(selectionToSet);
+        }
+    }
+
+    void RebuildAvailableList() {
+        if(!m_availableList) {
+            return;
+        }
+
+        wxString filterText = m_filterCtrl ? m_filterCtrl->GetValue() : wxString();
+        wxString filterLower = filterText;
+        filterLower.MakeLower();
+
+        m_filteredEntryIndices.clear();
+        for(size_t i = 0; i < m_entries.size(); ++i) {
+            wxString label = m_entries[i].label;
+            wxString description = m_entries[i].description;
+            wxString idText = wxString::Format("%d", m_entries[i].id);
+            label.MakeLower();
+            description.MakeLower();
+
+            if(filterLower.IsEmpty() ||
+               label.Find(filterLower) != wxNOT_FOUND ||
+               description.Find(filterLower) != wxNOT_FOUND ||
+               idText.Find(filterLower) != wxNOT_FOUND) {
+                m_filteredEntryIndices.push_back(static_cast<int>(i));
+            }
+        }
+
+        size_t count = m_filteredEntryIndices.size();
+        m_totalPages = (count == 0 ? 1 : ((count + m_pageSize - 1) / m_pageSize));
+        if(m_currentPage >= m_totalPages) {
+            m_currentPage = m_totalPages - 1;
+        }
+
+        m_availableList->DeleteAllItems();
+        if(m_availableImageList) {
+            m_availableImageList->RemoveAll();
+        }
+        m_visibleEntryIndices.clear();
+
+        size_t start = m_currentPage * m_pageSize;
+        size_t end = std::min(start + m_pageSize, count);
+        for(size_t i = start; i < end; ++i) {
+            int entryIndex = m_filteredEntryIndices[i];
+            m_visibleEntryIndices.push_back(entryIndex);
+
+            const BorderEntry& entry = m_entries[entryIndex];
+            wxString rowLabel = wxString::Format("Slot %03d | ID %d", static_cast<int>(i + 1), entry.id);
+            if(!entry.description.IsEmpty()) {
+                rowLabel += wxString::Format(" | %s", entry.description);
+            }
+            int imageIndex = -1;
+            if(m_availableImageList) {
+                imageIndex = m_availableImageList->Add(BuildBorderPreviewBitmap(entry));
+            }
+            m_availableList->InsertItem(static_cast<long>(m_availableList->GetItemCount()), rowLabel, imageIndex);
+        }
+
+        if(!m_visibleEntryIndices.empty()) {
+            m_availableList->SetItemState(0, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+            m_availableList->EnsureVisible(0);
+        }
+        m_availableList->SetColumnWidth(0, wxLIST_AUTOSIZE_USEHEADER);
+
+        if(m_pageInfoLabel) {
+            m_pageInfoLabel->SetLabel(wxString::Format(
+                "Page %d/%d   (%d results)",
+                static_cast<int>(m_currentPage + 1),
+                static_cast<int>(m_totalPages),
+                static_cast<int>(count)
+            ));
+        }
+        if(m_prevPageButton) {
+            m_prevPageButton->Enable(m_currentPage > 0);
+        }
+        if(m_nextPageButton) {
+            m_nextPageButton->Enable((m_currentPage + 1) < m_totalPages);
+        }
+    }
+
+    wxBitmap BuildBorderPreviewBitmap(const BorderEntry& entry) const {
+        const int width = 32;
+        const int height = 32;
+        wxBitmap bitmap(width, height, 32);
+        wxMemoryDC dc(bitmap);
+        dc.SetBackground(wxBrush(wxColour(24, 28, 34)));
+        dc.Clear();
+        dc.SetPen(wxPen(wxColour(70, 80, 95)));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawRectangle(0, 0, width, height);
+
+        bool drewSprite = false;
+        if(entry.previewItemId > 0) {
+            const ItemType& type = g_items.getItemType(entry.previewItemId);
+            if(type.id != 0) {
+                Sprite* sprite = g_gui.gfx.getSprite(type.clientID);
+                if(sprite) {
+                    sprite->DrawTo(&dc, SPRITE_SIZE_32x32, 0, 0, width, height);
+                    drewSprite = true;
+                }
+            }
+        }
+
+        if(!drewSprite) {
+            dc.SetPen(wxPen(wxColour(115, 130, 150)));
+            dc.DrawLine(4, 4, width - 4, height - 4);
+            dc.DrawLine(width - 4, 4, 4, height - 4);
+        }
+
+        dc.SelectObject(wxNullBitmap);
+        return bitmap;
+    }
+
+    void OnAvailableItemActivated(wxListEvent& WXUNUSED(event)) {
+        wxCommandEvent cmd;
+        OnApplyToSlot(cmd);
+    }
+
+    void OnAvailableItemSelected(wxListEvent& event) {
+        event.Skip();
+    }
+
+    void OnAddSlot(wxCommandEvent& WXUNUSED(event)) {
+        wxTextEntryDialog dialog(this, "Type the border ID for the new slot:", "Add Slot");
+        if(dialog.ShowModal() != wxID_OK) {
+            return;
+        }
+
+        int borderId = 0;
+        if(!TryParsePositiveId(dialog.GetValue(), borderId)) {
+            wxMessageBox("Invalid border ID. Use a positive integer (1-65535).", "Add Slot", wxICON_ERROR);
+            return;
+        }
+
+        m_slots.push_back(borderId);
+        RefreshSlotsList(static_cast<int>(m_slots.size()) - 1);
+    }
+
+    void OnEditSelectedSlot(wxCommandEvent& WXUNUSED(event)) {
+        int slotIndex = GetSelectedSlotIndex();
+        if(slotIndex == -1) {
+            wxMessageBox("Select a slot first.", "Edit Slot", wxICON_INFORMATION);
+            return;
+        }
+
+        wxTextEntryDialog dialog(
+            this,
+            "Type a new border ID (leave empty to remove this slot):",
+            "Edit Slot",
+            wxString::Format("%d", m_slots[slotIndex])
+        );
+        if(dialog.ShowModal() != wxID_OK) {
+            return;
+        }
+
+        wxString text = dialog.GetValue();
+        wxString trimmed = text;
+        trimmed.Trim(true).Trim(false);
+        if(trimmed.IsEmpty()) {
+            m_slots.erase(m_slots.begin() + slotIndex);
+            RefreshSlotsList(slotIndex);
+            return;
+        }
+
+        int borderId = 0;
+        if(!TryParsePositiveId(trimmed, borderId)) {
+            wxMessageBox("Invalid border ID. Use a positive integer (1-65535).", "Edit Slot", wxICON_ERROR);
+            return;
+        }
+
+        m_slots[slotIndex] = borderId;
+        RefreshSlotsList(slotIndex);
+    }
+
+    void OnRemoveSelectedSlot(wxCommandEvent& WXUNUSED(event)) {
+        int slotIndex = GetSelectedSlotIndex();
+        if(slotIndex == -1) {
+            wxMessageBox("Select a slot first.", "Remove Slot", wxICON_INFORMATION);
+            return;
+        }
+
+        m_slots.erase(m_slots.begin() + slotIndex);
+        RefreshSlotsList(slotIndex);
+    }
+
+    void OnFilterChanged(wxCommandEvent& WXUNUSED(event)) {
+        m_currentPage = 0;
+        RebuildAvailableList();
+    }
+
+    void OnPrevPage(wxCommandEvent& WXUNUSED(event)) {
+        if(m_currentPage > 0) {
+            --m_currentPage;
+            RebuildAvailableList();
+        }
+    }
+
+    void OnNextPage(wxCommandEvent& WXUNUSED(event)) {
+        if((m_currentPage + 1) < m_totalPages) {
+            ++m_currentPage;
+            RebuildAvailableList();
+        }
+    }
+
+    void OnApplyToSlot(wxCommandEvent& WXUNUSED(event)) {
+        int borderId = GetSelectedAvailableBorderId();
+        if(borderId <= 0) {
+            wxMessageBox("Select an available border first.", "Apply Border", wxICON_INFORMATION);
+            return;
+        }
+
+        int slotIndex = GetSelectedSlotIndex();
+        if(slotIndex == -1) {
+            m_slots.push_back(borderId);
+            RefreshSlotsList(static_cast<int>(m_slots.size()) - 1);
+            return;
+        }
+
+        m_slots[slotIndex] = borderId;
+        RefreshSlotsList(slotIndex);
+    }
+
+    void OnAppendSlotFromAvailable(wxCommandEvent& WXUNUSED(event)) {
+        int borderId = GetSelectedAvailableBorderId();
+        if(borderId <= 0) {
+            wxMessageBox("Select an available border first.", "Append Slot", wxICON_INFORMATION);
+            return;
+        }
+
+        m_slots.push_back(borderId);
+        RefreshSlotsList(static_cast<int>(m_slots.size()) - 1);
+    }
+
+    void OnConfirm(wxCommandEvent& WXUNUSED(event)) {
+        EndModal(wxID_OK);
+    }
+
+    std::vector<int> m_slots;
+    std::vector<BorderEntry> m_entries;
+    std::vector<int> m_filteredEntryIndices;
+    std::vector<int> m_visibleEntryIndices;
+    wxTextCtrl* m_filterCtrl;
+    wxListBox* m_slotList;
+    wxListCtrl* m_availableList;
+    wxImageList* m_availableImageList;
+    wxButton* m_prevPageButton;
+    wxButton* m_nextPageButton;
+    wxStaticText* m_pageInfoLabel;
+    size_t m_totalPages;
+    size_t m_currentPage;
+    const size_t m_pageSize;
+};
 
 // Add a helper function at the top of the file to get item ID from brush
 uint16_t GetItemIDFromBrush(Brush* brush) {
@@ -235,11 +889,14 @@ BEGIN_EVENT_TABLE(BorderPreviewPanel, wxPanel)
     EVT_PAINT(BorderPreviewPanel::OnPaint)
 END_EVENT_TABLE()
 
-BorderEditorDialog::BorderEditorDialog(wxWindow* parent, const wxString& title) :
+BorderEditorDialog::BorderEditorDialog(wxWindow* parent, const wxString& title, bool modifyGroundBordersOnly, const wxString& initialGroundBrushName) :
     wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(1000, 650),
         wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
     m_nextBorderId(1),
-    m_activeTab(0) {
+    m_activeTab(0),
+    m_modifyGroundBordersOnly(modifyGroundBordersOnly),
+    m_initialGroundBrushName(initialGroundBrushName),
+    m_borderPreviewCatalogLoaded(false) {
     
     CreateGUIControls();
     LoadExistingBorders();
@@ -248,6 +905,13 @@ BorderEditorDialog::BorderEditorDialog(wxWindow* parent, const wxString& title) 
     
     // Set ID to next available ID
     m_idCtrl->SetValue(m_nextBorderId);
+    if(m_borderIdsCtrl) {
+        m_borderIdsCtrl->SetValue(wxString::Format("%d", m_nextBorderId));
+    }
+
+    if(m_modifyGroundBordersOnly) {
+        ConfigureModifyGroundBordersMode();
+    }
     
     // Center the dialog
     CenterOnParent();
@@ -258,6 +922,13 @@ BorderEditorDialog::~BorderEditorDialog() {
 }
 
 void BorderEditorDialog::CreateGUIControls() {
+    m_borderIdsPreviewCtrl = nullptr;
+    m_borderToNoneIdsPreviewCtrl = nullptr;
+    m_borderListIdsPreviewCtrl = nullptr;
+    m_borderIdsPreviewImages = nullptr;
+    m_borderToNoneIdsPreviewImages = nullptr;
+    m_borderListIdsPreviewImages = nullptr;
+
     wxBoxSizer* topSizer = new wxBoxSizer(wxVERTICAL);
     
     // Common properties - more compact horizontal layout
@@ -482,13 +1153,13 @@ void BorderEditorDialog::CreateGUIControls() {
     groundBrowseButton->SetToolTip("Browse for an item");
     buttonsSizer->Add(groundBrowseButton, 0, wxRIGHT, 5);
     
-    wxButton* addGroundItemButton = new wxButton(m_groundPanel, wxID_ADD + 100, "Add", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    addGroundItemButton->SetToolTip("Add this item to the list");
-    buttonsSizer->Add(addGroundItemButton, 0, wxRIGHT, 5);
+    m_addGroundItemButton = new wxButton(m_groundPanel, wxID_ADD + 100, "Add", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_addGroundItemButton->SetToolTip("Add this item to the list");
+    buttonsSizer->Add(m_addGroundItemButton, 0, wxRIGHT, 5);
     
-    wxButton* removeGroundItemButton = new wxButton(m_groundPanel, wxID_REMOVE, "Remove", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-    removeGroundItemButton->SetToolTip("Remove the selected item");
-    buttonsSizer->Add(removeGroundItemButton, 0);
+    m_removeGroundItemButton = new wxButton(m_groundPanel, wxID_REMOVE, "Remove", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_removeGroundItemButton->SetToolTip("Remove the selected item");
+    buttonsSizer->Add(m_removeGroundItemButton, 0);
     
     itemButtonsSizer->Add(buttonsSizer, 0, wxEXPAND);
     groundItemRowSizer->Add(itemButtonsSizer, 0, wxEXPAND);
@@ -529,12 +1200,112 @@ void BorderEditorDialog::CreateGUIControls() {
     borderRow1->Add(optionsSizer, 1, wxEXPAND);
     
     groundBorderSizer->Add(borderRow1, 0, wxEXPAND | wxALL, 5);
-    
+
+    // Second row - border ID lists
+    wxBoxSizer* borderRow2 = new wxBoxSizer(wxHORIZONTAL);
+
+    wxBoxSizer* borderIdsSizer = new wxBoxSizer(wxVERTICAL);
+    borderIdsSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Border IDs:"), 0);
+    m_borderIdsCtrl = new wxTextCtrl(m_groundPanel, wxID_ANY, "");
+    m_borderIdsCtrl->SetToolTip("Comma-separated border IDs. Example: 258, 256");
+    borderIdsSizer->Add(m_borderIdsCtrl, 0, wxEXPAND | wxTOP, 2);
+    borderIdsSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Preview (click to activate as first ID):"), 0, wxTOP, 4);
+    m_borderIdsPreviewCtrl = new wxListCtrl(
+        m_groundPanel,
+        wxID_ANY,
+        wxDefaultPosition,
+        wxDefaultSize,
+        wxLC_ICON | wxLC_AUTOARRANGE | wxLC_SINGLE_SEL | wxBORDER_SUNKEN
+    );
+    m_borderIdsPreviewCtrl->SetMinSize(wxSize(-1, 78));
+    m_borderIdsPreviewCtrl->SetToolTip("Click a border preview to make it the active outer border ID.");
+    m_borderIdsPreviewImages = new wxImageList(32, 32, true);
+    m_borderIdsPreviewCtrl->AssignImageList(m_borderIdsPreviewImages, wxIMAGE_LIST_NORMAL);
+    borderIdsSizer->Add(m_borderIdsPreviewCtrl, 0, wxEXPAND | wxTOP, 2);
+    borderRow2->Add(borderIdsSizer, 1, wxEXPAND | wxRIGHT, 10);
+
+    wxBoxSizer* toNoneIdsSizer = new wxBoxSizer(wxVERTICAL);
+    toNoneIdsSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "To None IDs (Optional):"), 0);
+    m_borderToNoneIdsCtrl = new wxTextCtrl(m_groundPanel, wxID_ANY, "");
+    m_borderToNoneIdsCtrl->SetToolTip("Optional comma-separated IDs for to=\"none\". Leave empty to reuse Border IDs.");
+    toNoneIdsSizer->Add(m_borderToNoneIdsCtrl, 0, wxEXPAND | wxTOP, 2);
+    toNoneIdsSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Preview (click to activate as first ID):"), 0, wxTOP, 4);
+    m_borderToNoneIdsPreviewCtrl = new wxListCtrl(
+        m_groundPanel,
+        wxID_ANY,
+        wxDefaultPosition,
+        wxDefaultSize,
+        wxLC_ICON | wxLC_AUTOARRANGE | wxLC_SINGLE_SEL | wxBORDER_SUNKEN
+    );
+    m_borderToNoneIdsPreviewCtrl->SetMinSize(wxSize(-1, 78));
+    m_borderToNoneIdsPreviewCtrl->SetToolTip("Click a border preview to make it the first To None ID.");
+    m_borderToNoneIdsPreviewImages = new wxImageList(32, 32, true);
+    m_borderToNoneIdsPreviewCtrl->AssignImageList(m_borderToNoneIdsPreviewImages, wxIMAGE_LIST_NORMAL);
+    toNoneIdsSizer->Add(m_borderToNoneIdsPreviewCtrl, 0, wxEXPAND | wxTOP, 2);
+    borderRow2->Add(toNoneIdsSizer, 1, wxEXPAND);
+
+    groundBorderSizer->Add(borderRow2, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+    // Third row - optional borderlist attribute used for quick border variant switching.
+    wxBoxSizer* borderRow3 = new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer* borderListSizer = new wxBoxSizer(wxVERTICAL);
+    borderListSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Border List IDs (Optional):"), 0);
+    m_borderListCtrl = new wxTextCtrl(m_groundPanel, wxID_ANY, "");
+    m_borderListCtrl->SetToolTip("Comma-separated variant IDs stored in borderlist. Example: 201, 202, 2023");
+    borderListSizer->Add(m_borderListCtrl, 0, wxEXPAND | wxTOP, 2);
+    borderListSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Preview (click to activate in outer IDs):"), 0, wxTOP, 4);
+    m_borderListIdsPreviewCtrl = new wxListCtrl(
+        m_groundPanel,
+        wxID_ANY,
+        wxDefaultPosition,
+        wxDefaultSize,
+        wxLC_ICON | wxLC_AUTOARRANGE | wxLC_SINGLE_SEL | wxBORDER_SUNKEN
+    );
+    m_borderListIdsPreviewCtrl->SetMinSize(wxSize(-1, 88));
+    m_borderListIdsPreviewCtrl->SetToolTip("Click a border preview to promote it to Border IDs.");
+    m_borderListIdsPreviewImages = new wxImageList(32, 32, true);
+    m_borderListIdsPreviewCtrl->AssignImageList(m_borderListIdsPreviewImages, wxIMAGE_LIST_NORMAL);
+    borderListSizer->Add(m_borderListIdsPreviewCtrl, 0, wxEXPAND | wxTOP, 2);
+    borderRow3->Add(borderListSizer, 1, wxEXPAND);
+    m_searchBorderListButton = new wxButton(m_groundPanel, wxID_ANY, "Slots...", wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+    m_searchBorderListButton->SetToolTip("Open slot editor with available borders, search and pagination.");
+    borderRow3->Add(m_searchBorderListButton, 0, wxALIGN_BOTTOM | wxLEFT, 8);
+    groundBorderSizer->Add(borderRow3, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+    // Fourth row - quick promote from borderlist to outer.
+    wxBoxSizer* borderRow4 = new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer* borderListPreviewSizer = new wxBoxSizer(wxVERTICAL);
+    borderListPreviewSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Border List Preview (select one):"), 0);
+    m_borderListIdsList = new wxListBox(m_groundPanel, wxID_ANY);
+    m_borderListIdsList->SetMinSize(wxSize(-1, 90));
+    m_borderListIdsList->SetToolTip("Select a borderlist ID and promote it to become the first ID in Border IDs.");
+    borderListPreviewSizer->Add(m_borderListIdsList, 1, wxEXPAND | wxTOP, 2);
+    borderRow4->Add(borderListPreviewSizer, 1, wxEXPAND | wxRIGHT, 10);
+
+    wxBoxSizer* promoteActionsSizer = new wxBoxSizer(wxVERTICAL);
+    m_promoteBorderListIdButton = new wxButton(m_groundPanel, wxID_ANY, "Promote Selected To Outer");
+    m_promoteBorderListIdButton->SetToolTip("Moves the selected borderlist ID to the first position in Border IDs.");
+    promoteActionsSizer->Add(m_promoteBorderListIdButton, 0, wxEXPAND | wxBOTTOM, 6);
+    m_promoteAlsoToNoneCheck = new wxCheckBox(m_groundPanel, wxID_ANY, "Also apply to To None IDs");
+    m_promoteAlsoToNoneCheck->SetValue(false);
+    promoteActionsSizer->Add(m_promoteAlsoToNoneCheck, 0, wxEXPAND);
+    borderRow4->Add(promoteActionsSizer, 0, wxALIGN_TOP);
+    groundBorderSizer->Add(borderRow4, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
+    // Fifth row - preview of every border entry currently attached to this ground brush.
+    wxBoxSizer* refsSizer = new wxBoxSizer(wxVERTICAL);
+    refsSizer->Add(new wxStaticText(m_groundPanel, wxID_ANY, "Current Border Entries:"), 0);
+    m_groundBorderRefsList = new wxListBox(m_groundPanel, wxID_ANY);
+    m_groundBorderRefsList->SetMinSize(wxSize(-1, 80));
+    m_groundBorderRefsList->SetToolTip("Shows all <border .../> references currently present in this ground brush.");
+    refsSizer->Add(m_groundBorderRefsList, 1, wxEXPAND | wxTOP, 2);
+    groundBorderSizer->Add(refsSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
     // Border ID notice (red text)
     wxBoxSizer* borderIdSizer = new wxBoxSizer(wxHORIZONTAL);
-    wxStaticText* borderIdLabel = new wxStaticText(m_groundPanel, wxID_ANY, "Border ID:");
+    wxStaticText* borderIdLabel = new wxStaticText(m_groundPanel, wxID_ANY, "Fallback Border ID:");
     borderIdSizer->Add(borderIdLabel, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
-    wxStaticText* borderId = new wxStaticText(m_groundPanel, wxID_ANY, "Uses the ID specified in 'Common Properties' section");
+    wxStaticText* borderId = new wxStaticText(m_groundPanel, wxID_ANY, "Uses 'Common Properties > ID' when Border IDs is empty");
     borderId->SetForegroundColour(*wxRED);
     borderIdSizer->Add(borderId, 1, wxALIGN_CENTER_VERTICAL);
     
@@ -550,8 +1321,10 @@ void BorderEditorDialog::CreateGUIControls() {
     
     // Bottom buttons for ground tab
     wxBoxSizer* groundButtonSizer = new wxBoxSizer(wxHORIZONTAL);
-    groundButtonSizer->Add(new wxButton(m_groundPanel, wxID_CLEAR, "Clear"), 0, wxRIGHT, 5);
-    groundButtonSizer->Add(new wxButton(m_groundPanel, wxID_SAVE, "Save Ground"), 0, wxRIGHT, 5);
+    m_clearGroundButton = new wxButton(m_groundPanel, wxID_CLEAR, "Clear");
+    groundButtonSizer->Add(m_clearGroundButton, 0, wxRIGHT, 5);
+    m_saveGroundButton = new wxButton(m_groundPanel, wxID_SAVE, "Save Ground");
+    groundButtonSizer->Add(m_saveGroundButton, 0, wxRIGHT, 5);
     groundButtonSizer->AddStretchSpacer(1);
     groundButtonSizer->Add(new wxButton(m_groundPanel, wxID_CLOSE, "Close"), 0);
     
@@ -566,7 +1339,100 @@ void BorderEditorDialog::CreateGUIControls() {
     topSizer->Add(m_notebook, 1, wxEXPAND | wxALL, 5);
     
     SetSizer(topSizer);
+    if(m_borderListCtrl) {
+        m_borderListCtrl->Bind(wxEVT_TEXT, &BorderEditorDialog::OnBorderListTextChanged, this);
+    }
+    if(m_borderIdsCtrl) {
+        m_borderIdsCtrl->Bind(wxEVT_TEXT, &BorderEditorDialog::OnBorderListTextChanged, this);
+    }
+    if(m_borderToNoneIdsCtrl) {
+        m_borderToNoneIdsCtrl->Bind(wxEVT_TEXT, &BorderEditorDialog::OnBorderListTextChanged, this);
+    }
+    if(m_promoteBorderListIdButton) {
+        m_promoteBorderListIdButton->Bind(wxEVT_BUTTON, &BorderEditorDialog::OnPromoteBorderListId, this);
+    }
+    if(m_searchBorderListButton) {
+        m_searchBorderListButton->Bind(wxEVT_BUTTON, &BorderEditorDialog::OnSearchBorderListId, this);
+    }
+    if(m_borderIdsPreviewCtrl) {
+        m_borderIdsPreviewCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &BorderEditorDialog::OnBorderIdsPreviewSelected, this);
+    }
+    if(m_borderToNoneIdsPreviewCtrl) {
+        m_borderToNoneIdsPreviewCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &BorderEditorDialog::OnToNoneIdsPreviewSelected, this);
+    }
+    if(m_borderListIdsPreviewCtrl) {
+        m_borderListIdsPreviewCtrl->Bind(wxEVT_LIST_ITEM_SELECTED, &BorderEditorDialog::OnBorderListIdsPreviewSelected, this);
+    }
+    RefreshBorderListIdsUI();
     Layout();
+}
+
+void BorderEditorDialog::ConfigureModifyGroundBordersMode() {
+    SetTitle("Modify Ground Borders");
+
+    // Focus this workflow on the ground tab and keep border definitions read-only here.
+    if(m_notebook) {
+        m_notebook->ChangeSelection(1);
+        m_activeTab = 1;
+    }
+    if(m_borderPanel) {
+        m_borderPanel->Enable(false);
+    }
+
+    // Existing ground brush selector remains editable; all creation-oriented fields are read-only.
+    if(m_nameCtrl) {
+        m_nameCtrl->SetEditable(false);
+    }
+    if(m_idCtrl) {
+        m_idCtrl->Enable(false);
+    }
+    if(m_serverLookIdCtrl) {
+        m_serverLookIdCtrl->Enable(false);
+    }
+    if(m_zOrderCtrl) {
+        m_zOrderCtrl->Enable(false);
+    }
+    if(m_groundItemIdCtrl) {
+        m_groundItemIdCtrl->Enable(false);
+    }
+    if(m_groundItemChanceCtrl) {
+        m_groundItemChanceCtrl->Enable(false);
+    }
+    if(m_addGroundItemButton) {
+        m_addGroundItemButton->Enable(false);
+    }
+    if(m_removeGroundItemButton) {
+        m_removeGroundItemButton->Enable(false);
+    }
+    if(m_clearGroundButton) {
+        m_clearGroundButton->Enable(false);
+    }
+    if(m_tilesetChoice) {
+        m_tilesetChoice->Enable(false);
+    }
+    if(m_saveGroundButton) {
+        m_saveGroundButton->SetLabel("Save Borders");
+    }
+
+    if(!m_initialGroundBrushName.IsEmpty()) {
+        SelectGroundBrushByName(m_initialGroundBrushName);
+    }
+}
+
+void BorderEditorDialog::SelectGroundBrushByName(const wxString& brushName) {
+    if(!m_existingGroundBrushesCombo || brushName.IsEmpty()) {
+        return;
+    }
+
+    const unsigned int count = m_existingGroundBrushesCombo->GetCount();
+    for(unsigned int i = 1; i < count; ++i) {
+        if(m_existingGroundBrushesCombo->GetString(i) == brushName) {
+            m_existingGroundBrushesCombo->SetSelection(i);
+            wxCommandEvent loadEvent(wxEVT_COMBOBOX, m_existingGroundBrushesCombo->GetId());
+            OnLoadGroundBrush(loadEvent);
+            return;
+        }
+    }
 }
 
 void BorderEditorDialog::LoadExistingBorders() {
@@ -918,6 +1784,10 @@ void BorderEditorDialog::OnAddItem(wxCommandEvent& event) {
 }
 
 void BorderEditorDialog::OnClear(wxCommandEvent& event) {
+    if(m_modifyGroundBordersOnly && m_activeTab != 0) {
+        return;
+    }
+
     if (m_activeTab == 0) {
         // Border tab
     ClearItems();
@@ -1085,6 +1955,10 @@ void BorderEditorDialog::SaveBorder() {
         wxMessageBox("Failed to save changes to borders.xml", "Error", wxICON_ERROR);
         return;
     }
+
+    m_borderPreviewCatalogLoaded = false;
+    m_borderPreviewItemById.clear();
+    RefreshInlineBorderIdPreviews();
     
     wxMessageBox("Border saved successfully.", "Success", wxICON_INFORMATION);
     
@@ -1093,6 +1967,11 @@ void BorderEditorDialog::SaveBorder() {
 }
 
 void BorderEditorDialog::OnSave(wxCommandEvent& event) {
+    if(m_modifyGroundBordersOnly) {
+        SaveGroundBrush();
+        return;
+    }
+
     if (m_activeTab == 0) {
         // Border tab
     SaveBorder();
@@ -1559,8 +2438,12 @@ void BorderEditorDialog::LoadExistingGroundBrushes() {
     // Clear the combo box
     m_existingGroundBrushesCombo->Clear();
     
-    // Add "Create New" as the first option
-    m_existingGroundBrushesCombo->Append("<Create New>");
+    // Add first option depending on the dialog mode.
+    if(m_modifyGroundBordersOnly) {
+        m_existingGroundBrushesCombo->Append("<Select Existing Ground>");
+    } else {
+        m_existingGroundBrushesCombo->Append("<Create New>");
+    }
     m_existingGroundBrushesCombo->SetSelection(0);
     
     wxString dataDir = GetVersionDataDirectory();
@@ -1612,6 +2495,18 @@ void BorderEditorDialog::ClearGroundItems() {
     m_groundItems.clear();
     m_nameCtrl->SetValue("");
     m_idCtrl->SetValue(m_nextBorderId);
+    if(m_borderIdsCtrl) {
+        m_borderIdsCtrl->SetValue(wxString::Format("%d", m_nextBorderId));
+    }
+    if(m_borderToNoneIdsCtrl) {
+        m_borderToNoneIdsCtrl->SetValue("");
+    }
+    if(m_borderListCtrl) {
+        m_borderListCtrl->SetValue("");
+    }
+    if(m_groundBorderRefsList) {
+        m_groundBorderRefsList->Clear();
+    }
     m_serverLookIdCtrl->SetValue(0);
     m_zOrderCtrl->SetValue(0);
     m_groundItemIdCtrl->SetValue(0);
@@ -1623,6 +2518,7 @@ void BorderEditorDialog::ClearGroundItems() {
     m_includeInnerCheck->SetValue(false);     // Default to unchecked
     
     UpdateGroundItemsList();
+    RefreshBorderListIdsUI();
 }
 
 void BorderEditorDialog::UpdateGroundItemsList() {
@@ -1634,7 +2530,512 @@ void BorderEditorDialog::UpdateGroundItemsList() {
     }
 }
 
+bool BorderEditorDialog::EnsureBorderPreviewCatalogLoaded() {
+    if(m_borderPreviewCatalogLoaded) {
+        return true;
+    }
+
+    m_borderPreviewItemById.clear();
+
+    wxString dataDir = GetVersionDataDirectory();
+    wxString bordersFile = dataDir + "borders.xml";
+    if(!wxFileExists(bordersFile)) {
+        return false;
+    }
+
+    pugi::xml_document doc;
+    pugi::xml_parse_result parseResult = doc.load_file(nstr(bordersFile).c_str());
+    if(!parseResult) {
+        return false;
+    }
+
+    pugi::xml_node materials = doc.child("materials");
+    if(!materials) {
+        return false;
+    }
+
+    for(pugi::xml_node borderNode = materials.child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
+        pugi::xml_attribute idAttr = borderNode.attribute("id");
+        if(!idAttr) {
+            continue;
+        }
+
+        int borderId = idAttr.as_int();
+        if(borderId <= 0) {
+            continue;
+        }
+
+        uint16_t previewItemId = 0;
+        for(pugi::xml_node borderItemNode = borderNode.child("borderitem"); borderItemNode; borderItemNode = borderItemNode.next_sibling("borderitem")) {
+            pugi::xml_attribute itemAttr = borderItemNode.attribute("item");
+            if(itemAttr) {
+                previewItemId = static_cast<uint16_t>(itemAttr.as_uint());
+                if(previewItemId > 0) {
+                    break;
+                }
+            }
+        }
+
+        m_borderPreviewItemById[borderId] = previewItemId;
+    }
+
+    m_borderPreviewCatalogLoaded = true;
+    return !m_borderPreviewItemById.empty();
+}
+
+static void PopulateBorderIdPreviewList(
+    wxListCtrl* listCtrl,
+    wxImageList* imageList,
+    const wxString& rawValue,
+    const wxString& emptyLabel,
+    const std::map<int, uint16_t>& previewItemById
+) {
+    if(!listCtrl || !imageList) {
+        return;
+    }
+
+    listCtrl->DeleteAllItems();
+    imageList->RemoveAll();
+
+    wxString value = rawValue;
+    value.Trim(true).Trim(false);
+    if(value.IsEmpty()) {
+        long idx = listCtrl->InsertItem(0, emptyLabel);
+        listCtrl->SetItemData(idx, 0);
+        return;
+    }
+
+    std::vector<int> parsedIds;
+    if(!ParseBorderIdList(value, parsedIds)) {
+        long idx = listCtrl->InsertItem(0, "<invalid IDs>");
+        listCtrl->SetItemData(idx, 0);
+        return;
+    }
+
+    for(size_t i = 0; i < parsedIds.size(); ++i) {
+        int borderId = parsedIds[i];
+        uint16_t previewItemId = 0;
+        std::map<int, uint16_t>::const_iterator it = previewItemById.find(borderId);
+        if(it != previewItemById.end()) {
+            previewItemId = it->second;
+        }
+
+        int imageIndex = imageList->Add(BuildSmallBorderPreviewBitmap(previewItemId));
+        long idx = listCtrl->InsertItem(static_cast<long>(listCtrl->GetItemCount()), wxString::Format("ID %d", borderId), imageIndex);
+        listCtrl->SetItemData(idx, static_cast<long>(borderId));
+    }
+
+    listCtrl->Arrange();
+}
+
+void BorderEditorDialog::RefreshInlineBorderIdPreviews() {
+    EnsureBorderPreviewCatalogLoaded();
+
+    PopulateBorderIdPreviewList(
+        m_borderIdsPreviewCtrl,
+        m_borderIdsPreviewImages,
+        m_borderIdsCtrl ? m_borderIdsCtrl->GetValue() : wxString(),
+        "<empty>",
+        m_borderPreviewItemById
+    );
+
+    PopulateBorderIdPreviewList(
+        m_borderToNoneIdsPreviewCtrl,
+        m_borderToNoneIdsPreviewImages,
+        m_borderToNoneIdsCtrl ? m_borderToNoneIdsCtrl->GetValue() : wxString(),
+        "<empty: uses Border IDs>",
+        m_borderPreviewItemById
+    );
+
+    PopulateBorderIdPreviewList(
+        m_borderListIdsPreviewCtrl,
+        m_borderListIdsPreviewImages,
+        m_borderListCtrl ? m_borderListCtrl->GetValue() : wxString(),
+        "<empty>",
+        m_borderPreviewItemById
+    );
+}
+
+void BorderEditorDialog::RefreshBorderListIdsUI() {
+    if(!m_borderListIdsList) {
+        RefreshInlineBorderIdPreviews();
+        return;
+    }
+
+    int previouslySelectedId = 0;
+    int previousSelection = m_borderListIdsList->GetSelection();
+    if(previousSelection != wxNOT_FOUND) {
+        wxString currentLabel = m_borderListIdsList->GetString(previousSelection);
+        wxString numericPart = currentLabel.BeforeFirst(' ');
+        long parsedId = 0;
+        if(numericPart.ToLong(&parsedId) && parsedId > 0) {
+            previouslySelectedId = static_cast<int>(parsedId);
+        }
+    }
+
+    m_borderListIdsList->Clear();
+
+    std::vector<int> borderListIds;
+    bool borderListValid = false;
+    if(m_borderListCtrl && !m_borderListCtrl->GetValue().IsEmpty()) {
+        borderListValid = ParseBorderIdList(m_borderListCtrl->GetValue(), borderListIds);
+    }
+
+    int currentOuterId = 0;
+    if(m_borderIdsCtrl && !m_borderIdsCtrl->GetValue().IsEmpty()) {
+        std::vector<int> currentBorderIds;
+        if(ParseBorderIdList(m_borderIdsCtrl->GetValue(), currentBorderIds) && !currentBorderIds.empty()) {
+            currentOuterId = currentBorderIds.front();
+        }
+    } else if(m_idCtrl && m_idCtrl->GetValue() > 0) {
+        currentOuterId = m_idCtrl->GetValue();
+    }
+
+    if(!borderListValid) {
+        if(m_borderListCtrl && !m_borderListCtrl->GetValue().IsEmpty()) {
+            m_borderListIdsList->Append("<invalid borderlist>");
+        }
+        if(m_promoteBorderListIdButton) {
+            m_promoteBorderListIdButton->Enable(false);
+        }
+        RefreshInlineBorderIdPreviews();
+        return;
+    }
+
+    for(size_t i = 0; i < borderListIds.size(); ++i) {
+        int borderId = borderListIds[i];
+        wxString label = wxString::Format("%d", borderId);
+        if(borderId == currentOuterId) {
+            label += " (outer atual)";
+        }
+        m_borderListIdsList->Append(label);
+    }
+
+    int selectionToSet = wxNOT_FOUND;
+    if(previouslySelectedId > 0) {
+        for(unsigned int i = 0; i < m_borderListIdsList->GetCount(); ++i) {
+            wxString label = m_borderListIdsList->GetString(i);
+            wxString numericPart = label.BeforeFirst(' ');
+            long parsedId = 0;
+            if(numericPart.ToLong(&parsedId) && parsedId == previouslySelectedId) {
+                selectionToSet = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    if(selectionToSet == wxNOT_FOUND && m_borderListIdsList->GetCount() > 0) {
+        selectionToSet = 0;
+    }
+    if(selectionToSet != wxNOT_FOUND) {
+        m_borderListIdsList->SetSelection(selectionToSet);
+    }
+
+    if(m_promoteBorderListIdButton) {
+        m_promoteBorderListIdButton->Enable(m_borderListIdsList->GetCount() > 0 && selectionToSet != wxNOT_FOUND);
+    }
+
+    RefreshInlineBorderIdPreviews();
+}
+
+void BorderEditorDialog::OnBorderListTextChanged(wxCommandEvent& event) {
+    RefreshBorderListIdsUI();
+    event.Skip();
+}
+
+void BorderEditorDialog::OnBorderIdsPreviewSelected(wxListEvent& event) {
+    if(!m_borderIdsPreviewCtrl || !m_borderIdsCtrl) {
+        return;
+    }
+
+    long selectedData = m_borderIdsPreviewCtrl->GetItemData(event.GetIndex());
+    int selectedId = static_cast<int>(selectedData);
+    if(selectedId <= 0) {
+        return;
+    }
+
+    std::vector<int> currentIds;
+    wxString currentValue = m_borderIdsCtrl->GetValue();
+    currentValue.Trim(true).Trim(false);
+    if(!currentValue.IsEmpty()) {
+        ParseBorderIdList(currentValue, currentIds);
+    } else if(m_idCtrl && m_idCtrl->GetValue() > 0) {
+        currentIds.push_back(m_idCtrl->GetValue());
+    }
+
+    std::vector<int> reordered = ReorderBorderIdsWithPrimary(currentIds, selectedId);
+    if(reordered.empty()) {
+        reordered.push_back(selectedId);
+    }
+    m_borderIdsCtrl->ChangeValue(JoinBorderIdList(reordered));
+    if(m_idCtrl) {
+        m_idCtrl->SetValue(selectedId);
+    }
+    RefreshBorderListIdsUI();
+}
+
+void BorderEditorDialog::OnToNoneIdsPreviewSelected(wxListEvent& event) {
+    if(!m_borderToNoneIdsPreviewCtrl || !m_borderToNoneIdsCtrl) {
+        return;
+    }
+
+    long selectedData = m_borderToNoneIdsPreviewCtrl->GetItemData(event.GetIndex());
+    int selectedId = static_cast<int>(selectedData);
+    if(selectedId <= 0) {
+        return;
+    }
+
+    std::vector<int> currentIds;
+    wxString currentValue = m_borderToNoneIdsCtrl->GetValue();
+    currentValue.Trim(true).Trim(false);
+    if(!currentValue.IsEmpty()) {
+        ParseBorderIdList(currentValue, currentIds);
+    }
+
+    std::vector<int> reordered = ReorderBorderIdsWithPrimary(currentIds, selectedId);
+    if(reordered.empty()) {
+        reordered.push_back(selectedId);
+    }
+    m_borderToNoneIdsCtrl->ChangeValue(JoinBorderIdList(reordered));
+    RefreshBorderListIdsUI();
+}
+
+void BorderEditorDialog::OnBorderListIdsPreviewSelected(wxListEvent& event) {
+    if(!m_borderListIdsPreviewCtrl || !m_borderListCtrl || !m_borderIdsCtrl) {
+        return;
+    }
+
+    long selectedData = m_borderListIdsPreviewCtrl->GetItemData(event.GetIndex());
+    int selectedId = static_cast<int>(selectedData);
+    if(selectedId <= 0) {
+        return;
+    }
+
+    std::vector<int> borderListIds;
+    if(!ParseBorderIdList(m_borderListCtrl->GetValue(), borderListIds)) {
+        return;
+    }
+
+    std::vector<int> reorderedBorderList = ReorderBorderIdsWithPrimary(borderListIds, selectedId);
+    m_borderListCtrl->ChangeValue(JoinBorderIdList(reorderedBorderList));
+
+    std::vector<int> currentOuterIds;
+    if(!m_borderIdsCtrl->GetValue().IsEmpty()) {
+        ParseBorderIdList(m_borderIdsCtrl->GetValue(), currentOuterIds);
+    }
+    std::vector<int> reorderedOuterIds = ReorderBorderIdsWithPrimary(currentOuterIds, selectedId);
+    if(reorderedOuterIds.size() <= 1) {
+        for(size_t i = 0; i < borderListIds.size(); ++i) {
+            if(borderListIds[i] != selectedId) {
+                AppendUniqueBorderId(reorderedOuterIds, borderListIds[i]);
+            }
+        }
+    }
+    if(!reorderedOuterIds.empty()) {
+        m_borderIdsCtrl->ChangeValue(JoinBorderIdList(reorderedOuterIds));
+    }
+
+    if(m_promoteAlsoToNoneCheck && m_promoteAlsoToNoneCheck->IsChecked() && m_borderToNoneIdsCtrl) {
+        std::vector<int> currentToNoneIds;
+        if(!m_borderToNoneIdsCtrl->GetValue().IsEmpty()) {
+            ParseBorderIdList(m_borderToNoneIdsCtrl->GetValue(), currentToNoneIds);
+        }
+        std::vector<int> reorderedToNoneIds = ReorderBorderIdsWithPrimary(currentToNoneIds, selectedId);
+        if(reorderedToNoneIds.size() <= 1) {
+            for(size_t i = 0; i < borderListIds.size(); ++i) {
+                if(borderListIds[i] != selectedId) {
+                    AppendUniqueBorderId(reorderedToNoneIds, borderListIds[i]);
+                }
+            }
+        }
+        if(!reorderedToNoneIds.empty()) {
+            m_borderToNoneIdsCtrl->ChangeValue(JoinBorderIdList(reorderedToNoneIds));
+        }
+    }
+
+    if(m_idCtrl) {
+        m_idCtrl->SetValue(selectedId);
+    }
+    RefreshBorderListIdsUI();
+}
+
+void BorderEditorDialog::OnPromoteBorderListId(wxCommandEvent& WXUNUSED(event)) {
+    if(!m_borderListIdsList || !m_borderIdsCtrl || !m_borderListCtrl) {
+        return;
+    }
+
+    int selection = m_borderListIdsList->GetSelection();
+    if(selection == wxNOT_FOUND) {
+        wxMessageBox("Select a borderlist ID first.", "Border List", wxICON_INFORMATION);
+        return;
+    }
+
+    wxString selectedLabel = m_borderListIdsList->GetString(selection);
+    wxString selectedNumeric = selectedLabel.BeforeFirst(' ');
+    long selectedIdLong = 0;
+    if(!selectedNumeric.ToLong(&selectedIdLong) || selectedIdLong <= 0) {
+        wxMessageBox("Invalid selected borderlist ID.", "Border List", wxICON_ERROR);
+        return;
+    }
+    int selectedId = static_cast<int>(selectedIdLong);
+
+    std::vector<int> borderListIds;
+    if(!ParseBorderIdList(m_borderListCtrl->GetValue(), borderListIds)) {
+        wxMessageBox("Border List IDs must be valid before promoting.", "Border List", wxICON_ERROR);
+        return;
+    }
+
+    std::vector<int> currentOuterIds;
+    if(!m_borderIdsCtrl->GetValue().IsEmpty()) {
+        if(!ParseBorderIdList(m_borderIdsCtrl->GetValue(), currentOuterIds)) {
+            wxMessageBox("Current Border IDs are invalid. Fix them before promoting.", "Border IDs", wxICON_ERROR);
+            return;
+        }
+    }
+
+    std::vector<int> reorderedOuterIds;
+    AppendUniqueBorderId(reorderedOuterIds, selectedId);
+    if(!currentOuterIds.empty()) {
+        for(size_t i = 0; i < currentOuterIds.size(); ++i) {
+            if(currentOuterIds[i] != selectedId) {
+                AppendUniqueBorderId(reorderedOuterIds, currentOuterIds[i]);
+            }
+        }
+    } else {
+        for(size_t i = 0; i < borderListIds.size(); ++i) {
+            if(borderListIds[i] != selectedId) {
+                AppendUniqueBorderId(reorderedOuterIds, borderListIds[i]);
+            }
+        }
+    }
+
+    bool applyToNone = m_promoteAlsoToNoneCheck && m_promoteAlsoToNoneCheck->IsChecked() && m_borderToNoneIdsCtrl;
+    std::vector<int> reorderedToNoneIds;
+    if(applyToNone) {
+        std::vector<int> currentToNoneIds;
+        if(!m_borderToNoneIdsCtrl->GetValue().IsEmpty()) {
+            if(!ParseBorderIdList(m_borderToNoneIdsCtrl->GetValue(), currentToNoneIds)) {
+                wxMessageBox("To None IDs are invalid. Fix them before applying promotion to To None.", "To None IDs", wxICON_ERROR);
+                return;
+            }
+        }
+
+        AppendUniqueBorderId(reorderedToNoneIds, selectedId);
+        if(!currentToNoneIds.empty()) {
+            for(size_t i = 0; i < currentToNoneIds.size(); ++i) {
+                if(currentToNoneIds[i] != selectedId) {
+                    AppendUniqueBorderId(reorderedToNoneIds, currentToNoneIds[i]);
+                }
+            }
+        } else {
+            for(size_t i = 0; i < borderListIds.size(); ++i) {
+                if(borderListIds[i] != selectedId) {
+                    AppendUniqueBorderId(reorderedToNoneIds, borderListIds[i]);
+                }
+            }
+        }
+    }
+
+    m_borderIdsCtrl->SetValue(JoinBorderIdList(reorderedOuterIds));
+    if(applyToNone) {
+        m_borderToNoneIdsCtrl->SetValue(JoinBorderIdList(reorderedToNoneIds));
+    }
+
+    RefreshBorderListIdsUI();
+}
+
+void BorderEditorDialog::OnSearchBorderListId(wxCommandEvent& WXUNUSED(event)) {
+    if(!m_borderListCtrl) {
+        return;
+    }
+
+    wxString dataDir = GetVersionDataDirectory();
+    wxString bordersFile = dataDir + "borders.xml";
+    if(!wxFileExists(bordersFile)) {
+        wxMessageBox("Cannot find borders.xml file in the data directory.", "Search Border IDs", wxICON_ERROR);
+        return;
+    }
+
+    pugi::xml_document doc;
+    pugi::xml_parse_result parseResult = doc.load_file(nstr(bordersFile).c_str());
+    if(!parseResult) {
+        wxMessageBox("Failed to load borders.xml: " + wxString(parseResult.description()), "Search Border IDs", wxICON_ERROR);
+        return;
+    }
+
+    pugi::xml_node materials = doc.child("materials");
+    if(!materials) {
+        wxMessageBox("Invalid borders.xml file: missing 'materials' node", "Search Border IDs", wxICON_ERROR);
+        return;
+    }
+
+    std::vector<BorderListSlotEditorDialog::BorderEntry> entries;
+    for(pugi::xml_node borderNode = materials.child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
+        pugi::xml_attribute idAttr = borderNode.attribute("id");
+        if(!idAttr) {
+            continue;
+        }
+
+        int borderId = idAttr.as_int();
+        if(borderId <= 0) {
+            continue;
+        }
+
+        uint16_t previewItemId = 0;
+        for(pugi::xml_node borderItemNode = borderNode.child("borderitem"); borderItemNode; borderItemNode = borderItemNode.next_sibling("borderitem")) {
+            pugi::xml_attribute itemAttr = borderItemNode.attribute("item");
+            if(itemAttr) {
+                previewItemId = static_cast<uint16_t>(itemAttr.as_uint());
+                if(previewItemId > 0) {
+                    break;
+                }
+            }
+        }
+
+        wxString description = ExtractBorderCommentDescription(borderNode);
+        BorderListSlotEditorDialog::BorderEntry entry;
+        entry.id = borderId;
+        entry.description = NormalizeSingleLine(description);
+        entry.previewItemId = previewItemId;
+        if(entry.description.IsEmpty()) {
+            entry.label = wxString::Format("ID %d", borderId);
+        } else {
+            entry.label = wxString::Format("ID %d | %s", borderId, entry.description);
+        }
+        entries.push_back(entry);
+    }
+
+    if(entries.empty()) {
+        wxMessageBox("No border entries found in borders.xml.", "Search Border IDs", wxICON_INFORMATION);
+        return;
+    }
+
+    std::vector<int> currentIds;
+    wxString currentValue = m_borderListCtrl->GetValue();
+    currentValue.Trim(true).Trim(false);
+    if(!currentValue.IsEmpty()) {
+        if(!ParseBorderIdList(currentValue, currentIds)) {
+            wxMessageBox("Border List IDs is invalid. Please fix it before opening slot editor.", "Search Border IDs", wxICON_ERROR);
+            return;
+        }
+    }
+
+    BorderListSlotEditorDialog dialog(this, currentIds, entries);
+    if(dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+
+    std::vector<int> finalIds = dialog.GetSlotIds();
+    m_borderListCtrl->SetValue(JoinBorderIdList(finalIds));
+    RefreshBorderListIdsUI();
+}
+
 void BorderEditorDialog::OnPageChanged(wxBookCtrlEvent& event) {
+    if(m_modifyGroundBordersOnly && event.GetSelection() != 1) {
+        m_notebook->ChangeSelection(1);
+        m_activeTab = 1;
+        return;
+    }
+
     m_activeTab = event.GetSelection();
     
     // When switching to the ground tab, use the same border items for the ground brush
@@ -1770,21 +3171,50 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
             m_borderAlignmentChoice->SetSelection(0); // Default to "outer"
             m_includeToNoneCheck->SetValue(true);     // Default to checked
             m_includeInnerCheck->SetValue(false);     // Default to unchecked
+            if(m_borderIdsCtrl) {
+                m_borderIdsCtrl->SetValue("");
+            }
+            if(m_borderToNoneIdsCtrl) {
+                m_borderToNoneIdsCtrl->SetValue("");
+            }
+            if(m_borderListCtrl) {
+                m_borderListCtrl->SetValue("");
+            }
+            if(m_groundBorderRefsList) {
+                m_groundBorderRefsList->Clear();
+            }
             
             bool hasNormalBorder = false;
             bool hasToNoneBorder = false;
             bool hasInnerBorder = false;
             bool hasInnerToNoneBorder = false;
             wxString alignment = "outer"; // Default
+            wxString loadedBorderIds;
+            wxString loadedToNoneIds;
+            wxString loadedBorderList;
             
             for (pugi::xml_node borderNode = brushNode.child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
                 pugi::xml_attribute alignAttr = borderNode.attribute("align");
                 pugi::xml_attribute toAttr = borderNode.attribute("to");
                 pugi::xml_attribute idAttr = borderNode.attribute("id");
+                pugi::xml_attribute borderListAttr = borderNode.attribute("borderlist");
+
+                if(m_groundBorderRefsList) {
+                    m_groundBorderRefsList->Append(BuildBorderReferenceLabel(borderNode));
+                }
+
+                if(borderListAttr && loadedBorderList.IsEmpty()) {
+                    loadedBorderList = wxString(borderListAttr.as_string());
+                }
                 
                 if (idAttr) {
-                    int borderId = idAttr.as_int();
-                    m_idCtrl->SetValue(borderId);
+                    wxString borderIdList = wxString(idAttr.as_string());
+                    std::vector<int> parsedBorderIds;
+                    int borderId = 0;
+                    if(ParseBorderIdList(borderIdList, parsedBorderIds)) {
+                        borderId = parsedBorderIds.front();
+                        m_idCtrl->SetValue(borderId);
+                    }
                     
                     // Check border type and attributes
                     if (alignAttr) {
@@ -1793,15 +3223,30 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                         if (alignVal == "outer") {
                             if (toAttr && wxString(toAttr.as_string()) == "none") {
                                 hasToNoneBorder = true;
+                                if(loadedToNoneIds.IsEmpty()) {
+                                    loadedToNoneIds = borderIdList;
+                                }
                             } else {
                                 hasNormalBorder = true;
                                 alignment = "outer";
+                                if(loadedBorderIds.IsEmpty()) {
+                                    loadedBorderIds = borderIdList;
+                                }
                             }
                         } else if (alignVal == "inner") {
                             if (toAttr && wxString(toAttr.as_string()) == "none") {
                                 hasInnerToNoneBorder = true;
+                                if(loadedToNoneIds.IsEmpty()) {
+                                    loadedToNoneIds = borderIdList;
+                                }
                             } else {
                                 hasInnerBorder = true;
+                                if(loadedBorderIds.IsEmpty()) {
+                                    loadedBorderIds = borderIdList;
+                                }
+                                if(!hasNormalBorder) {
+                                    alignment = "inner";
+                                }
                             }
                         }
                     }
@@ -1827,6 +3272,10 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                         continue;
                     }
                     
+                    if(borderId <= 0) {
+                        continue;
+                    }
+
                     for (pugi::xml_node targetBorder = bordersMaterials.child("border"); targetBorder; targetBorder = targetBorder.next_sibling("border")) {
                         pugi::xml_attribute targetIdAttr = targetBorder.attribute("id");
                         
@@ -1842,7 +3291,17 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                                 uint16_t borderItemId = itemAttr.as_uint();
                                 
                                 if (pos != EDGE_NONE && borderItemId > 0) {
-                                    m_borderItems.push_back(BorderItem(pos, borderItemId));
+                                    bool updated = false;
+                                    for(BorderItem& loadedItem : m_borderItems) {
+                                        if(loadedItem.position == pos) {
+                                            loadedItem.itemId = borderItemId;
+                                            updated = true;
+                                            break;
+                                        }
+                                    }
+                                    if(!updated) {
+                                        m_borderItems.push_back(BorderItem(pos, borderItemId));
+                                    }
                                     m_gridPanel->SetItemId(pos, borderItemId);
                                 }
                             }
@@ -1851,6 +3310,10 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                         }
                     }
                 }
+            }
+
+            if(m_groundBorderRefsList && m_groundBorderRefsList->GetCount() == 0) {
+                m_groundBorderRefsList->Append("<No border entries>");
             }
             
             // Update the ground items list and border preview
@@ -1862,7 +3325,7 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                 m_includeInnerCheck->SetValue(true);
             }
             
-            if (!hasToNoneBorder) {
+            if (!hasToNoneBorder && !hasInnerToNoneBorder) {
                 m_includeToNoneCheck->SetValue(false);
             }
             
@@ -1871,6 +3334,19 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
                 alignmentIndex = 1;
             }
             m_borderAlignmentChoice->SetSelection(alignmentIndex);
+            if(loadedBorderIds.IsEmpty() && m_idCtrl->GetValue() > 0) {
+                loadedBorderIds = wxString::Format("%d", m_idCtrl->GetValue());
+            }
+            if(m_borderIdsCtrl) {
+                m_borderIdsCtrl->SetValue(loadedBorderIds);
+            }
+            if(m_borderToNoneIdsCtrl) {
+                m_borderToNoneIdsCtrl->SetValue(loadedToNoneIds);
+            }
+            if(m_borderListCtrl) {
+                m_borderListCtrl->SetValue(loadedBorderList);
+            }
+            RefreshBorderListIdsUI();
             
             break;
         }
@@ -1881,26 +3357,57 @@ void BorderEditorDialog::OnLoadGroundBrush(wxCommandEvent& event) {
 }
 
 bool BorderEditorDialog::ValidateGroundBrush() {
+    if(m_modifyGroundBordersOnly) {
+        if(!m_existingGroundBrushesCombo || m_existingGroundBrushesCombo->GetSelection() <= 0) {
+            wxMessageBox("Select an existing ground brush first.", "Validation Error", wxICON_ERROR);
+            return false;
+        }
+    }
+
     // Check for empty name
-    if (m_nameCtrl->GetValue().IsEmpty()) {
+    if (!m_modifyGroundBordersOnly && m_nameCtrl->GetValue().IsEmpty()) {
         wxMessageBox("Please enter a name for the ground brush.", "Validation Error", wxICON_ERROR);
         return false;
     }
     
-    if (m_groundItems.empty()) {
+    if (!m_modifyGroundBordersOnly && m_groundItems.empty()) {
         wxMessageBox("The ground brush must have at least one item.", "Validation Error", wxICON_ERROR);
         return false;
     }
     
-    if (m_serverLookIdCtrl->GetValue() <= 0) {
+    if (!m_modifyGroundBordersOnly && m_serverLookIdCtrl->GetValue() <= 0) {
         wxMessageBox("You must specify a valid server look ID.", "Validation Error", wxICON_ERROR);
         return false;
     }
     
     // Check tileset selection
-    if (m_tilesetChoice->GetSelection() == wxNOT_FOUND) {
+    if (!m_modifyGroundBordersOnly && m_tilesetChoice->GetSelection() == wxNOT_FOUND) {
         wxMessageBox("Please select a tileset for the ground brush.", "Validation Error", wxICON_ERROR);
         return false;
+    }
+
+    if(m_borderIdsCtrl && !m_borderIdsCtrl->GetValue().IsEmpty()) {
+        std::vector<int> parsed;
+        if(!ParseBorderIdList(m_borderIdsCtrl->GetValue(), parsed)) {
+            wxMessageBox("Border IDs must be comma-separated positive integers. Example: 258, 256", "Validation Error", wxICON_ERROR);
+            return false;
+        }
+    }
+
+    if(m_borderToNoneIdsCtrl && !m_borderToNoneIdsCtrl->GetValue().IsEmpty()) {
+        std::vector<int> parsed;
+        if(!ParseBorderIdList(m_borderToNoneIdsCtrl->GetValue(), parsed)) {
+            wxMessageBox("To None IDs must be comma-separated positive integers. Example: 258, 256", "Validation Error", wxICON_ERROR);
+            return false;
+        }
+    }
+
+    if(m_borderListCtrl && !m_borderListCtrl->GetValue().IsEmpty()) {
+        std::vector<int> parsed;
+        if(!ParseBorderIdList(m_borderListCtrl->GetValue(), parsed)) {
+            wxMessageBox("Border List IDs must be comma-separated positive integers. Example: 201, 202, 2023", "Validation Error", wxICON_ERROR);
+            return false;
+        }
     }
     
     return true;
@@ -1913,6 +3420,9 @@ void BorderEditorDialog::SaveGroundBrush() {
     
     // Get the ground brush properties
     wxString name = m_nameCtrl->GetValue();
+    if(m_modifyGroundBordersOnly && m_existingGroundBrushesCombo && m_existingGroundBrushesCombo->GetSelection() > 0) {
+        name = m_existingGroundBrushesCombo->GetStringSelection();
+    }
     
     // Double check that we have a name (it's also checked in ValidateGroundBrush)
     if (name.IsEmpty()) {
@@ -1922,15 +3432,46 @@ void BorderEditorDialog::SaveGroundBrush() {
     
     int serverId = m_serverLookIdCtrl->GetValue();
     int zOrder = m_zOrderCtrl->GetValue();
-    int borderId = m_idCtrl->GetValue();  // This should be taken from common properties
-    
-    // Get the selected tileset
-    int tilesetSelection = m_tilesetChoice->GetSelection();
-    if (tilesetSelection == wxNOT_FOUND) {
-        wxMessageBox("Please select a tileset.", "Validation Error", wxICON_ERROR);
-        return;
+    wxString borderIdsText = m_borderIdsCtrl ? m_borderIdsCtrl->GetValue() : wxString();
+    borderIdsText.Trim(true).Trim(false);
+
+    std::vector<int> parsedBorderIds;
+    if(!borderIdsText.IsEmpty()) {
+        if(!ParseBorderIdList(borderIdsText, parsedBorderIds)) {
+            wxMessageBox("Border IDs must be comma-separated positive integers. Example: 258, 256", "Validation Error", wxICON_ERROR);
+            return;
+        }
+    } else if(m_idCtrl->GetValue() > 0) {
+        borderIdsText = wxString::Format("%d", m_idCtrl->GetValue());
+        parsedBorderIds.push_back(m_idCtrl->GetValue());
     }
-    wxString tilesetName = m_tilesetChoice->GetString(tilesetSelection);
+
+    wxString toNoneIdsText = m_borderToNoneIdsCtrl ? m_borderToNoneIdsCtrl->GetValue() : wxString();
+    toNoneIdsText.Trim(true).Trim(false);
+    if(!toNoneIdsText.IsEmpty()) {
+        std::vector<int> parsedToNoneIds;
+        if(!ParseBorderIdList(toNoneIdsText, parsedToNoneIds)) {
+            wxMessageBox("To None IDs must be comma-separated positive integers. Example: 204, 271", "Validation Error", wxICON_ERROR);
+            return;
+        }
+    } else {
+        toNoneIdsText = borderIdsText;
+    }
+
+    wxString borderListText = m_borderListCtrl ? m_borderListCtrl->GetValue() : wxString();
+    borderListText.Trim(true).Trim(false);
+    if(!borderListText.IsEmpty()) {
+        std::vector<int> parsedBorderList;
+        if(!ParseBorderIdList(borderListText, parsedBorderList)) {
+            wxMessageBox("Border List IDs must be comma-separated positive integers. Example: 201, 202, 2023", "Validation Error", wxICON_ERROR);
+            return;
+        }
+    }
+
+    if(!parsedBorderIds.empty()) {
+        // Keep common ID in sync with the primary border for SaveBorder()/UI compatibility.
+        m_idCtrl->SetValue(parsedBorderIds.front());
+    }
     
     wxString dataDir = GetVersionDataDirectory();
     wxString groundsFile = dataDir + "grounds.xml";
@@ -1940,8 +3481,8 @@ void BorderEditorDialog::SaveGroundBrush() {
         return;
     }
     
-    // Make sure the border is saved first if we have border items
-    if (!m_borderItems.empty()) {
+    // Make sure the border is saved first if we have border items (full editor mode only).
+    if (!m_modifyGroundBordersOnly && !m_borderItems.empty()) {
         SaveBorder();
     }
     
@@ -1975,14 +3516,18 @@ void BorderEditorDialog::SaveGroundBrush() {
     }
     
     if (brushExists) {
-        // Ask for confirmation to overwrite
-        if (wxMessageBox("A ground brush with name '" + name + "' already exists. Do you want to overwrite it?", 
+        // Ask for confirmation to overwrite (only in full editor mode).
+        if (!m_modifyGroundBordersOnly &&
+            wxMessageBox("A ground brush with name '" + name + "' already exists. Do you want to overwrite it?",
                         "Confirm Overwrite", wxYES_NO | wxICON_QUESTION) != wxYES) {
             return;
         }
         
         // Remove the existing brush
         materials.remove_child(existingBrush);
+    } else if(m_modifyGroundBordersOnly) {
+        wxMessageBox("This mode only edits existing ground brushes.", "Error", wxICON_ERROR);
+        return;
     }
     
     // Create the new brush node
@@ -1999,36 +3544,48 @@ void BorderEditorDialog::SaveGroundBrush() {
         itemNode.append_attribute("chance").set_value(item.chance);
     }
     
-    // Add border reference if we have border items, or if border ID is specified (even without items)
-    if (!m_borderItems.empty() || borderId > 0) {
+    // Add border reference if we have border items, or if border IDs are specified (even without items)
+    if (!m_borderItems.empty() || !borderIdsText.IsEmpty()) {
         // Get alignment type
         wxString alignmentType = m_borderAlignmentChoice->GetStringSelection();
         
         // Main border
         pugi::xml_node borderNode = brushNode.append_child("border");
         borderNode.append_attribute("align").set_value(nstr(alignmentType).c_str());
-        borderNode.append_attribute("id").set_value(borderId);
+        borderNode.append_attribute("id").set_value(nstr(borderIdsText).c_str());
+        if(!borderListText.IsEmpty()) {
+            borderNode.append_attribute("borderlist").set_value(nstr(borderListText).c_str());
+        }
         
         // "to none" border if checked
         if (m_includeToNoneCheck->IsChecked()) {
             pugi::xml_node borderToNoneNode = brushNode.append_child("border");
             borderToNoneNode.append_attribute("align").set_value(nstr(alignmentType).c_str());
             borderToNoneNode.append_attribute("to").set_value("none");
-            borderToNoneNode.append_attribute("id").set_value(borderId);
+            borderToNoneNode.append_attribute("id").set_value(nstr(toNoneIdsText).c_str());
+            if(!borderListText.IsEmpty()) {
+                borderToNoneNode.append_attribute("borderlist").set_value(nstr(borderListText).c_str());
+            }
         }
         
         // Inner border if checked
         if (m_includeInnerCheck->IsChecked()) {
             pugi::xml_node innerBorderNode = brushNode.append_child("border");
             innerBorderNode.append_attribute("align").set_value("inner");
-            innerBorderNode.append_attribute("id").set_value(borderId);
+            innerBorderNode.append_attribute("id").set_value(nstr(borderIdsText).c_str());
+            if(!borderListText.IsEmpty()) {
+                innerBorderNode.append_attribute("borderlist").set_value(nstr(borderListText).c_str());
+            }
             
             // Inner "to none" border if checked
             if (m_includeToNoneCheck->IsChecked()) {
                 pugi::xml_node innerToNoneNode = brushNode.append_child("border");
                 innerToNoneNode.append_attribute("align").set_value("inner");
                 innerToNoneNode.append_attribute("to").set_value("none");
-                innerToNoneNode.append_attribute("id").set_value(borderId);
+                innerToNoneNode.append_attribute("id").set_value(nstr(toNoneIdsText).c_str());
+                if(!borderListText.IsEmpty()) {
+                    innerToNoneNode.append_attribute("borderlist").set_value(nstr(borderListText).c_str());
+                }
             }
         }
     }
@@ -2039,7 +3596,22 @@ void BorderEditorDialog::SaveGroundBrush() {
         return;
     }
     
+    // In modify-only mode we stop after updating grounds.xml.
+    if (m_modifyGroundBordersOnly) {
+        wxMessageBox("Ground borders updated successfully.", "Success", wxICON_INFORMATION);
+        LoadExistingGroundBrushes();
+        SelectGroundBrushByName(name);
+        return;
+    }
+
     // Now also add this brush to the selected tileset
+    int tilesetSelection = m_tilesetChoice->GetSelection();
+    if (tilesetSelection == wxNOT_FOUND) {
+        wxMessageBox("Please select a tileset.", "Validation Error", wxICON_ERROR);
+        return;
+    }
+    wxString tilesetName = m_tilesetChoice->GetString(tilesetSelection);
+
     wxString tilesetsFile = dataDir + "tilesets.xml";
     
     if (!wxFileExists(tilesetsFile)) {
@@ -2113,6 +3685,7 @@ void BorderEditorDialog::SaveGroundBrush() {
     
     // Reload the existing ground brushes list
     LoadExistingGroundBrushes();
+    SelectGroundBrushByName(name);
 }
 
 void BorderEditorDialog::LoadTilesets() {

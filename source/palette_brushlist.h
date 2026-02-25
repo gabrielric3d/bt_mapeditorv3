@@ -71,6 +71,8 @@ public:
 	void OnRightClick(wxMouseEvent& event);
 	void OnApplyReplaceBox1(wxCommandEvent& event);
 	void OnApplyReplaceBox2(wxCommandEvent& event);
+	void OnApplyBrushReplaceBox1(wxCommandEvent& event);
+	void OnApplyBrushReplaceBox2(wxCommandEvent& event);
 	void OnCopyServerID(wxCommandEvent& event);
 	void OnCopyClientID(wxCommandEvent& event);
 
@@ -107,6 +109,8 @@ public:
 	void OnRightClick(wxMouseEvent& event);
 	void OnApplyReplaceBox1(wxCommandEvent& event);
 	void OnApplyReplaceBox2(wxCommandEvent& event);
+	void OnApplyBrushReplaceBox1(wxCommandEvent& event);
+	void OnApplyBrushReplaceBox2(wxCommandEvent& event);
 	void OnCopyServerID(wxCommandEvent& event);
 	void OnCopyClientID(wxCommandEvent& event);
 protected:

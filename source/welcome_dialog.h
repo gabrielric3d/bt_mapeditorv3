@@ -26,6 +26,10 @@
 wxDECLARE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 wxDECLARE_EVENT(WELCOME_DIALOG_FAVORITE, wxCommandEvent);
 
+enum {
+    WELCOME_ID_OPEN_BTMAP = wxID_HIGHEST + 100
+};
+
 class WelcomeDialogPanel;
 class RecentMapsPanel;
 
@@ -79,10 +83,10 @@ public:
     void OnPaint(const wxPaintEvent& event);
     void OnMouseEnter(const wxMouseEvent& event);
     void OnMouseLeave(const wxMouseEvent& event);
-    wxStandardID GetAction() { return m_action; };
-    void SetAction(wxStandardID action) { m_action = action; };
+    int GetAction() { return m_action; };
+    void SetAction(int action) { m_action = action; };
 private:
-    wxStandardID m_action;
+    int m_action;
     wxString m_text;
     ThemeColors m_theme;
     wxColour m_text_colour;
@@ -102,9 +106,13 @@ public:
             const std::vector<wxString>& favorite_files);
 private:
     void OnFavoriteClicked(wxCommandEvent& event);
+    void OnLayoutChanged(wxCommandEvent& event);
     WelcomeDialog* m_dialog;
     ThemeColors m_theme;
     wxBoxSizer* m_sizer;
+    wxBoxSizer* m_content_sizer;
+    wxChoice* m_layout_choice;
+    bool m_use_grid_layout;
     std::vector<wxString> m_recent_files;
 };
 
@@ -114,7 +122,8 @@ public:
     RecentItem(wxWindow* parent,
             const ThemeColors& theme,
             const wxString &item_name,
-            bool is_favorite);
+            bool is_favorite,
+            bool use_grid_layout);
     void OnMouseEnter(const wxMouseEvent& event);
     void OnMouseLeave(const wxMouseEvent& event);
     void PropagateItemClicked(wxMouseEvent& event);
@@ -136,6 +145,7 @@ private:
     wxStaticBitmap* m_favorite_toggle;
     wxString m_item_text;
     bool m_is_favorite;
+    bool m_use_grid_layout;
     bool m_selected;
     wxBitmap m_star_filled;
     wxBitmap m_star_outline;

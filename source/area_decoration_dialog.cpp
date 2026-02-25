@@ -308,6 +308,7 @@ FloorRuleEditDialog::~FloorRuleEditDialog() {
 }
 
 void FloorRuleEditDialog::CreateControls() {
+	const ThemeColors& theme = Theme::Dark();
 	wxBoxSizer* mainSizer = newd wxBoxSizer(wxVERTICAL);
 
 	// Two-column layout
@@ -618,37 +619,55 @@ void FloorRuleEditDialog::CreateControls() {
 	m_itemsListCtrl->InsertColumn(3, "Name", wxLIST_FORMAT_LEFT, 150);
 	itemsBox->Add(m_itemsListCtrl, 1, wxALL | wxEXPAND, 5);
 
-	// Item controls row
-	wxBoxSizer* itemControlsSizer = newd wxBoxSizer(wxHORIZONTAL);
-	itemControlsSizer->Add(newd wxStaticText(this, wxID_ANY, "ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
-	m_newItemIdSpin = newd wxSpinCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 65535, 0);
-	itemControlsSizer->Add(m_newItemIdSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	// ---- Highlighted panel: Add Single Item ----
+	wxPanel* singleItemPanel = newd wxPanel(this, wxID_ANY);
+	singleItemPanel->SetBackgroundColour(theme.surfaceHighlight);
+	wxBoxSizer* singleItemSizer = newd wxBoxSizer(wxVERTICAL);
 
-	wxButton* browseBtn = newd wxButton(this, ID_BROWSE_ITEM, "...", wxDefaultPosition, wxSize(25, -1));
+	wxStaticText* singleItemLabel = newd wxStaticText(singleItemPanel, wxID_ANY, "Add Single Item");
+	singleItemLabel->SetForegroundColour(theme.accent);
+	wxFont labelFont = singleItemLabel->GetFont();
+	labelFont.SetWeight(wxFONTWEIGHT_BOLD);
+	singleItemLabel->SetFont(labelFont);
+	singleItemSizer->Add(singleItemLabel, 0, wxLEFT | wxTOP, 6);
+
+	wxBoxSizer* singleItemRow = newd wxBoxSizer(wxHORIZONTAL);
+	singleItemRow->Add(newd wxStaticText(singleItemPanel, wxID_ANY, "ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_newItemIdSpin = newd wxSpinCtrl(singleItemPanel, wxID_ANY, "0", wxDefaultPosition, wxSize(70, -1), wxSP_ARROW_KEYS, 0, 65535, 0);
+	singleItemRow->Add(m_newItemIdSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+
+	wxButton* browseBtn = newd wxButton(singleItemPanel, ID_BROWSE_ITEM, "...", wxDefaultPosition, wxSize(25, -1));
 	browseBtn->SetToolTip("Browse for item");
-	itemControlsSizer->Add(browseBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+	singleItemRow->Add(browseBtn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
-	itemControlsSizer->Add(newd wxStaticText(this, wxID_ANY, "Weight:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
-	m_newItemWeightSpin = newd wxSpinCtrl(this, wxID_ANY, "100", wxDefaultPosition, wxSize(60, -1), wxSP_ARROW_KEYS, 1, 1000, 100);
-	itemControlsSizer->Add(m_newItemWeightSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+	singleItemRow->Add(newd wxStaticText(singleItemPanel, wxID_ANY, "Weight:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+	m_newItemWeightSpin = newd wxSpinCtrl(singleItemPanel, wxID_ANY, "100", wxDefaultPosition, wxSize(60, -1), wxSP_ARROW_KEYS, 1, 1000, 100);
+	singleItemRow->Add(m_newItemWeightSpin, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
 
-	wxButton* addBtn = newd wxButton(this, ID_ADD_ITEM, "Add", wxDefaultPosition, wxSize(50, -1));
+	wxButton* addBtn = newd wxButton(singleItemPanel, ID_ADD_ITEM, "Add", wxDefaultPosition, wxSize(50, -1));
+	singleItemRow->Add(addBtn, 0, wxALIGN_CENTER_VERTICAL);
+
+	singleItemSizer->Add(singleItemRow, 0, wxALL, 6);
+	singleItemPanel->SetSizer(singleItemSizer);
+	itemsBox->Add(singleItemPanel, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, 5);
+
+	// ---- Action buttons row (below the single item panel) ----
+	wxBoxSizer* actionBtnSizer = newd wxBoxSizer(wxHORIZONTAL);
 	m_editItemBtn = newd wxButton(this, ID_EDIT_ITEM, "Edit", wxDefaultPosition, wxSize(50, -1));
 	m_previewClusterItemBtn = newd wxButton(this, ID_PREVIEW_CLUSTER_ITEM, "Preview", wxDefaultPosition, wxSize(60, -1));
 	wxButton* removeBtn = newd wxButton(this, ID_REMOVE_ITEM, "Remove", wxDefaultPosition, wxSize(60, -1));
 	wxButton* clearBtn = newd wxButton(this, ID_CLEAR_ITEMS, "Clear All", wxDefaultPosition, wxSize(70, -1));
-	itemControlsSizer->Add(addBtn, 0, wxRIGHT, 5);
-	itemControlsSizer->Add(m_editItemBtn, 0, wxRIGHT, 5);
-	itemControlsSizer->Add(m_previewClusterItemBtn, 0, wxRIGHT, 5);
-	itemControlsSizer->Add(removeBtn, 0);
-	itemControlsSizer->Add(clearBtn, 0, wxLEFT, 5);
+	actionBtnSizer->Add(m_editItemBtn, 0, wxRIGHT, 5);
+	actionBtnSizer->Add(m_previewClusterItemBtn, 0, wxRIGHT, 5);
+	actionBtnSizer->Add(removeBtn, 0, wxRIGHT, 5);
+	actionBtnSizer->Add(clearBtn, 0);
 
 	m_editItemBtn->Enable(false);
 	m_editItemBtn->SetToolTip("Apply the fields above to the selected item/cluster");
 	m_previewClusterItemBtn->Enable(false);
 	m_previewClusterItemBtn->SetToolTip("Preview the selected cluster item");
 
-	itemsBox->Add(itemControlsSizer, 0, wxALL, 5);
+	itemsBox->Add(actionBtnSizer, 0, wxALL, 5);
 
 	wxBoxSizer* itemsDoodadSizer = newd wxBoxSizer(wxHORIZONTAL);
 	itemsDoodadSizer->Add(itemsBox, 1, wxALL | wxEXPAND, 5);

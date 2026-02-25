@@ -141,6 +141,8 @@ protected:
 	bool saveSpawns(Map& map, pugi::xml_document& doc);
 	bool saveHouses(Map& map, const FileName& dir);
 	bool saveHouses(Map& map, pugi::xml_document& doc);
+
+	friend class IOMapBTMap;
 };
 
 #endif

@@ -45,6 +45,8 @@ BEGIN_EVENT_TABLE(CameraPathPalettePanel, PalettePanel)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_DOWN, CameraPathPalettePanel::OnKeyframeDown)
 	EVT_BUTTON(PALETTE_CAMERA_KEYFRAME_APPLY, CameraPathPalettePanel::OnApplyKeyframeProps)
 	EVT_CHECKBOX(PALETTE_CAMERA_SHOW_PATHS, CameraPathPalettePanel::OnToggleShowPaths)
+	EVT_CHECKBOX(PALETTE_CAMERA_HIDE_PREVIEW_MOUSE, CameraPathPalettePanel::OnToggleHidePreviewMouse)
+	EVT_BUTTON(PALETTE_CAMERA_GET_ZOOM, CameraPathPalettePanel::OnGetZoom)
 END_EVENT_TABLE()
 
 CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) :
@@ -74,9 +76,16 @@ CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) 
 	play_pause_button = newd wxButton(this, PALETTE_CAMERA_PATH_PLAY, "Play/Pause");
 	pathSizer->Add(play_pause_button, 0, wxEXPAND | wxTOP, 4);
 
+	wxSizer* previewOptions = newd wxBoxSizer(wxHORIZONTAL);
 	show_paths_checkbox = newd wxCheckBox(this, PALETTE_CAMERA_SHOW_PATHS, "Show Camera Paths");
 	show_paths_checkbox->SetValue(g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
-	pathSizer->Add(show_paths_checkbox, 0, wxTOP, 4);
+	previewOptions->Add(show_paths_checkbox, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
+
+	hide_preview_mouse_checkbox = newd wxCheckBox(this, PALETTE_CAMERA_HIDE_PREVIEW_MOUSE, "Hide Preview Mouse");
+	hide_preview_mouse_checkbox->SetValue(g_settings.getBoolean(Config::HIDE_CAMERA_PREVIEW_MOUSE));
+	previewOptions->Add(hide_preview_mouse_checkbox, 0, wxALIGN_CENTER_VERTICAL);
+
+	pathSizer->Add(previewOptions, 0, wxTOP, 4);
 
 	root->Add(pathSizer, 1, wxEXPAND | wxBOTTOM, 6);
 
@@ -122,8 +131,13 @@ CameraPathPalettePanel::CameraPathPalettePanel(wxWindow* parent, wxWindowID id) 
 	grid->Add(speed_ctrl, 1, wxEXPAND);
 
 	grid->Add(newd wxStaticText(this, wxID_ANY, "Zoom"), 0, wxALIGN_CENTER_VERTICAL);
+	wxBoxSizer* zoomSizer = newd wxBoxSizer(wxHORIZONTAL);
 	zoom_ctrl = newd wxTextCtrl(this, wxID_ANY, "1.0");
-	grid->Add(zoom_ctrl, 1, wxEXPAND);
+	get_zoom_button = newd wxButton(this, PALETTE_CAMERA_GET_ZOOM, "Get", wxDefaultPosition, wxSize(40, -1));
+	get_zoom_button->SetToolTip("Get current viewport zoom level");
+	zoomSizer->Add(zoom_ctrl, 1, wxEXPAND);
+	zoomSizer->Add(get_zoom_button, 0, wxLEFT, 4);
+	grid->Add(zoomSizer, 1, wxEXPAND);
 
 	grid->Add(newd wxStaticText(this, wxID_ANY, "Z"), 0, wxALIGN_CENTER_VERTICAL);
 	z_ctrl = newd wxTextCtrl(this, wxID_ANY, "7");
@@ -193,6 +207,7 @@ void CameraPathPalettePanel::OnSwitchIn()
 	PalettePanel::OnSwitchIn();
 	g_gui.ActivatePalette(GetParentPalette());
 	show_paths_checkbox->SetValue(g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
+	hide_preview_mouse_checkbox->SetValue(g_settings.getBoolean(Config::HIDE_CAMERA_PREVIEW_MOUSE));
 }
 
 void CameraPathPalettePanel::OnSwitchOut()
@@ -802,4 +817,36 @@ void CameraPathPalettePanel::OnToggleShowPaths(wxCommandEvent& WXUNUSED(event))
 	g_settings.setInteger(Config::SHOW_CAMERA_PATHS, show ? 1 : 0);
 	g_gui.UpdateMenubar();
 	g_gui.RefreshView();
+}
+
+void CameraPathPalettePanel::OnToggleHidePreviewMouse(wxCommandEvent& WXUNUSED(event))
+{
+	bool hide = hide_preview_mouse_checkbox->GetValue();
+	g_settings.setInteger(Config::HIDE_CAMERA_PREVIEW_MOUSE, hide ? 1 : 0);
+
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if(tab) {
+		MapCanvas* canvas = tab->GetCanvas();
+		if(canvas) {
+			canvas->UpdateCameraPreviewCursorVisibility();
+		}
+	}
+
+	g_gui.RefreshView();
+}
+
+void CameraPathPalettePanel::OnGetZoom(wxCommandEvent& WXUNUSED(event))
+{
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if(!tab) {
+		return;
+	}
+
+	MapCanvas* canvas = tab->GetCanvas();
+	if(!canvas) {
+		return;
+	}
+
+	double zoom = canvas->GetZoom();
+	zoom_ctrl->ChangeValue(wxString::Format("%.2f", zoom));
 }

@@ -25,6 +25,8 @@
 #include <wx/filename.h>
 #include <wx/graphics.h>
 #include <wx/display.h>
+#include <wx/dirdlg.h>
+#include <wx/wrapsizer.h>
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -161,6 +163,21 @@ void WelcomeDialog::OnButtonClicked(const wxMouseEvent &event) {
             PreferencesWindow preferences_window(m_welcome_dialog_panel, true);
             preferences_window.ShowModal();
             m_welcome_dialog_panel->updateInputs();
+        } else if(button->GetAction() == WELCOME_ID_OPEN_BTMAP) {
+            wxDirDialog dir_dialog(this, "Open BTMap directory", "",
+                wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+            if(dir_dialog.ShowModal() == wxID_OK) {
+                wxString dirPath = dir_dialog.GetPath();
+                if(!dirPath.EndsWith(".btmap")) {
+                    wxMessageBox("Please select a directory ending with .btmap",
+                        "Invalid BTMap Directory", wxOK | wxICON_WARNING, this);
+                    return;
+                }
+                wxCommandEvent action_event(WELCOME_DIALOG_ACTION);
+                action_event.SetString(dirPath);
+                action_event.SetId(wxID_OPEN);
+                ProcessWindowEvent(action_event);
+            }
         } else {
             wxCommandEvent action_event(WELCOME_DIALOG_ACTION);
             if(button->GetAction() == wxID_OPEN) {
@@ -260,6 +277,15 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog *dialog,
                                                      "Open");
     open_map_button->SetAction(wxID_OPEN);
     open_map_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
+
+    auto *open_btmap_button = newd WelcomeDialogButton(this,
+                                                       wxDefaultPosition,
+                                                       button_size,
+                                                       theme,
+                                                       "Open BTMap");
+    open_btmap_button->SetAction(WELCOME_ID_OPEN_BTMAP);
+    open_btmap_button->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnButtonClicked, dialog);
+
     auto *preferences_button = newd WelcomeDialogButton(this,
                                                         wxDefaultPosition,
                                                         button_size,
@@ -275,6 +301,7 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog *dialog,
     buttons_sizer->AddSpacer(size.y / 2);
     buttons_sizer->Add(new_map_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
     buttons_sizer->Add(open_map_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
+    buttons_sizer->Add(open_btmap_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
     buttons_sizer->Add(preferences_button, 0, wxALIGN_CENTER | wxTOP, FROM_DIP(this, 10));
 
     wxSizer *vertical_sizer = newd wxBoxSizer(wxVERTICAL);
@@ -410,9 +437,33 @@ RecentMapsPanel::RecentMapsPanel(wxWindow *parent,
         : wxPanel(parent, wxID_ANY),
           m_dialog(dialog),
           m_theme(theme),
-          m_sizer(new wxBoxSizer(wxVERTICAL)) {
+          m_sizer(new wxBoxSizer(wxVERTICAL)),
+          m_content_sizer(new wxBoxSizer(wxVERTICAL)),
+          m_layout_choice(nullptr),
+          m_use_grid_layout(false) {
     SetBackgroundColour(theme.surfaceAlt);
     Bind(WELCOME_DIALOG_FAVORITE, &RecentMapsPanel::OnFavoriteClicked, this);
+
+    auto* layout_row = newd wxBoxSizer(wxHORIZONTAL);
+    auto* layout_label = newd wxStaticText(this, wxID_ANY, "Layout:");
+    layout_label->SetForegroundColour(m_theme.textMuted);
+    m_layout_choice = newd wxChoice(this, wxID_ANY);
+    m_layout_choice->Append("Vertical list");
+    m_layout_choice->Append("Grid");
+    m_layout_choice->SetSelection(0);
+    m_layout_choice->SetBackgroundColour(theme.controlBase);
+    m_layout_choice->SetForegroundColour(theme.text);
+    m_layout_choice->Bind(wxEVT_CHOICE, &RecentMapsPanel::OnLayoutChanged, this);
+    layout_row->Add(layout_label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 8));
+    layout_row->Add(m_layout_choice, 0, wxALIGN_CENTER_VERTICAL);
+    m_sizer->Add(layout_row, 0, wxEXPAND | wxALL, FROM_DIP(this, 8));
+
+    auto* top_divider = newd wxPanel(this, wxID_ANY);
+    top_divider->SetBackgroundColour(m_theme.border);
+    top_divider->SetMinSize(wxSize(-1, FROM_DIP(this, 1)));
+    m_sizer->Add(top_divider, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 8));
+    m_sizer->Add(m_content_sizer, 1, wxEXPAND | wxTOP, FROM_DIP(this, 2));
+
     SetSizer(m_sizer);
     UpdateRecentFiles(recent_files, LoadFavoriteFiles());
 }
@@ -421,22 +472,25 @@ void RecentMapsPanel::UpdateRecentFiles(const std::vector<wxString>& recent_file
                                         const std::vector<wxString>& favorite_files) {
     Freeze();
     m_recent_files = recent_files;
-    m_sizer->Clear(true);
+    m_content_sizer->Clear(true);
+
     auto add_divider = [this]() {
         auto *divider = newd wxPanel(this, wxID_ANY);
         divider->SetBackgroundColour(m_theme.border);
         divider->SetMinSize(wxSize(-1, FROM_DIP(this, 1)));
-        m_sizer->Add(divider, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 8));
+        m_content_sizer->Add(divider, 0, wxEXPAND | wxLEFT | wxRIGHT, FROM_DIP(this, 8));
     };
+
     auto add_title = [this, &add_divider](const wxString& title) {
         auto *label = newd wxStaticText(this, wxID_ANY, title);
         wxFont font = label->GetFont().Bold();
         font.SetPointSize(font.GetPointSize() + 1);
         label->SetFont(font);
         label->SetForegroundColour(m_theme.textMuted);
-        m_sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 8));
+        m_content_sizer->Add(label, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FROM_DIP(this, 8));
         add_divider();
     };
+
     std::vector<wxString> unique_favorites;
     for(const wxString& favorite : favorite_files) {
         AddUniquePath(unique_favorites, favorite);
@@ -450,48 +504,89 @@ void RecentMapsPanel::UpdateRecentFiles(const std::vector<wxString>& recent_file
 
     if(!unique_favorites.empty()) {
         add_title("Favorites");
-        for(const wxString& file : unique_favorites) {
-            auto *recent_item = newd RecentItem(this, m_theme, file, true);
-            m_sizer->Add(recent_item, 0, wxEXPAND);
-            recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+        if(m_use_grid_layout) {
+            auto* grid_sizer = newd wxWrapSizer(wxHORIZONTAL);
+            for(const wxString& file : unique_favorites) {
+                auto *recent_item = newd RecentItem(this, m_theme, file, true, true);
+                recent_item->SetMinSize(wxSize(FROM_DIP(this, 300), -1));
+                recent_item->SetMaxSize(wxSize(FROM_DIP(this, 360), -1));
+                grid_sizer->Add(recent_item, 0, wxALL, FROM_DIP(this, 4));
+                recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+            }
+            m_content_sizer->Add(grid_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 4));
             add_divider();
+        } else {
+            for(const wxString& file : unique_favorites) {
+                auto *recent_item = newd RecentItem(this, m_theme, file, true, false);
+                m_content_sizer->Add(recent_item, 0, wxEXPAND);
+                recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+                add_divider();
+            }
         }
     }
+
     if(!unique_recent.empty()) {
         add_title("Recent Maps");
-        for(const wxString& file : unique_recent) {
-            auto *recent_item = newd RecentItem(this, m_theme, file, false);
-            m_sizer->Add(recent_item, 0, wxEXPAND);
-            recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+        if(m_use_grid_layout) {
+            auto* grid_sizer = newd wxWrapSizer(wxHORIZONTAL);
+            for(const wxString& file : unique_recent) {
+                auto *recent_item = newd RecentItem(this, m_theme, file, false, true);
+                recent_item->SetMinSize(wxSize(FROM_DIP(this, 300), -1));
+                recent_item->SetMaxSize(wxSize(FROM_DIP(this, 360), -1));
+                grid_sizer->Add(recent_item, 0, wxALL, FROM_DIP(this, 4));
+                recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+            }
+            m_content_sizer->Add(grid_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FROM_DIP(this, 4));
             add_divider();
+        } else {
+            for(const wxString& file : unique_recent) {
+                auto *recent_item = newd RecentItem(this, m_theme, file, false, false);
+                m_content_sizer->Add(recent_item, 0, wxEXPAND);
+                recent_item->Bind(wxEVT_LEFT_UP, &WelcomeDialog::OnRecentItemClicked, m_dialog);
+                add_divider();
+            }
         }
     }
     Layout();
     Thaw();
 }
 
+void RecentMapsPanel::OnLayoutChanged(wxCommandEvent& event) {
+    m_use_grid_layout = event.GetSelection() == 1;
+    UpdateRecentFiles(m_recent_files, LoadFavoriteFiles());
+}
+
 RecentItem::RecentItem(wxWindow *parent,
                        const ThemeColors &theme,
                        const wxString &item_name,
-                       bool is_favorite)
+                       bool is_favorite,
+                       bool use_grid_layout)
         : wxPanel(parent, wxID_ANY),
           m_theme(theme),
           m_text_colour(theme.text),
           m_text_colour_hover(theme.accent),
+          m_title(nullptr),
+          m_file_path(nullptr),
+          m_modified_text(nullptr),
+          m_favorite_toggle(nullptr),
           m_item_text(item_name),
           m_is_favorite(is_favorite),
+          m_use_grid_layout(use_grid_layout),
           m_selected(false) {
     const wxColour favorite_colour(214, 170, 46);
     m_background_normal = theme.surfaceHighlight;
     m_background_selected = theme.controlActive;
     UpdateBackground();
     m_title = newd wxStaticText(this, wxID_ANY, wxFileNameFromPath(m_item_text));
+    m_title->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
     wxFont title_font = GetFont().Bold();
-    title_font.SetPointSize(title_font.GetPointSize() + 2);
+    title_font.SetPointSize(title_font.GetPointSize() + 1);
     m_title->SetFont(title_font);
     m_title->SetForegroundColour(m_is_favorite ? favorite_colour : m_text_colour);
     m_title->SetToolTip(m_item_text);
-    m_file_path = newd wxStaticText(this, wxID_ANY, m_item_text, wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_START);
+    const int path_width = m_use_grid_layout ? FROM_DIP(this, 240) : FROM_DIP(this, 360);
+    m_file_path = newd wxStaticText(this, wxID_ANY, m_item_text, wxDefaultPosition, wxSize(path_width, -1), wxST_ELLIPSIZE_START);
+    m_file_path->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
     m_file_path->SetToolTip(m_item_text);
     m_file_path->SetFont(GetFont().Smaller());
     m_file_path->SetForegroundColour(m_is_favorite ? favorite_colour : theme.textMuted);
@@ -504,28 +599,39 @@ RecentItem::RecentItem(wxWindow *parent,
         }
     }
     m_modified_text = newd wxStaticText(this, wxID_ANY, modified_label);
+    m_modified_text->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
     m_modified_text->SetFont(GetFont().Smaller());
     m_modified_text->SetForegroundColour(m_is_favorite ? favorite_colour : theme.textMuted);
+    m_modified_text->SetMinSize(wxSize(path_width, -1));
     m_star_filled = CreateStarBitmap(this, m_text_colour_hover, true);
     m_star_outline = CreateStarBitmap(this, theme.textMuted, false);
     m_star_outline_hover = CreateStarBitmap(this, m_text_colour_hover, false);
     m_favorite_toggle = newd wxStaticBitmap(this, wxID_ANY,
         m_is_favorite ? m_star_filled : m_star_outline);
+
+    const int item_padding = m_use_grid_layout ? FROM_DIP(this, 6) : FROM_DIP(this, 5);
+    const int line_spacing = FROM_DIP(this, 1);
     wxBoxSizer *mainSizer = newd wxBoxSizer(wxHORIZONTAL);
     wxBoxSizer *sizer = newd wxBoxSizer(wxVERTICAL);
-    sizer->Add(m_title);
-    sizer->Add(m_file_path, 1, wxTOP, FROM_DIP(this, 2));
-    sizer->Add(m_modified_text, 0, wxTOP, FROM_DIP(this, 2));
-    mainSizer->Add(sizer, 0, wxEXPAND | wxALL, FROM_DIP(this, 8));
-    mainSizer->AddStretchSpacer(1);
-    mainSizer->Add(m_favorite_toggle, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FROM_DIP(this, 10));
+    sizer->Add(m_title, 0, wxBOTTOM, line_spacing);
+    sizer->Add(m_file_path, 0, wxBOTTOM, line_spacing);
+    sizer->Add(m_modified_text, 0);
+    mainSizer->Add(sizer, 1, wxEXPAND | wxALL, item_padding);
+    mainSizer->Add(m_favorite_toggle, 0, wxALIGN_TOP | wxTOP | wxRIGHT, item_padding);
+
     Bind(wxEVT_ENTER_WINDOW, &RecentItem::OnMouseEnter, this);
     Bind(wxEVT_LEAVE_WINDOW, &RecentItem::OnMouseLeave, this);
     m_title->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
     m_file_path->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
     m_modified_text->Bind(wxEVT_LEFT_UP, &RecentItem::PropagateItemClicked, this);
     m_favorite_toggle->Bind(wxEVT_LEFT_UP, &RecentItem::OnFavoriteClicked, this);
-    SetSizerAndFit(mainSizer);
+    SetSizer(mainSizer);
+
+    if(m_use_grid_layout) {
+        SetMinSize(wxSize(FROM_DIP(this, 300), FROM_DIP(this, 70)));
+    } else {
+        SetMinSize(wxSize(-1, FROM_DIP(this, 60)));
+    }
 }
 
 void RecentItem::SetSelected(bool selected) {
@@ -537,7 +643,17 @@ void RecentItem::SetSelected(bool selected) {
 }
 
 void RecentItem::UpdateBackground() {
-    SetBackgroundColour(m_selected ? m_background_selected : m_background_normal);
+    const wxColour background = m_selected ? m_background_selected : m_background_normal;
+    SetBackgroundColour(background);
+    if(m_title) {
+        m_title->SetBackgroundColour(background);
+    }
+    if(m_file_path) {
+        m_file_path->SetBackgroundColour(background);
+    }
+    if(m_modified_text) {
+        m_modified_text->SetBackgroundColour(background);
+    }
     Refresh();
 }
 

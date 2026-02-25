@@ -39,6 +39,7 @@
 
 #include "doodad_brush.h"
 #include "creature_brush.h"
+#include "creatures.h"
 #include "house_exit_brush.h"
 #include "house_brush.h"
 #include "spawn_brush.h"
@@ -48,6 +49,7 @@
 #include "table_brush.h"
 #include "waypoint_brush.h"
 #include "light_drawer.h"
+#include "creature_walk_animator.h"
 #include <cmath>
 
 DrawingOptions::DrawingOptions()
@@ -92,6 +94,8 @@ void DrawingOptions::SetDefault()
 	show_only_grounds = false;
 	show_camera_paths = false;
 	show_npc_paths = false;
+	show_creature_wander_radius = false;
+	animate_creature_walk = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = true;
 	full_detail_zoom_out = false;
@@ -139,6 +143,8 @@ void DrawingOptions::SetIngame()
 	show_only_grounds = false;
 	show_camera_paths = false;
 	show_npc_paths = false;
+	show_creature_wander_radius = false;
+	animate_creature_walk = false;
 	show_selected_tile_indicator = false;
 	hide_items_when_zoomed = false;
 	full_detail_zoom_out = false;
@@ -185,7 +191,10 @@ void DrawingOptions::LoadFromSettings()
 	show_stair_direction = g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION);
 	show_camera_paths = g_settings.getBoolean(Config::SHOW_CAMERA_PATHS);
 	show_npc_paths = g_settings.getBoolean(Config::SHOW_NPC_PATHS);
+	show_creature_wander_radius = g_settings.getBoolean(Config::SHOW_CREATURE_WANDER_RADIUS);
+	animate_creature_walk = g_settings.getBoolean(Config::ANIMATE_CREATURE_WALK);
 	show_only_grounds = g_settings.getBoolean(Config::SHOW_ONLY_GROUNDS);
+	show_chunk_boundaries = g_settings.getBoolean(Config::SHOW_CHUNK_BOUNDARIES);
 	show_selected_tile_indicator = g_settings.getBoolean(Config::SELECTED_TILE_INDICATOR);
 	hide_items_when_zoomed = g_settings.getBoolean(Config::HIDE_ITEMS_WHEN_ZOOMED);
 	full_detail_zoom_out = g_settings.getBoolean(Config::FULL_DETAIL_ZOOM_OUT);
@@ -364,10 +373,24 @@ int MapDrawer::GetLODLevel() const
 void MapDrawer::Draw()
 {
 	int lod_level = GetLODLevel();
-	
+
+	// Update creature walk animation state
+	if(options.animate_creature_walk) {
+		if(!g_creature_walk_animator.isEnabled()) {
+			g_creature_walk_animator.setEnabled(true);
+		}
+		g_creature_walk_animator.update(wxGetLocalTimeMillis().GetLo());
+	} else {
+		if(g_creature_walk_animator.isEnabled()) {
+			g_creature_walk_animator.setEnabled(false);
+		}
+	}
+
 	DrawBackground();
 	DrawMap();
+	DrawFloorFadeOverlay();
 	DrawSpawnOverlays();
+	DrawWanderRadiusOverlays();
 	if(options.show_mountain_overlay)
 		DrawMountainOverlay();
 	if(options.show_wall_borders)
@@ -376,13 +399,22 @@ void MapDrawer::Draw()
 	DrawHigherFloors();
 	if(options.dragging)
 		DrawSelectionBox();
+	DrawBoundboxRegion();
 	DrawLiveCursors();
-	DrawBrush();
-	DrawCursorTile();
+	const bool hide_preview_mouse =
+		canvas &&
+		canvas->IsCameraPathPlaying() &&
+		g_settings.getBoolean(Config::HIDE_CAMERA_PREVIEW_MOUSE);
+	if(!hide_preview_mouse) {
+		DrawBrush();
+		DrawCursorTile();
+	}
 
 	// Skip grid in high LOD levels
 	if(options.show_grid && (zoom <= 10.f || options.full_detail_zoom_out) && lod_level < 3)
 		DrawGrid();
+	if(options.show_chunk_boundaries && (zoom <= 10.f || options.full_detail_zoom_out) && lod_level < 3)
+		DrawChunkBoundaries();
 	if(options.show_camera_paths)
 		DrawCameraPaths();
 	if(options.show_npc_paths)
@@ -404,6 +436,11 @@ void MapDrawer::Draw()
 		DrawStairDirections();
 
 	DrawStatsOverlay();
+
+	// Request continuous refresh for creature walk animations
+	if(options.animate_creature_walk) {
+		canvas->animation_timer->RequestRefresh();
+	}
 }
 
 void MapDrawer::DrawBackground()
@@ -456,6 +493,7 @@ void MapDrawer::DrawMap()
 	tiles_rendered = 0; // Reset tile counter
 	bool live_client = editor.IsLiveClient();
 	spawn_overlays.clear();
+	wander_overlays.clear();
 
 	Brush* brush = g_gui.GetCurrentBrush();
 
@@ -748,6 +786,46 @@ void MapDrawer::DrawGrid()
 	}
 
 	glEnd();
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawChunkBoundaries()
+{
+	const int CHUNK_TILES = 256;
+
+	glDisable(GL_TEXTURE_2D);
+	glEnable(GL_LINE_STIPPLE);
+	glLineStipple(2, 0xAAAA);
+	glLineWidth(2.0f);
+	glColor4ub(0, 200, 255, 180);
+	glBegin(GL_LINES);
+
+	// Align to chunk boundaries
+	int cx_start = (start_x / CHUNK_TILES) * CHUNK_TILES;
+	int cy_start = (start_y / CHUNK_TILES) * CHUNK_TILES;
+
+	int sx_min = start_x * rme::TileSize - view_scroll_x;
+	int sx_max = end_x * rme::TileSize - view_scroll_x;
+	int sy_min = start_y * rme::TileSize - view_scroll_y;
+	int sy_max = end_y * rme::TileSize - view_scroll_y;
+
+	// Vertical lines at chunk boundaries
+	for(int cx = cx_start; cx <= end_x; cx += CHUNK_TILES) {
+		int sx = cx * rme::TileSize - view_scroll_x;
+		glVertex2f(sx, sy_min);
+		glVertex2f(sx, sy_max);
+	}
+
+	// Horizontal lines at chunk boundaries
+	for(int cy = cy_start; cy <= end_y; cy += CHUNK_TILES) {
+		int sy = cy * rme::TileSize - view_scroll_y;
+		glVertex2f(sx_min, sy);
+		glVertex2f(sx_max, sy);
+	}
+
+	glEnd();
+	glLineWidth(1.0f);
+	glDisable(GL_LINE_STIPPLE);
 	glEnable(GL_TEXTURE_2D);
 }
 
@@ -1193,6 +1271,145 @@ void MapDrawer::DrawHigherFloors()
 	glDisable(GL_TEXTURE_2D);
 }
 
+void MapDrawer::DrawFloorTilesWithAlpha(int target_floor, int alpha)
+{
+	int current_floor = floor;
+	int cur_adjustment = getFloorAdjustment(current_floor);
+	int target_adjustment = getFloorAdjustment(target_floor);
+	int offset = target_adjustment - cur_adjustment;
+
+	glEnable(GL_TEXTURE_2D);
+
+	for(int map_x = start_x; map_x <= end_x; map_x++) {
+		for(int map_y = start_y; map_y <= end_y; map_y++) {
+			Tile* tile = editor.getMap().getTile(map_x, map_y, target_floor);
+			if(!tile) continue;
+
+			int draw_x = map_x * rme::TileSize - view_scroll_x - cur_adjustment + offset;
+			int draw_y = map_y * rme::TileSize - view_scroll_y - cur_adjustment + offset;
+
+			if(tile->ground) {
+				BlitItem(draw_x, draw_y, tile, tile->ground, false, 255, 255, 255, alpha);
+			}
+
+			bool hidden = options.hide_items_when_zoomed && zoom > 10.f && !options.full_detail_zoom_out;
+			if(!hidden && !tile->items.empty()) {
+				for(const Item* item : tile->items)
+					BlitItem(draw_x, draw_y, tile, item, false, 255, 255, 255, alpha);
+			}
+
+			if(options.show_creatures && tile->creature) {
+				BlitCreature(draw_x, draw_y, tile->creature, 255, 255, 255, alpha);
+			}
+		}
+	}
+
+	glDisable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawFloorFadeOverlay()
+{
+	int mode = g_settings.getInteger(Config::FLOOR_FADING_MODE);
+	long duration = g_settings.getInteger(Config::FLOOR_FADING_DURATION);
+	int easing_type = g_settings.getInteger(Config::FLOOR_FADING_EASING);
+	int max_opacity_pct = g_settings.getInteger(Config::FLOOR_FADING_OPACITY);
+	float max_alpha = 255.0f * max_opacity_pct / 100.0f;
+
+	if(mode == 1) {
+		// Continuous mode: render all accumulated fade layers
+		auto& layers = canvas->floor_fade_layers;
+
+		// Remove expired layers
+		for(auto it = layers.begin(); it != layers.end(); ) {
+			if(it->timer.Time() >= duration)
+				it = layers.erase(it);
+			else
+				++it;
+		}
+
+		// Render each layer with its own alpha
+		for(const auto& layer : layers) {
+			long elapsed = layer.timer.Time();
+			if(elapsed >= duration) continue;
+
+			float t = static_cast<float>(elapsed) / duration;
+			float eased;
+			switch(easing_type) {
+				case 1: eased = 1.0f - (1.0f - t) * (1.0f - t); break;
+				case 2: eased = t < 0.5f ? 2.0f * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 2.0f) / 2.0f; break;
+				default: eased = t; break;
+			}
+
+			int alpha = static_cast<int>(max_alpha * (1.0f - eased));
+			if(alpha > 0)
+				DrawFloorTilesWithAlpha(layer.floor_z, alpha);
+		}
+
+		// Also handle the main fade for the most recent floor change
+		if(!canvas->IsFloorFading()) {
+			canvas->floor_fading = false;
+			return;
+		}
+		// The most recent change is already in layers, so we're done
+		return;
+	}
+
+	// Non-continuous modes use the single fade timer
+	if(!canvas->IsFloorFading()) {
+		canvas->floor_fading = false;
+		return;
+	}
+
+	int alpha = canvas->GetFloorFadeAlpha();
+	if(alpha <= 0) {
+		canvas->floor_fading = false;
+		return;
+	}
+
+	if(mode == 0) {
+		// Crossfade: render old floor with decreasing alpha
+		DrawFloorTilesWithAlpha(canvas->GetFloorFadeOldFloor(), alpha);
+	}
+	else if(mode == 2) {
+		// Fade to Black: draw black quad with alpha that goes up then down
+		float progress = canvas->GetFloorFadeProgress();
+		float black_alpha;
+		if(progress < 0.5f) {
+			// First half: fade to black (0 -> max)
+			black_alpha = max_alpha * (progress * 2.0f);
+		} else {
+			// Second half: fade from black (max -> 0)
+			black_alpha = max_alpha * ((1.0f - progress) * 2.0f);
+		}
+
+		int a = static_cast<int>(black_alpha);
+		if(a > 0) {
+			glDisable(GL_TEXTURE_2D);
+			glColor4ub(0, 0, 0, static_cast<uint8_t>(a));
+			glBegin(GL_QUADS);
+				glVertex2f(0, 0);
+				glVertex2f(screensize_x * zoom, 0);
+				glVertex2f(screensize_x * zoom, screensize_y * zoom);
+				glVertex2f(0, screensize_y * zoom);
+			glEnd();
+			glEnable(GL_TEXTURE_2D);
+		}
+	}
+	else if(mode == 3) {
+		// Fade Out: draw a covering quad that fades away (new floor appears gradually)
+		// The new floor is already rendered; we cover it with black that fades out
+		glDisable(GL_TEXTURE_2D);
+		glColor4ub(0, 0, 0, static_cast<uint8_t>(alpha));
+		glBegin(GL_QUADS);
+			glVertex2f(0, 0);
+			glVertex2f(screensize_x * zoom, 0);
+			glVertex2f(screensize_x * zoom, screensize_y * zoom);
+			glVertex2f(0, screensize_y * zoom);
+		glEnd();
+		glEnable(GL_TEXTURE_2D);
+	}
+}
+
 void MapDrawer::DrawSelectionBox()
 {
 	if (options.ingame) {
@@ -1275,6 +1492,53 @@ void MapDrawer::DrawSelectionBox()
 	}
 	glEnd();
 	glDisable(GL_LINE_STIPPLE);
+	glEnable(GL_TEXTURE_2D);
+}
+
+void MapDrawer::DrawBoundboxRegion()
+{
+	if(options.ingame || options.dragging)
+		return;
+
+	if(!canvas->has_boundbox_region)
+		return;
+
+	// Only show when on the same floor as the selection
+	if(floor != canvas->boundbox_from.z)
+		return;
+
+	int adj = getFloorAdjustment(floor);
+	int x1 = canvas->boundbox_from.x * rme::TileSize - view_scroll_x - adj;
+	int y1 = canvas->boundbox_from.y * rme::TileSize - view_scroll_y - adj;
+	int x2 = (canvas->boundbox_to.x + 1) * rme::TileSize - view_scroll_x - adj;
+	int y2 = (canvas->boundbox_to.y + 1) * rme::TileSize - view_scroll_y - adj;
+
+	glDisable(GL_TEXTURE_2D);
+
+	// Semi-transparent fill
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glColor4f(0.3f, 0.6f, 1.0f, 0.12f);
+	glBegin(GL_QUADS);
+	glVertex2f(x1, y1);
+	glVertex2f(x2, y1);
+	glVertex2f(x2, y2);
+	glVertex2f(x1, y2);
+	glEnd();
+
+	// Dashed border
+	glEnable(GL_LINE_STIPPLE);
+	glLineStipple(2, 0xAAAA);
+	glLineWidth(1.0f);
+	glColor4f(0.4f, 0.7f, 1.0f, 0.8f);
+	glBegin(GL_LINE_LOOP);
+	glVertex2f(x1, y1);
+	glVertex2f(x2, y1);
+	glVertex2f(x2, y2);
+	glVertex2f(x1, y2);
+	glEnd();
+	glDisable(GL_LINE_STIPPLE);
+
 	glEnable(GL_TEXTURE_2D);
 }
 
@@ -2389,7 +2653,29 @@ void MapDrawer::DrawTile(TileLocation* location)
 
 	// LOD Level 2+ (zoom > 6): Skip creatures
 	if(!hidden && options.show_creatures && tile->creature && lod_level < 2) {
-		BlitCreature(draw_x, draw_y, tile->creature);
+		if(options.animate_creature_walk && tile->creature->hasWanderBehavior()) {
+			// Register creature for walk animation and get visual offset
+			g_creature_walk_animator.ensureRegistered(position.x, position.y, position.z, tile->creature);
+			auto walk = g_creature_walk_animator.getOffset(position.x, position.y, position.z, tile->creature);
+
+			int creature_draw_x = draw_x + walk.pixel_x;
+			int creature_draw_y = draw_y + walk.pixel_y;
+
+			// Determine direction: use walk direction when actively walking, otherwise creature default
+			Direction dir = walk.is_walking ? walk.direction : tile->creature->getDirection();
+
+			// Apply selection tint (same logic as BlitCreature(const Creature*))
+			int cr = 255, cg = 255, cb = 255;
+			if(!options.ingame && tile->creature->isSelected()) {
+				cr /= 2;
+				cg /= 2;
+				cb /= 2;
+			}
+
+			BlitCreature(creature_draw_x, creature_draw_y, tile->creature->getLookType(), dir, cr, cg, cb, 255);
+		} else {
+			BlitCreature(draw_x, draw_y, tile->creature);
+		}
 		if(show_tooltips && options.show_spawn_creatureslist && position.z == floor) {
 			MakeTooltip(draw_x, draw_y, tile->creature->getName(), 0, 0, 0, 255, 255, 255);
 		}
@@ -2556,6 +2842,21 @@ void MapDrawer::DrawTileIndicators(TileLocation* location)
 			MakeTooltip(x, y, monsterText, 0, 0, 0, 255, 255, 0);
 		}
 	}
+
+	if(options.show_creature_wander_radius && tile->creature) {
+		CreatureType* cType = g_creatures[tile->creature->getName()];
+		if(cType && cType->hasWanderBehavior()) {
+			const Position& creaturePos = tile->getPosition();
+			if(creaturePos.z == floor) {
+				int radius = cType->wander_radius;
+				int start_x = creaturePos.x - radius;
+				int start_y = creaturePos.y - radius;
+				int end_x = creaturePos.x + radius + 1;
+				int end_y = creaturePos.y + radius + 1;
+				wander_overlays.push_back(std::make_tuple(start_x, start_y, end_x, end_y, radius, tile->creature->isSelected()));
+			}
+		}
+	}
 }
 
 void MapDrawer::DrawSpawnAreaOverlay(int start_map_x, int start_map_y, int end_map_x, int end_map_y, int radius, bool full_visibility)
@@ -2630,10 +2931,10 @@ void MapDrawer::DrawSpawnAreaOverlay(int start_map_x, int start_map_y, int end_m
 	drawFilledRect(center_box_x, center_box_y, center_box_size, center_box_size, box_fill);
 	drawRect(center_box_x, center_box_y, center_box_size, center_box_size, *wxWHITE, 1);
 
-	const char* center_text = "S";
+	const std::string center_text = std::to_string(radius);
 	int center_text_width = 0;
-	for(const char* c = center_text; *c != '\0'; ++c) {
-		center_text_width += glutBitmapWidth(GLUT_BITMAP_8_BY_13, *c);
+	for(char c : center_text) {
+		center_text_width += glutBitmapWidth(GLUT_BITMAP_8_BY_13, c);
 	}
 	float center_text_x = center_box_x + (center_box_size - center_text_width * zoom) / 2.0f;
 	float center_text_y = center_box_y + (center_box_size + 8 * zoom) / 2.0f;
@@ -2646,34 +2947,13 @@ void MapDrawer::DrawSpawnAreaOverlay(int start_map_x, int start_map_y, int end_m
 	};
 	for(const auto& offset : outline_offsets) {
 		glRasterPos2f(center_text_x + offset[0], center_text_y + offset[1]);
-		for(const char* c = center_text; *c != '\0'; ++c) {
-			glutBitmapCharacter(GLUT_BITMAP_8_BY_13, *c);
+		for(char c : center_text) {
+			glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
 		}
 	}
 	glColor4ub(box_text.Red(), box_text.Green(), box_text.Blue(), box_text.Alpha());
 	glRasterPos2f(center_text_x, center_text_y);
-	for(const char* c = center_text; *c != '\0'; ++c) {
-		glutBitmapCharacter(GLUT_BITMAP_8_BY_13, *c);
-	}
-
-	int box_size = rme::TileSize;
-	int box_x = end_sx - box_size;
-	int box_y = end_sy - box_size;
-
-	drawFilledRect(box_x, box_y, box_size, box_size, box_fill);
-	drawRect(box_x, box_y, box_size, box_size, *wxWHITE, 1);
-
-	std::string size_text = std::to_string(radius);
-	int text_width = 0;
-	for(char c : size_text) {
-		text_width += glutBitmapWidth(GLUT_BITMAP_8_BY_13, c);
-	}
-
-	float text_x = box_x + (box_size - text_width * zoom) / 2.0f;
-	float text_y = box_y + (box_size + 8 * zoom) / 2.0f;
-	glColor4ub(box_text.Red(), box_text.Green(), box_text.Blue(), box_text.Alpha());
-	glRasterPos2f(text_x, text_y);
-	for(char c : size_text) {
+	for(char c : center_text) {
 		glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
 	}
 
@@ -2713,6 +2993,136 @@ void MapDrawer::DrawSpawnOverlays()
 			std::get<5>(overlay)
 		);
 	}
+}
+
+void MapDrawer::DrawWanderRadiusOverlays()
+{
+	if(wander_overlays.empty())
+		return;
+
+	for(const auto& overlay : wander_overlays) {
+		DrawWanderRadiusOverlay(
+			std::get<0>(overlay),
+			std::get<1>(overlay),
+			std::get<2>(overlay),
+			std::get<3>(overlay),
+			std::get<4>(overlay),
+			std::get<5>(overlay)
+		);
+	}
+}
+
+void MapDrawer::DrawWanderRadiusOverlay(int start_map_x, int start_map_y, int end_map_x, int end_map_y, int radius, bool selected)
+{
+	int adjustment = getFloorAdjustment(floor);
+	int start_sx = start_map_x * rme::TileSize - view_scroll_x - adjustment;
+	int start_sy = start_map_y * rme::TileSize - view_scroll_y - adjustment;
+	int end_sx = end_map_x * rme::TileSize - view_scroll_x - adjustment;
+	int end_sy = end_map_y * rme::TileSize - view_scroll_y - adjustment;
+
+	// Cyan/teal color to distinguish from spawn overlays (magenta)
+	const wxColor outline(0, 180, 220, selected ? 255 : 180);
+	const wxColor box_fill(0, 180, 220, selected ? 220 : 180);
+	const wxColor box_text(255, 255, 255, 255);
+
+	glDisable(GL_TEXTURE_2D);
+	glLineWidth(selected ? 3.0f : 2.0f);
+
+	// Draw border outline
+	glBegin(GL_LINES);
+	// Top edge
+	for(int x = start_map_x; x < end_map_x; ++x) {
+		glColor4ub(outline.Red(), outline.Green(), outline.Blue(), outline.Alpha());
+		int sx = x * rme::TileSize - view_scroll_x - adjustment;
+		int sy = start_map_y * rme::TileSize - view_scroll_y - adjustment;
+		glVertex2f(sx, sy);
+		glVertex2f(sx + rme::TileSize, sy);
+	}
+	// Bottom edge
+	for(int x = start_map_x; x < end_map_x; ++x) {
+		int y = end_map_y - 1;
+		glColor4ub(outline.Red(), outline.Green(), outline.Blue(), outline.Alpha());
+		int sx = x * rme::TileSize - view_scroll_x - adjustment;
+		int sy = y * rme::TileSize - view_scroll_y - adjustment + rme::TileSize;
+		glVertex2f(sx, sy);
+		glVertex2f(sx + rme::TileSize, sy);
+	}
+	// Left edge
+	for(int y = start_map_y; y < end_map_y; ++y) {
+		glColor4ub(outline.Red(), outline.Green(), outline.Blue(), outline.Alpha());
+		int sx = start_map_x * rme::TileSize - view_scroll_x - adjustment;
+		int sy = y * rme::TileSize - view_scroll_y - adjustment;
+		glVertex2f(sx, sy);
+		glVertex2f(sx, sy + rme::TileSize);
+	}
+	// Right edge
+	for(int y = start_map_y; y < end_map_y; ++y) {
+		int x = end_map_x - 1;
+		glColor4ub(outline.Red(), outline.Green(), outline.Blue(), outline.Alpha());
+		int sx = x * rme::TileSize - view_scroll_x - adjustment + rme::TileSize;
+		int sy = y * rme::TileSize - view_scroll_y - adjustment;
+		glVertex2f(sx, sy);
+		glVertex2f(sx, sy + rme::TileSize);
+	}
+	glEnd();
+
+	// Draw center box with "W" label
+	int center_box_size = rme::TileSize;
+	int center_box_x = start_sx + ((end_sx - start_sx) - center_box_size) / 2;
+	int center_box_y = start_sy + ((end_sy - start_sy) - center_box_size) / 2;
+	drawFilledRect(center_box_x, center_box_y, center_box_size, center_box_size, box_fill);
+	drawRect(center_box_x, center_box_y, center_box_size, center_box_size, *wxWHITE, 1);
+
+	const char* center_text = "W";
+	int center_text_width = 0;
+	for(const char* c = center_text; *c != '\0'; ++c) {
+		center_text_width += glutBitmapWidth(GLUT_BITMAP_8_BY_13, *c);
+	}
+	float center_text_x = center_box_x + (center_box_size - center_text_width * zoom) / 2.0f;
+	float center_text_y = center_box_y + (center_box_size + 8 * zoom) / 2.0f;
+	// Draw text outline in black
+	glColor4ub(0, 0, 0, 255);
+	const float outline_offsets[4][2] = {
+		{-1.0f, 0.0f},
+		{1.0f, 0.0f},
+		{0.0f, -1.0f},
+		{0.0f, 1.0f},
+	};
+	for(const auto& offset : outline_offsets) {
+		glRasterPos2f(center_text_x + offset[0], center_text_y + offset[1]);
+		for(const char* c = center_text; *c != '\0'; ++c) {
+			glutBitmapCharacter(GLUT_BITMAP_8_BY_13, *c);
+		}
+	}
+	glColor4ub(box_text.Red(), box_text.Green(), box_text.Blue(), box_text.Alpha());
+	glRasterPos2f(center_text_x, center_text_y);
+	for(const char* c = center_text; *c != '\0'; ++c) {
+		glutBitmapCharacter(GLUT_BITMAP_8_BY_13, *c);
+	}
+
+	// Draw radius number box in bottom-right corner
+	int box_size = rme::TileSize;
+	int box_x = end_sx - box_size;
+	int box_y = end_sy - box_size;
+
+	drawFilledRect(box_x, box_y, box_size, box_size, box_fill);
+	drawRect(box_x, box_y, box_size, box_size, *wxWHITE, 1);
+
+	std::string size_text = std::to_string(radius);
+	int text_width = 0;
+	for(char c : size_text) {
+		text_width += glutBitmapWidth(GLUT_BITMAP_8_BY_13, c);
+	}
+
+	float text_x = box_x + (box_size - text_width * zoom) / 2.0f;
+	float text_y = box_y + (box_size + 8 * zoom) / 2.0f;
+	glColor4ub(box_text.Red(), box_text.Green(), box_text.Blue(), box_text.Alpha());
+	glRasterPos2f(text_x, text_y);
+	for(char c : size_text) {
+		glutBitmapCharacter(GLUT_BITMAP_8_BY_13, c);
+	}
+
+	glEnable(GL_TEXTURE_2D);
 }
 
 void MapDrawer::DrawWallBorderLines()

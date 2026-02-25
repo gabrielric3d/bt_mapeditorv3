@@ -27,7 +27,9 @@
 #include "map_tab.h"
 #include "ground_brush.h"
 #include "common_windows.h"
+#include "brush.h"
 #include <wx/spinctrl.h>
+#include <wx/listctrl.h>
 
 namespace {
 
@@ -160,6 +162,198 @@ private:
 };
 
 // ----------------------------------------------------------------------------
+// Ground brush picker dialog (with visual list, search filter, and pagination)
+
+class GroundBrushPickerDialog : public wxDialog
+{
+	static constexpr int ITEMS_PER_PAGE = 20;
+
+public:
+	GroundBrushPickerDialog(wxWindow* parent, const wxString& title) :
+		wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(350, 480), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+		selectedBrush(nullptr), currentPage(0)
+	{
+		// Collect all ground brushes
+		const BrushMap& brushMap = g_brushes.getMap();
+		for(const auto& pair : brushMap) {
+			if(pair.second && pair.second->isGround()) {
+				allBrushes.push_back(static_cast<GroundBrush*>(pair.second));
+			}
+		}
+		std::sort(allBrushes.begin(), allBrushes.end(), [](GroundBrush* a, GroundBrush* b) {
+			return a->getName() < b->getName();
+		});
+		filteredBrushes = allBrushes;
+
+		wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+
+		// Search filter
+		wxBoxSizer* searchSizer = new wxBoxSizer(wxHORIZONTAL);
+		searchSizer->Add(new wxStaticText(this, wxID_ANY, "Search:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+		searchBox = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+		searchSizer->Add(searchBox, 1, wxEXPAND);
+		mainSizer->Add(searchSizer, 0, wxALL | wxEXPAND, 5);
+
+		// Brush list
+		brushList = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+			wxLC_REPORT | wxLC_SINGLE_SEL | wxLC_NO_HEADER);
+		brushList->InsertColumn(0, "Icon", wxLIST_FORMAT_LEFT, 40);
+		brushList->InsertColumn(1, "Name", wxLIST_FORMAT_LEFT, 250);
+
+		const ThemeColors& theme = Theme::Dark();
+		brushList->SetBackgroundColour(theme.surface);
+		brushList->SetForegroundColour(theme.text);
+
+		mainSizer->Add(brushList, 1, wxALL | wxEXPAND, 5);
+
+		// Pagination controls
+		wxBoxSizer* pageSizer = new wxBoxSizer(wxHORIZONTAL);
+		prevButton = new wxButton(this, wxID_ANY, "<", wxDefaultPosition, wxSize(40, -1));
+		nextButton = new wxButton(this, wxID_ANY, ">", wxDefaultPosition, wxSize(40, -1));
+		pageLabel = new wxStaticText(this, wxID_ANY, "Page 1 / 1", wxDefaultPosition, wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+
+		pageSizer->Add(prevButton, 0, wxRIGHT, 5);
+		pageSizer->Add(pageLabel, 1, wxALIGN_CENTER_VERTICAL);
+		pageSizer->Add(nextButton, 0, wxLEFT, 5);
+		mainSizer->Add(pageSizer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+
+		// Dialog buttons
+		wxStdDialogButtonSizer* buttons = new wxStdDialogButtonSizer();
+		okButton = new wxButton(this, wxID_OK);
+		okButton->Enable(false);
+		buttons->AddButton(okButton);
+		buttons->AddButton(new wxButton(this, wxID_CANCEL));
+		buttons->Realize();
+		mainSizer->Add(buttons, 0, wxALL | wxALIGN_RIGHT, 5);
+
+		SetSizer(mainSizer);
+
+		// Bind events
+		searchBox->Bind(wxEVT_TEXT, &GroundBrushPickerDialog::OnSearchChanged, this);
+		searchBox->Bind(wxEVT_TEXT_ENTER, &GroundBrushPickerDialog::OnSearchEnter, this);
+		brushList->Bind(wxEVT_LIST_ITEM_SELECTED, &GroundBrushPickerDialog::OnItemSelected, this);
+		brushList->Bind(wxEVT_LIST_ITEM_ACTIVATED, &GroundBrushPickerDialog::OnItemActivated, this);
+		prevButton->Bind(wxEVT_BUTTON, &GroundBrushPickerDialog::OnPrevPage, this);
+		nextButton->Bind(wxEVT_BUTTON, &GroundBrushPickerDialog::OnNextPage, this);
+
+		PopulateList();
+		CentreOnParent();
+	}
+
+	GroundBrush* GetSelectedBrush() const { return selectedBrush; }
+
+private:
+	void PopulateList()
+	{
+		brushList->DeleteAllItems();
+
+		const int totalPages = GetTotalPages();
+		const int startIndex = currentPage * ITEMS_PER_PAGE;
+		const int endIndex = std::min(startIndex + ITEMS_PER_PAGE, static_cast<int>(filteredBrushes.size()));
+
+		for(int i = startIndex; i < endIndex; ++i) {
+			GroundBrush* brush = filteredBrushes[i];
+			long itemIndex = brushList->InsertItem(brushList->GetItemCount(), "");
+
+			// Store brush pointer as item data
+			brushList->SetItemPtrData(itemIndex, reinterpret_cast<wxUIntPtr>(brush));
+
+			// Set the brush name
+			brushList->SetItem(itemIndex, 1, wxstr(brush->getName()));
+		}
+
+		// Update pagination controls
+		pageLabel->SetLabel(wxString::Format("Page %d / %d", currentPage + 1, std::max(1, totalPages)));
+		prevButton->Enable(currentPage > 0);
+		nextButton->Enable(currentPage < totalPages - 1);
+	}
+
+	int GetTotalPages() const
+	{
+		return static_cast<int>((filteredBrushes.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
+	}
+
+	void ApplyFilter()
+	{
+		wxString filter = searchBox->GetValue().Lower();
+		filteredBrushes.clear();
+
+		if(filter.IsEmpty()) {
+			filteredBrushes = allBrushes;
+		} else {
+			for(GroundBrush* brush : allBrushes) {
+				wxString brushName = wxstr(brush->getName()).Lower();
+				if(brushName.Contains(filter)) {
+					filteredBrushes.push_back(brush);
+				}
+			}
+		}
+
+		currentPage = 0;
+		PopulateList();
+	}
+
+	void OnSearchChanged(wxCommandEvent&)
+	{
+		ApplyFilter();
+	}
+
+	void OnSearchEnter(wxCommandEvent&)
+	{
+		// If only one result, select it and close
+		if(filteredBrushes.size() == 1) {
+			selectedBrush = filteredBrushes[0];
+			EndModal(wxID_OK);
+		}
+	}
+
+	void OnItemSelected(wxListEvent& event)
+	{
+		long index = event.GetIndex();
+		if(index >= 0) {
+			selectedBrush = reinterpret_cast<GroundBrush*>(brushList->GetItemData(index));
+			okButton->Enable(selectedBrush != nullptr);
+		}
+	}
+
+	void OnItemActivated(wxListEvent& event)
+	{
+		OnItemSelected(event);
+		if(selectedBrush) {
+			EndModal(wxID_OK);
+		}
+	}
+
+	void OnPrevPage(wxCommandEvent&)
+	{
+		if(currentPage > 0) {
+			currentPage--;
+			PopulateList();
+		}
+	}
+
+	void OnNextPage(wxCommandEvent&)
+	{
+		if(currentPage < GetTotalPages() - 1) {
+			currentPage++;
+			PopulateList();
+		}
+	}
+
+	std::vector<GroundBrush*> allBrushes;
+	std::vector<GroundBrush*> filteredBrushes;
+	GroundBrush* selectedBrush;
+	int currentPage;
+
+	wxTextCtrl* searchBox;
+	wxListCtrl* brushList;
+	wxButton* prevButton;
+	wxButton* nextButton;
+	wxButton* okButton;
+	wxStaticText* pageLabel;
+};
+
+// ----------------------------------------------------------------------------
 // Ground brush replace helper dialog
 
 class GroundBrushReplaceDialog : public wxDialog
@@ -203,33 +397,26 @@ public:
 private:
 	void OnPickFrom(wxCommandEvent&)
 	{
-		fromBrush = PickBrush("Select source ground brush");
-		UpdateLabels();
+		GroundBrushPickerDialog dlg(this, "Select source ground brush");
+		if(dlg.ShowModal() == wxID_OK) {
+			fromBrush = dlg.GetSelectedBrush();
+			UpdateLabels();
+		}
 	}
 
 	void OnPickTo(wxCommandEvent&)
 	{
-		toBrush = PickBrush("Select target ground brush");
-		UpdateLabels();
-	}
-
-	GroundBrush* PickBrush(const wxString& title)
-	{
-		FindBrushDialog dlg(this, title);
+		GroundBrushPickerDialog dlg(this, "Select target ground brush");
 		if(dlg.ShowModal() == wxID_OK) {
-			const Brush* brush = dlg.getResult();
-			if(brush && brush->isGround()) {
-				return const_cast<GroundBrush*>(dynamic_cast<const GroundBrush*>(brush));
-			}
-			wxMessageBox("Please pick a ground brush.", "Replace Ground Brush", wxOK | wxICON_WARNING, this);
+			toBrush = dlg.GetSelectedBrush();
+			UpdateLabels();
 		}
-		return nullptr;
 	}
 
 	void UpdateLabels()
 	{
-		from_label->SetLabel(wxString::Format("From: %s", fromBrush ? wxstr(fromBrush->getName()) : "none"));
-		to_label->SetLabel(wxString::Format("To: %s", toBrush ? wxstr(toBrush->getName()) : "none"));
+		from_label->SetLabel(wxString::Format("From: %s", fromBrush ? wxstr(fromBrush->getName()) : wxString("none")));
+		to_label->SetLabel(wxString::Format("To: %s", toBrush ? wxstr(toBrush->getName()) : wxString("none")));
 		ok_button->Enable(fromBrush && toBrush);
 		Layout();
 		Fit();
@@ -406,8 +593,8 @@ void ReplaceItemsListBox::OnDrawItem(wxDC& dc, const wxRect& rect, size_t index)
 			sprite2 = g_gui.gfx.getSprite(item.toBrush->getLookID());
 		}
 		label = wxString::Format("Replace brush: %s With: %s",
-			item.fromBrush ? wxstr(item.fromBrush->getName()) : "?", 
-			item.toBrush ? wxstr(item.toBrush->getName()) : "?");
+			item.fromBrush ? wxstr(item.fromBrush->getName()) : wxString("?"),
+			item.toBrush ? wxstr(item.toBrush->getName()) : wxString("?"));
 	}
 
 	const ThemeColors& theme = Theme::Dark();
@@ -445,11 +632,8 @@ wxCoord ReplaceItemsListBox::OnMeasureItem(size_t WXUNUSED(index)) const
 // ============================================================================
 // ReplaceItemsDialog
 
-ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
-	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"),
-			 wxDefaultPosition, wxSize(500, 480), wxDEFAULT_DIALOG_STYLE),
-	selectionOnly(selectionOnly),
-	lock_selection_checkbox(nullptr)
+ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent) :
+	wxDialog(parent, wxID_ANY, "Replace Items", wxDefaultPosition, wxSize(500, 480), wxDEFAULT_DIALOG_STYLE)
 {
 	SetSizeHints(wxDefaultSize, wxDefaultSize);
 
@@ -483,19 +667,30 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	auto_add_checkbox->SetToolTip("Automatically add to list when both boxes are filled");
 	items_sizer->Add(auto_add_checkbox, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
 
-	if(selectionOnly) {
-		lock_selection_checkbox = new wxCheckBox(this, wxID_ANY, wxT("Lock Selection"));
-		lock_selection_checkbox->SetToolTip("Use the selection captured now even if it is cleared or changed later");
-		items_sizer->Add(lock_selection_checkbox, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-	}
-
 	items_sizer->Add(0, 0, 1, wxEXPAND, 5);
 
 	progress = new wxGauge(this, wxID_ANY, 100);
 	progress->SetValue(0);
-	items_sizer->Add(progress, 0, wxALL, 5);
+	items_sizer->Add(progress, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
 
-	sizer->Add(items_sizer, 1, wxALL | wxEXPAND, 5);
+	sizer->Add(items_sizer, 0, wxLEFT | wxRIGHT | wxEXPAND, 5);
+
+	// Scope options row
+	wxBoxSizer* scope_sizer = new wxBoxSizer(wxHORIZONTAL);
+
+	scope_entire_map = new wxRadioButton(this, wxID_ANY, wxT("Entire Map"), wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+	scope_entire_map->SetValue(true);
+	scope_sizer->Add(scope_entire_map, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+
+	scope_selection = new wxRadioButton(this, wxID_ANY, wxT("Selection Only"));
+	scope_sizer->Add(scope_selection, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+
+	lock_selection_checkbox = new wxCheckBox(this, wxID_ANY, wxT("Lock Selection"));
+	lock_selection_checkbox->SetToolTip("Use the selection captured now even if it is cleared or changed later");
+	lock_selection_checkbox->Enable(false);
+	scope_sizer->Add(lock_selection_checkbox, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+
+	sizer->Add(scope_sizer, 0, wxLEFT | wxRIGHT | wxEXPAND, 5);
 
 	wxBoxSizer* buttons_sizer = new wxBoxSizer(wxHORIZONTAL);
 
@@ -522,7 +717,7 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	close_button = new wxButton(this, wxID_ANY, wxT("Close"));
 	buttons_sizer->Add(close_button, 0, wxALL, 5);
 
-	sizer->Add(buttons_sizer, 1, wxALL | wxLEFT | wxRIGHT | wxSHAPED, 5);
+	sizer->Add(buttons_sizer, 0, wxALL | wxEXPAND, 5);
 
 	SetSizer(sizer);
 	Layout();
@@ -540,13 +735,9 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	remove_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
-	if(lock_selection_checkbox) {
-		lock_selection_checkbox->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnLockSelectionToggled), NULL, this);
-	}
-
-	if(selectionOnly) {
-		CaptureSelectionSnapshot(GetParentEditor());
-	}
+	scope_entire_map->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnScopeChanged), NULL, this);
+	scope_selection->Connect(wxEVT_RADIOBUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnScopeChanged), NULL, this);
+	lock_selection_checkbox->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnLockSelectionToggled), NULL, this);
 }
 
 ReplaceItemsDialog::~ReplaceItemsDialog()
@@ -563,9 +754,14 @@ ReplaceItemsDialog::~ReplaceItemsDialog()
 	remove_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
-	if(lock_selection_checkbox) {
-		lock_selection_checkbox->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnLockSelectionToggled), NULL, this);
-	}
+	scope_entire_map->Disconnect(wxEVT_RADIOBUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnScopeChanged), NULL, this);
+	scope_selection->Disconnect(wxEVT_RADIOBUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnScopeChanged), NULL, this);
+	lock_selection_checkbox->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnLockSelectionToggled), NULL, this);
+}
+
+bool ReplaceItemsDialog::IsSelectionMode() const
+{
+	return scope_selection->GetValue();
 }
 
 void ReplaceItemsDialog::UpdateWidgets()
@@ -588,7 +784,7 @@ Editor* ReplaceItemsDialog::GetParentEditor() const
 void ReplaceItemsDialog::CaptureSelectionSnapshot(Editor* editor)
 {
 	selectionSnapshot.clear();
-	if(!selectionOnly || !editor) {
+	if(!editor) {
 		return;
 	}
 
@@ -601,12 +797,17 @@ void ReplaceItemsDialog::CaptureSelectionSnapshot(Editor* editor)
 	}
 }
 
+void ReplaceItemsDialog::OnScopeChanged(wxCommandEvent& event)
+{
+	lock_selection_checkbox->Enable(IsSelectionMode());
+	if(!IsSelectionMode()) {
+		lock_selection_checkbox->SetValue(false);
+		selectionSnapshot.clear();
+	}
+}
+
 void ReplaceItemsDialog::OnLockSelectionToggled(wxCommandEvent& event)
 {
-	if(!selectionOnly) {
-		return;
-	}
-
 	if(event.IsChecked()) {
 		CaptureSelectionSnapshot(GetParentEditor());
 	} else {
@@ -724,7 +925,8 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 	if(!editor)
 		return;
 
-	const bool useLockedSelection = selectionOnly && lock_selection_checkbox && lock_selection_checkbox->IsChecked();
+	const bool selectionMode = IsSelectionMode();
+	const bool useLockedSelection = selectionMode && lock_selection_checkbox->IsChecked();
 	if(useLockedSelection && selectionSnapshot.empty()) {
 		CaptureSelectionSnapshot(editor);
 		if(selectionSnapshot.empty()) {
@@ -751,7 +953,7 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 			if(useLockedSelection) {
 				foreach_ItemOnPositions(editor->getMap(), finder, selectionSnapshot);
 			} else {
-				foreach_ItemOnMap(editor->getMap(), finder, selectionOnly);
+				foreach_ItemOnMap(editor->getMap(), finder, selectionMode);
 			}
 
 			const auto& result = finder.result;
@@ -788,7 +990,7 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 			if(useLockedSelection) {
 				foreach_ItemOnPositions(editor->getMap(), finder, selectionSnapshot);
 			} else {
-				foreach_ItemOnMap(editor->getMap(), finder, selectionOnly);
+				foreach_ItemOnMap(editor->getMap(), finder, selectionMode);
 			}
 
 			if(!finder.tiles.empty()) {

@@ -22,6 +22,7 @@
 #include "main_menubar.h"
 #include "application.h"
 #include "preferences.h"
+#include "floor_fading_dialog.h"
 #include "about_window.h"
 #include "minimap_window.h"
 #include "dat_debug_view.h"
@@ -38,10 +39,14 @@
 #include "hotkey_window.h"
 #include "hotkey_utils.h"
 #include "welcome_dialog.h"
+#include "region_scan_dialog.h"
+#include "selection_scanner_dialog.h"
+#include "spawn_density_dialog.h"
 
 #include "gui.h"
 
 #include <wx/chartype.h>
+#include <wx/choicdlg.h>
 #include <wx/numdlg.h>
 #include <wx/filename.h>
 #include <wx/filedlg.h>
@@ -57,6 +62,8 @@
 #include "live_client.h"
 #include "live_server.h"
 #include "theme.h"
+#include "iomap_btmap.h"
+#include <wx/dirdlg.h>
 
 namespace
 {
@@ -180,6 +187,8 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(OPEN, wxITEM_NORMAL, OnOpen);
 	MAKE_ACTION(SAVE, wxITEM_NORMAL, OnSave);
 	MAKE_ACTION(SAVE_AS, wxITEM_NORMAL, OnSaveAs);
+	MAKE_ACTION(DEPLOY_MAP, wxITEM_NORMAL, OnDeployMap);
+	MAKE_ACTION(SAVE_AS_BTMAP, wxITEM_NORMAL, OnSaveAsBTMap);
 	MAKE_ACTION(GENERATE_MAP, wxITEM_NORMAL, OnGenerateMap);
 	MAKE_ACTION(CLOSE, wxITEM_NORMAL, OnClose);
 
@@ -188,6 +197,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(IMPORT_MONSTERSJSON, wxITEM_NORMAL, OnImportMonsterJson);
 	MAKE_ACTION(IMPORT_MINIMAP, wxITEM_NORMAL, OnImportMinimap);
 	MAKE_ACTION(EXPORT_MINIMAP, wxITEM_NORMAL, OnExportMinimap);
+	MAKE_ACTION(EXPORT_TO_OTBM, wxITEM_NORMAL, OnExportToOTBM);
 
 	MAKE_ACTION(RELOAD_DATA, wxITEM_NORMAL, OnReloadDataFiles);
 	MAKE_ACTION(RELOAD_BRUSHES, wxITEM_NORMAL, OnReloadBrushes);
@@ -201,6 +211,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 
 	MAKE_ACTION(FIND_ITEM, wxITEM_NORMAL, OnSearchForItem);
 	MAKE_ACTION(REPLACE_ITEMS, wxITEM_NORMAL, OnReplaceItems);
+	MAKE_ACTION(SET_ACTION_ID_ON_SELECTION, wxITEM_NORMAL, OnSetActionIdOnSelection);
 	MAKE_ACTION(SEARCH_ON_MAP_EVERYTHING, wxITEM_NORMAL, OnSearchForStuffOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_UNIQUE, wxITEM_NORMAL, OnSearchForUniqueOnMap);
 	MAKE_ACTION(SEARCH_ON_MAP_ACTION, wxITEM_NORMAL, OnSearchForActionOnMap);
@@ -255,6 +266,9 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, OnMapCleanHouseItems);
 	MAKE_ACTION(MAP_PROPERTIES, wxITEM_NORMAL, OnMapProperties);
 	MAKE_ACTION(MAP_STATISTICS, wxITEM_NORMAL, OnMapStatistics);
+	MAKE_ACTION(SCAN_REGION, wxITEM_NORMAL, OnScanRegion);
+	MAKE_ACTION(SELECTION_ITEM_SCANNER, wxITEM_NORMAL, OnSelectionItemScanner);
+	MAKE_ACTION(SPAWN_DENSITY_ADJUSTER, wxITEM_NORMAL, OnSpawnDensityAdjuster);
 
 	MAKE_ACTION(VIEW_TOOLBARS_BRUSHES, wxITEM_CHECK, OnToolbars);
 	MAKE_ACTION(VIEW_TOOLBARS_POSITION, wxITEM_CHECK, OnToolbars);
@@ -301,7 +315,12 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(SHOW_STAIR_DIRECTION, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_CAMERA_PATHS, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_NPC_PATHS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CREATURE_WANDER_RADIUS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(ANIMATE_CREATURE_WALK, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_ONLY_GROUNDS, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(SHOW_CHUNK_BOUNDARIES, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(FLOOR_FADING, wxITEM_CHECK, OnChangeViewSettings);
+	MAKE_ACTION(FLOOR_FADING_SETTINGS, wxITEM_NORMAL, OnFloorFadingSettings);
 	MAKE_ACTION(CAMERA_PLAY_PAUSE, wxITEM_NORMAL, OnCameraPlayPause);
 	MAKE_ACTION(CAMERA_ADD_KEYFRAME, wxITEM_NORMAL, OnCameraAddKeyframe);
 
@@ -314,6 +333,7 @@ MainMenuBar::MainMenuBar(MainFrame *frame) : frame(frame), recentFiles(kRecentFi
 	MAKE_ACTION(BRUSH_TIPS, wxITEM_NORMAL, OnBrushTipsWindow);
 	MAKE_ACTION(AREA_DECORATION, wxITEM_NORMAL, OnAreaDecoration);
 	MAKE_ACTION(AREA_CREATURE_SPAWN, wxITEM_NORMAL, OnAreaCreatureSpawn);
+	MAKE_ACTION(INSTANCE_LAYOUT_GENERATOR, wxITEM_NORMAL, OnInstanceLayoutGenerator);
 	MAKE_ACTION(NEW_PALETTE, wxITEM_NORMAL, OnNewPalette);
 	MAKE_ACTION(TAKE_SCREENSHOT, wxITEM_NORMAL, OnTakeScreenshot);
 	MAKE_ACTION(TAKE_REGION_SCREENSHOT, wxITEM_NORMAL, OnTakeRegionScreenshot);
@@ -483,6 +503,7 @@ void MainMenuBar::Update()
 	EnableItem(CLOSE, is_local);
 	EnableItem(SAVE, is_host);
 	EnableItem(SAVE_AS, is_host);
+	EnableItem(DEPLOY_MAP, has_map && is_host && editor->getMap().hasFile());
 	EnableItem(GENERATE_MAP, false);
 
 	EnableItem(IMPORT_MAP, is_local);
@@ -493,6 +514,7 @@ void MainMenuBar::Update()
 
 	EnableItem(FIND_ITEM, is_host);
 	EnableItem(REPLACE_ITEMS, is_local);
+	EnableItem(SET_ACTION_ID_ON_SELECTION, has_selection && is_host);
 	EnableItem(SEARCH_ON_MAP_EVERYTHING, is_host);
 	EnableItem(SEARCH_ON_MAP_UNIQUE, is_host);
 	EnableItem(SEARCH_ON_MAP_ACTION, is_host);
@@ -543,6 +565,9 @@ void MainMenuBar::Update()
 	EnableItem(MAP_CLEANUP, is_local);
 	EnableItem(MAP_PROPERTIES, is_local);
 	EnableItem(MAP_STATISTICS, is_local);
+	EnableItem(SCAN_REGION, has_map);
+	EnableItem(SELECTION_ITEM_SCANNER, has_map && has_selection);
+	EnableItem(SPAWN_DENSITY_ADJUSTER, has_map);
 
 	EnableItem(NEW_VIEW, has_map);
 	EnableItem(NEW_DETACHED_VIEW, has_map);
@@ -571,6 +596,7 @@ void MainMenuBar::Update()
 	EnableItem(STRUCTURE_MANAGER, has_map);
 	EnableItem(BRUSH_TIPS, true);
 	EnableItem(AREA_DECORATION, loaded);
+	EnableItem(INSTANCE_LAYOUT_GENERATOR, is_local);
 	EnableItem(NEW_PALETTE, loaded);
 	EnableItem(SELECT_TERRAIN, loaded);
 	EnableItem(SELECT_DOODAD, loaded);
@@ -657,6 +683,8 @@ void MainMenuBar::LoadValues()
 	CheckItem(SHOW_WALL_HOOKS, g_settings.getBoolean(Config::SHOW_WALL_HOOKS));
 	CheckItem(SHOW_PICKUPABLES, g_settings.getBoolean(Config::SHOW_PICKUPABLES));
 	CheckItem(SHOW_MOVEABLES, g_settings.getBoolean(Config::SHOW_MOVEABLES));
+	CheckItem(SHOW_CHUNK_BOUNDARIES, g_settings.getBoolean(Config::SHOW_CHUNK_BOUNDARIES));
+	CheckItem(FLOOR_FADING, g_settings.getBoolean(Config::FLOOR_FADING));
 }
 
 void MainMenuBar::LoadRecentFiles()
@@ -746,6 +774,8 @@ void MainMenuBar::UpdateIndicatorsMenu()
 	CheckItem(SHOW_STAIR_DIRECTION, g_settings.getBoolean(Config::SHOW_STAIR_DIRECTION));
 	CheckItem(SHOW_CAMERA_PATHS, g_settings.getBoolean(Config::SHOW_CAMERA_PATHS));
 	CheckItem(SHOW_NPC_PATHS, g_settings.getBoolean(Config::SHOW_NPC_PATHS));
+	CheckItem(SHOW_CREATURE_WANDER_RADIUS, g_settings.getBoolean(Config::SHOW_CREATURE_WANDER_RADIUS));
+	CheckItem(ANIMATE_CREATURE_WALK, g_settings.getBoolean(Config::ANIMATE_CREATURE_WALK));
 }
 
 bool MainMenuBar::Load(const FileName& path, wxArrayString& warnings, wxString& error)
@@ -1106,10 +1136,12 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 
 			wxBoxSizer* button_sizer = new wxBoxSizer(wxHORIZONTAL);
 			wxButton* browse_button = new wxButton(this, wxID_ANY, "Browse...");
+			wxButton* browse_btmap_button = new wxButton(this, wxID_ANY, "Open BTMap...");
 			open_button = new wxButton(this, wxID_OK, "Open");
 			wxButton* cancel_button = new wxButton(this, wxID_CANCEL, "Cancel");
 			open_button->Enable(false);
 			button_sizer->Add(browse_button, 0, wxRIGHT, FROM_DIP(this, 8));
+			button_sizer->Add(browse_btmap_button, 0, wxRIGHT, FROM_DIP(this, 8));
 			button_sizer->AddStretchSpacer(1);
 			button_sizer->Add(open_button, 0, wxRIGHT, FROM_DIP(this, 8));
 			button_sizer->Add(cancel_button, 0);
@@ -1119,6 +1151,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			SetSize(FROM_DIP(this, wxSize(800, 600)));
 			SetMinSize(FROM_DIP(this, wxSize(800, 600)));
 			browse_button->Bind(wxEVT_BUTTON, &OpenMapDialog::OnBrowse, this);
+			browse_btmap_button->Bind(wxEVT_BUTTON, &OpenMapDialog::OnBrowseBTMap, this);
 		}
 
 		wxString GetSelectedPath() const { return selected_path; }
@@ -1165,7 +1198,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			if(!unique_favorites.empty()) {
 				add_title("Favorites");
 				for(const wxString& file : unique_favorites) {
-					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, true);
+					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, true, false);
 					m_list_sizer->Add(recent_item, 0, wxEXPAND);
 					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
 					if(PathEquals(file, selected_path)) {
@@ -1179,7 +1212,7 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			if(!unique_recent.empty()) {
 				add_title("Recent Maps");
 				for(const wxString& file : unique_recent) {
-					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, false);
+					auto *recent_item = newd RecentItem(m_list_window, m_theme, file, false, false);
 					m_list_sizer->Add(recent_item, 0, wxEXPAND);
 					recent_item->Bind(wxEVT_LEFT_UP, &OpenMapDialog::OnRecentItemClicked, this);
 					if(PathEquals(file, selected_path)) {
@@ -1236,6 +1269,23 @@ void MainMenuBar::OnOpen(wxCommandEvent& WXUNUSED(event))
 			}
 		}
 
+		void OnBrowseBTMap(wxCommandEvent& WXUNUSED(event))
+		{
+			wxDirDialog dialog(this, "Open BTMap directory", "",
+				wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+			if(dialog.ShowModal() == wxID_OK) {
+				wxString dirPath = dialog.GetPath();
+				// Verify it's a valid .btmap directory
+				if(!dirPath.EndsWith(".btmap")) {
+					wxMessageBox("Please select a directory ending with .btmap", "Invalid BTMap Directory",
+						wxOK | wxICON_WARNING, this);
+					return;
+				}
+				selected_path = dirPath;
+				EndModal(wxID_OK);
+			}
+		}
+
 		ThemeColors m_theme;
 		wxScrolledWindow* m_list_window;
 		wxBoxSizer* m_list_sizer;
@@ -1268,6 +1318,60 @@ void MainMenuBar::OnSave(wxCommandEvent& WXUNUSED(event))
 void MainMenuBar::OnSaveAs(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.SaveMapAs();
+}
+
+void MainMenuBar::OnDeployMap(wxCommandEvent& event)
+{
+	MainToolBar* toolbar = frame ? frame->GetAuiToolBar() : nullptr;
+	if(toolbar) {
+		toolbar->OnDeployButtonClick(event);
+	}
+}
+
+void MainMenuBar::OnSaveAsBTMap(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen())
+		return;
+
+	wxDirDialog dialog(frame, "Choose directory for BTMap save", "",
+		wxDD_DEFAULT_STYLE);
+
+	if(dialog.ShowModal() == wxID_OK) {
+		wxString dirPath = dialog.GetPath();
+
+		// Append .btmap extension if not present
+		if(!dirPath.EndsWith(".btmap")) {
+			dirPath += ".btmap";
+		}
+
+		g_gui.SaveCurrentMap(FileName(dirPath), true);
+		g_gui.UpdateTitle();
+	}
+}
+
+void MainMenuBar::OnExportToOTBM(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen())
+		return;
+
+	wxFileDialog dialog(frame, "Export to OTBM", "", "",
+		"OpenTibia Binary Map (*.otbm)|*.otbm",
+		wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+
+	if(dialog.ShowModal() == wxID_OK) {
+		g_gui.CreateLoadBar("Exporting to OTBM...");
+		bool success = IOMapBTMap::exportToOTBM(
+			g_gui.GetCurrentMap(),
+			FileName(dialog.GetPath())
+		);
+		g_gui.DestroyLoadBar();
+
+		if(!success) {
+			g_gui.PopupDialog("Error", "Could not export to OTBM.", wxOK);
+		} else {
+			g_gui.PopupDialog("Success", "Map exported to OTBM successfully!", wxOK);
+		}
+	}
 }
 
 void MainMenuBar::OnPreferences(wxCommandEvent& WXUNUSED(event))
@@ -1492,6 +1596,152 @@ void MainMenuBar::OnReplaceItems(wxCommandEvent& WXUNUSED(event))
 			window->ShowAdvancedReplaceDialog();
 		}
 	}
+}
+
+void MainMenuBar::OnSetActionIdOnSelection(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) {
+		return;
+	}
+
+	Editor* editor = g_gui.GetCurrentEditor();
+	if(!editor || !editor->hasSelection()) {
+		return;
+	}
+
+	wxArrayString scopeChoices;
+	scopeChoices.Add("Items on selected tiles (excluding ground)");
+	scopeChoices.Add("Ground on selected tiles");
+	scopeChoices.Add("Items and ground on selected tiles");
+
+	wxSingleChoiceDialog scopeDialog(
+		frame,
+		"Choose what should receive the Action ID in the current selection.",
+		"Set Action ID on Selection",
+		scopeChoices
+	);
+	scopeDialog.SetSelection(0);
+	if(scopeDialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	const int scopeSelection = scopeDialog.GetSelection();
+	const bool applyToItems = scopeSelection == 0 || scopeSelection == 2;
+	const bool applyToGround = scopeSelection == 1 || scopeSelection == 2;
+
+	static int lastActionId = rme::MinActionId;
+	wxNumberEntryDialog actionDialog(
+		frame,
+		"Enter the Action ID to apply (0 clears Action ID).",
+		"Action ID:",
+		"Set Action ID on Selection",
+		lastActionId,
+		0,
+		rme::MaxActionId
+	);
+	if(actionDialog.ShowModal() != wxID_OK) {
+		return;
+	}
+
+	const int enteredActionId = actionDialog.GetValue();
+	if(enteredActionId != 0 && (enteredActionId < rme::MinActionId || enteredActionId > rme::MaxActionId)) {
+		const wxString message = wxString::Format(
+			"Action ID must be between %d and %d (or 0 to clear).",
+			rme::MinActionId,
+			rme::MaxActionId);
+		g_gui.PopupDialog("Error", message, wxOK);
+		return;
+	}
+
+	lastActionId = enteredActionId;
+	const uint16_t actionId = static_cast<uint16_t>(enteredActionId);
+
+	struct ApplySelectionActionId
+	{
+		Action* action = nullptr;
+		uint16_t actionId = 0;
+		bool applyToItems = false;
+		bool applyToGround = false;
+		size_t changedTiles = 0;
+		size_t changedEntries = 0;
+
+		void operator()(Map& map, Tile* tile, long long done)
+		{
+			(void)done;
+
+			if(!tile || !tile->isSelected()) {
+				return;
+			}
+
+			Tile* newTile = nullptr;
+			bool tileChanged = false;
+
+			if(applyToGround && tile->ground && tile->ground->getActionID() != actionId) {
+				if(!newTile) {
+					newTile = tile->deepCopy(map);
+				}
+				newTile->ground->setActionID(actionId);
+				++changedEntries;
+				tileChanged = true;
+			}
+
+			if(applyToItems) {
+				for(size_t i = 0; i < tile->items.size(); ++i) {
+					Item* oldItem = tile->items[i];
+					if(!oldItem || oldItem->getActionID() == actionId) {
+						continue;
+					}
+
+					if(!newTile) {
+						newTile = tile->deepCopy(map);
+					}
+
+					Item* newItem = newTile->items[i];
+					if(!newItem) {
+						continue;
+					}
+
+					newItem->setActionID(actionId);
+					++changedEntries;
+					tileChanged = true;
+				}
+			}
+
+			if(tileChanged) {
+				action->addChange(new Change(newTile));
+				++changedTiles;
+			} else if(newTile) {
+				delete newTile;
+			}
+		}
+	};
+
+	BatchAction* batch = editor->createBatch(ACTION_CHANGE_PROPERTIES);
+	Action* action = editor->createAction(batch);
+	ApplySelectionActionId applier;
+	applier.action = action;
+	applier.actionId = actionId;
+	applier.applyToItems = applyToItems;
+	applier.applyToGround = applyToGround;
+
+	foreach_TileOnMap(editor->getMap(), applier);
+
+	batch->addAndCommitAction(action);
+	editor->addBatch(batch);
+	editor->updateActions();
+
+	if(applier.changedTiles == 0) {
+		g_gui.PopupDialog("Set Action ID on Selection", "No selected entries required changes.", wxOK);
+		return;
+	}
+
+	wxString message;
+	message << "Updated " << applier.changedEntries << " entr";
+	message << (applier.changedEntries == 1 ? "y" : "ies");
+	message << " on " << applier.changedTiles << " tile";
+	message << (applier.changedTiles == 1 ? "." : "s.");
+	g_gui.PopupDialog("Set Action ID on Selection", message, wxOK);
+	g_gui.RefreshView();
 }
 
 namespace OnSearchForStuff
@@ -2423,6 +2673,24 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event))
 	}
 }
 
+void MainMenuBar::OnScanRegion(wxCommandEvent& WXUNUSED(event))
+{
+	RegionScanDialog::Show(frame);
+}
+
+void MainMenuBar::OnSelectionItemScanner(wxCommandEvent& WXUNUSED(event))
+{
+	SelectionScannerDialog::Show(frame);
+}
+
+void MainMenuBar::OnSpawnDensityAdjuster(wxCommandEvent& WXUNUSED(event))
+{
+	if(!g_gui.IsEditorOpen()) return;
+
+	SpawnDensityDialog dlg(frame);
+	dlg.ShowModal();
+}
+
 void MainMenuBar::OnMapCleanup(wxCommandEvent& WXUNUSED(event))
 {
 	int ok = g_gui.PopupDialog("Clean map", "Do you want to remove all invalid items from the map?", wxYES | wxNO);
@@ -2669,7 +2937,11 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent& event)
 	g_settings.setInteger(Config::SHOW_STAIR_DIRECTION, IsItemChecked(MenuBar::SHOW_STAIR_DIRECTION));
 	g_settings.setInteger(Config::SHOW_CAMERA_PATHS, IsItemChecked(MenuBar::SHOW_CAMERA_PATHS));
 	g_settings.setInteger(Config::SHOW_NPC_PATHS, IsItemChecked(MenuBar::SHOW_NPC_PATHS));
+	g_settings.setInteger(Config::SHOW_CREATURE_WANDER_RADIUS, IsItemChecked(MenuBar::SHOW_CREATURE_WANDER_RADIUS));
+	g_settings.setInteger(Config::ANIMATE_CREATURE_WALK, IsItemChecked(MenuBar::ANIMATE_CREATURE_WALK));
 	g_settings.setInteger(Config::SHOW_ONLY_GROUNDS, IsItemChecked(MenuBar::SHOW_ONLY_GROUNDS));
+	g_settings.setInteger(Config::SHOW_CHUNK_BOUNDARIES, IsItemChecked(MenuBar::SHOW_CHUNK_BOUNDARIES));
+	g_settings.setInteger(Config::FLOOR_FADING, IsItemChecked(MenuBar::FLOOR_FADING));
 
 	g_gui.RefreshView();
 	g_gui.root->GetAuiToolBar()->UpdateIndicators();
@@ -2757,9 +3029,21 @@ void MainMenuBar::OnAreaDecoration(wxCommandEvent& WXUNUSED(event))
 	g_gui.ShowAreaDecorationDialog();
 }
 
+void MainMenuBar::OnFloorFadingSettings(wxCommandEvent& WXUNUSED(event))
+{
+	FloorFadingDialog dialog(frame);
+	dialog.ShowModal();
+	dialog.Destroy();
+}
+
 void MainMenuBar::OnAreaCreatureSpawn(wxCommandEvent& WXUNUSED(event))
 {
 	g_gui.ShowAreaCreatureSpawnDialog();
+}
+
+void MainMenuBar::OnInstanceLayoutGenerator(wxCommandEvent& WXUNUSED(event))
+{
+	g_gui.ShowInstanceLayoutDialog();
 }
 
 void MainMenuBar::OnNewPalette(wxCommandEvent& event)

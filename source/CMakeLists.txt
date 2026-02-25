@@ -6,6 +6,7 @@ ${CMAKE_CURRENT_LIST_DIR}/area_decoration.h
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn.h
 ${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/instance_layout_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_rule_from_selection_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/application.h
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.h
@@ -33,6 +34,7 @@ ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.h
 ${CMAKE_CURRENT_LIST_DIR}/creature.h
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.h
+${CMAKE_CURRENT_LIST_DIR}/creature_walk_animator.h
 ${CMAKE_CURRENT_LIST_DIR}/creatures.h
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.h
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.h
@@ -45,6 +47,7 @@ ${CMAKE_CURRENT_LIST_DIR}/editor_tabs.h
 ${CMAKE_CURRENT_LIST_DIR}/extension.h
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.h
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.h
+${CMAKE_CURRENT_LIST_DIR}/floor_fading_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/gif_recorder.h
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.h
 ${CMAKE_CURRENT_LIST_DIR}/graphics.h
@@ -101,6 +104,9 @@ ${CMAKE_CURRENT_LIST_DIR}/pngfiles.h
 ${CMAKE_CURRENT_LIST_DIR}/position.h
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.h
 ${CMAKE_CURRENT_LIST_DIR}/preferences.h
+${CMAKE_CURRENT_LIST_DIR}/region_scan_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/selection_scanner_dialog.h
+${CMAKE_CURRENT_LIST_DIR}/spawn_density_dialog.h
 ${CMAKE_CURRENT_LIST_DIR}/process_com.h
 ${CMAKE_CURRENT_LIST_DIR}/properties_window.h
 ${CMAKE_CURRENT_LIST_DIR}/raw_brush.h
@@ -136,9 +142,10 @@ ${CMAKE_CURRENT_LIST_DIR}/action.cpp
 ${CMAKE_CURRENT_LIST_DIR}/actions_history_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_decoration_dialog.cpp
-${CMAKE_CURRENT_LIST_DIR}/area_decoration_rule_from_selection_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn.cpp
 ${CMAKE_CURRENT_LIST_DIR}/area_creature_spawn_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/instance_layout_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/area_decoration_rule_from_selection_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/application.cpp
 ${CMAKE_CURRENT_LIST_DIR}/artprovider.cpp
 ${CMAKE_CURRENT_LIST_DIR}/basemap.cpp
@@ -154,6 +161,9 @@ ${CMAKE_CURRENT_LIST_DIR}/brush_manager_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_manager_panel.cpp
 ${CMAKE_CURRENT_LIST_DIR}/brush_tips_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/positionctrl.cpp
+${CMAKE_CURRENT_LIST_DIR}/region_scan_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/selection_scanner_dialog.cpp
+${CMAKE_CURRENT_LIST_DIR}/spawn_density_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/carpet_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/client_version.cpp
 ${CMAKE_CURRENT_LIST_DIR}/cluster_preview_window.cpp
@@ -164,6 +174,7 @@ ${CMAKE_CURRENT_LIST_DIR}/container_properties_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/copybuffer.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creature.cpp
+${CMAKE_CURRENT_LIST_DIR}/creature_walk_animator.cpp
 ${CMAKE_CURRENT_LIST_DIR}/creatures.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dat_debug_view.cpp
 ${CMAKE_CURRENT_LIST_DIR}/dcbutton.cpp
@@ -176,6 +187,7 @@ ${CMAKE_CURRENT_LIST_DIR}/eraser_brush.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension.cpp
 ${CMAKE_CURRENT_LIST_DIR}/extension_window.cpp
 ${CMAKE_CURRENT_LIST_DIR}/find_item_window.cpp
+${CMAKE_CURRENT_LIST_DIR}/floor_fading_dialog.cpp
 ${CMAKE_CURRENT_LIST_DIR}/gif_recorder.cpp
 ${CMAKE_CURRENT_LIST_DIR}/filehandle.cpp
 ${CMAKE_CURRENT_LIST_DIR}/graphics.cpp

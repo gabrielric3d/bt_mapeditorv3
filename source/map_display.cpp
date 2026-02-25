@@ -58,6 +58,8 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
+#include "border_editor_window.h"
+#include "creature_walk_animator.h"
 #include "gif_recorder.h"
 #include "camera_path.h"
 #include "area_decoration_rule_from_selection_dialog.h"
@@ -197,6 +199,7 @@ BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 	EVT_MENU(MAP_POPUP_MENU_BROWSE_TILE, MapCanvas::OnBrowseTile)
 	// ----
 	EVT_MENU(MAP_POPUP_MENU_ADD_AREA_DECORATION_RULE, MapCanvas::OnAddAreaDecorationRule)
+	EVT_MENU(MAP_POPUP_MENU_MODIFY_GROUND_BORDERS, MapCanvas::OnModifyGroundBorders)
 END_EVENT_TABLE()
 
 bool MapCanvas::processed[] = {0};
@@ -243,6 +246,9 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 	camera_path_time(0.0),
 	camera_path_last_tick(),
 
+	floor_fading(false),
+	floor_fade_old_floor(rme::MapGroundLayer),
+
 	drag_start_x(-1),
 	drag_start_y(-1),
 	drag_start_z(-1),
@@ -261,6 +267,7 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor& editor, int* attriblist) :
 
 	last_mmb_click_x(-1),
 	last_mmb_click_y(-1),
+	has_boundbox_region(false),
 	gc_frame_counter(0)
 {
 	popup_menu = newd MapPopupMenu(editor);
@@ -1003,6 +1010,7 @@ void MapCanvas::ToggleCameraPathPlayback()
 		camera_path_playing = false;
 		camera_path_time = 0.0;
 		camera_path_name.clear();
+		UpdateCameraPreviewCursorVisibility();
 		g_gui.SetStatusText("Camera path playback stopped.");
 		return;
 	}
@@ -1018,8 +1026,20 @@ void MapCanvas::ToggleCameraPathPlayback()
 	camera_path_time = 0.0;
 	camera_path_last_tick = std::chrono::steady_clock::now();
 	camera_path_playing = true;
+	UpdateCameraPreviewCursorVisibility();
 	camera_path_timer.Start(16);
 	g_gui.SetStatusText("Camera path playback started.");
+}
+
+void MapCanvas::UpdateCameraPreviewCursorVisibility()
+{
+	const bool hide_preview_mouse =
+		camera_path_playing && g_settings.getBoolean(Config::HIDE_CAMERA_PREVIEW_MOUSE);
+	if(hide_preview_mouse) {
+		SetCursor(wxCursor(wxCURSOR_BLANK));
+	} else {
+		SetCursor(wxNullCursor);
+	}
 }
 
 void MapCanvas::OnCameraPathTimer(wxTimerEvent& WXUNUSED(event))
@@ -1842,6 +1862,7 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 				ClearLassoSelection();
 			}
 		if(event.ShiftDown()) {
+			has_boundbox_region = false;
 			boundbox_selection = true;
 			boundbox_deselect = event.ControlDown() && event.ShiftDown() && event.AltDown();
 			boundbox_select_creatures = event.AltDown() && !boundbox_deselect;
@@ -1870,6 +1891,7 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent& event)
 			} else {
 				Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
 				if(!tile) {
+					has_boundbox_region = false;
 					selection.start(Selection::NONE, ACTION_UNSELECT); // Start selection session
 					selection.clear(); // Clear out selection
 					selection.finish(); // End selection session
@@ -2111,6 +2133,17 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 					ApplyLassoSelection(selection, boundbox_select_creatures, deselect_mode);
 					selection.finish(); // Finish the selection session
 					selection.updateSelectionCount();
+					if(!deselect_mode && !lasso_map_points.empty()) {
+						int lmin_x = lasso_map_points.front().x, lmax_x = lasso_map_points.front().x;
+						int lmin_y = lasso_map_points.front().y, lmax_y = lasso_map_points.front().y;
+						for(const wxPoint& p : lasso_map_points) {
+							lmin_x = std::min(lmin_x, p.x); lmax_x = std::max(lmax_x, p.x);
+							lmin_y = std::min(lmin_y, p.y); lmax_y = std::max(lmax_y, p.y);
+						}
+						has_boundbox_region = true;
+						boundbox_from = Position(lmin_x, lmin_y, floor);
+						boundbox_to = Position(lmax_x, lmax_y, floor);
+					}
 				} else if(mouse_map_x == last_click_map_x && mouse_map_y == last_click_map_y && event.ControlDown()) {
 					// Mouse hasn't moved, do control+shift thingy!
 					Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
@@ -2320,6 +2353,9 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent& event)
 						}
 						selection.finish(); // Finish the selection session
 						selection.updateSelectionCount();
+						has_boundbox_region = true;
+						boundbox_from = Position(last_click_map_x, last_click_map_y, floor);
+						boundbox_to = Position(mouse_map_x, mouse_map_y, floor);
 					}
 				}
 			} else if(event.ControlDown()) {
@@ -2550,6 +2586,7 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event)
 		ClearLassoSelection();
 	}
 	if(event.ShiftDown()) {
+		has_boundbox_region = false;
 		boundbox_selection = true;
 		boundbox_deselect = event.ControlDown() && event.ShiftDown() && event.AltDown();
 		boundbox_select_creatures = event.AltDown() && !boundbox_deselect;
@@ -2566,10 +2603,12 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent& event)
 			selection.updateSelectionCount();
 		}
 	} else if(!tile) {
-		selection.start(); // Start selection session
-		selection.clear(); // Clear out selection
-		selection.finish(); // End selection session
-		selection.updateSelectionCount();
+		if(!has_boundbox_region) {
+			selection.start(); // Start selection session
+			selection.clear(); // Clear out selection
+			selection.finish(); // End selection session
+			selection.updateSelectionCount();
+		}
 	} else if(tile->isSelected()) {
 		// Do nothing!
 	} else {
@@ -2623,6 +2662,17 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 			ApplyLassoSelection(selection, boundbox_select_creatures, deselect_mode);
 			selection.finish(); // Finish the selection session
 			selection.updateSelectionCount();
+			if(!deselect_mode && !lasso_map_points.empty()) {
+				int lmin_x = lasso_map_points.front().x, lmax_x = lasso_map_points.front().x;
+				int lmin_y = lasso_map_points.front().y, lmax_y = lasso_map_points.front().y;
+				for(const wxPoint& p : lasso_map_points) {
+					lmin_x = std::min(lmin_x, p.x); lmax_x = std::max(lmax_x, p.x);
+					lmin_y = std::min(lmin_y, p.y); lmax_y = std::max(lmax_y, p.y);
+				}
+				has_boundbox_region = true;
+				boundbox_from = Position(lmin_x, lmin_y, floor);
+				boundbox_to = Position(lmax_x, lmax_y, floor);
+			}
 		} else if(mouse_map_x == last_click_map_x && mouse_map_y == last_click_map_y && event.ControlDown()) {
 			// Mouse hasn't move, do control+shift thingy!
 			Tile* tile = editor.getMap().getTile(mouse_map_x, mouse_map_y, floor);
@@ -2757,6 +2807,11 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent& event)
 			}
 			selection.finish(); // Finish the selection session
 			selection.updateSelectionCount();
+			if(!deselect_mode) {
+				has_boundbox_region = true;
+				boundbox_from = Position(last_click_map_x, last_click_map_y, floor);
+				boundbox_to = Position(mouse_map_x, mouse_map_y, floor);
+			}
 		}
 	} else if(event.ControlDown()) {
 		// Nothing
@@ -3241,6 +3296,13 @@ void MapCanvas::OnApplyReplaceBox2(wxCommandEvent& WXUNUSED(event))
 
 void MapCanvas::OnCopyPosition(wxCommandEvent& WXUNUSED(event))
 {
+	// Use stored boundbox region first (covers full area including empty tiles)
+	if (has_boundbox_region && boundbox_from != boundbox_to) {
+		posToClipboard(boundbox_from.x, boundbox_from.y, boundbox_from.z,
+			boundbox_to.x, boundbox_to.y, boundbox_to.z);
+		return;
+	}
+
 	if (editor.hasSelection()) {
 		const Position minPos = editor.getSelection().minPosition();
 		const Position maxPos = editor.getSelection().maxPosition();
@@ -3562,6 +3624,18 @@ void MapCanvas::OnToggleCarpetActivated(wxCommandEvent& WXUNUSED(event))
 	CarpetBrush* cb = carpet->getCarpetBrush();
 	if(!cb || !cb->hasSourceFile()) return;
 
+	const int confirm = wxMessageBox(
+		wxString::Format(
+			"Tem certeza que deseja desativar o brush '%s'?\n\nArquivo:\n%s",
+			wxString(cb->getName()),
+			wxString(cb->getSourceFile())),
+		"Confirmar desativacao",
+		wxYES_NO | wxNO_DEFAULT | wxICON_WARNING,
+		g_gui.root);
+	if(confirm != wxYES) {
+		return;
+	}
+
 	if(cb->toggleActivatedInXML()) {
 		wxMessageBox(
 			wxString::Format("Brush '%s' has been deactivated in:\n%s\n\nReload brushes to apply changes.",
@@ -3672,12 +3746,49 @@ void MapCanvas::OnAddAreaDecorationRule(wxCommandEvent& WXUNUSED(event))
 	}
 }
 
+void MapCanvas::OnModifyGroundBorders(wxCommandEvent& WXUNUSED(event))
+{
+	if(editor.getSelection().size() != 1) {
+		return;
+	}
+
+	Tile* tile = editor.getSelection().getSelectedTile();
+	if(!tile) {
+		return;
+	}
+
+	GroundBrush* groundBrush = tile->getGroundBrush();
+	if(!groundBrush) {
+		wxMessageBox("No ground brush found on the selected tile.", "Modify Ground Borders", wxICON_INFORMATION);
+		return;
+	}
+
+	BorderEditorDialog* dialog = new BorderEditorDialog(
+		g_gui.root,
+		"Modify Ground Borders",
+		true,
+		wxstr(groundBrush->getName())
+	);
+	dialog->Show();
+	g_gui.RefreshView();
+}
+
 void MapCanvas::ChangeFloor(int new_floor)
 {
 	ASSERT(new_floor >= 0 || new_floor <= rme::MapMaxLayer);
 	int old_floor = floor;
 	floor = new_floor;
 	if(old_floor != new_floor) {
+		if(g_settings.getBoolean(Config::FLOOR_FADING)) {
+			int mode = g_settings.getInteger(Config::FLOOR_FADING_MODE);
+			if(mode == 1) {
+				// Continuous mode: accumulate layers
+				floor_fade_layers.emplace_back(old_floor);
+			}
+			floor_fade_old_floor = old_floor;
+			floor_fading = true;
+			floor_fade_timer.Start();
+		}
 		if(!preview_mode) {
 			UpdatePositionStatus();
 			g_gui.root->UpdateFloorMenu();
@@ -3686,6 +3797,61 @@ void MapCanvas::ChangeFloor(int new_floor)
 		ClearAutoborderPreview();
 	}
 	Refresh();
+}
+
+namespace {
+	float applyEasing(float t, int easing_type)
+	{
+		switch(easing_type) {
+			case 0: return t; // Linear
+			case 1: return 1.0f - (1.0f - t) * (1.0f - t); // Ease-Out
+			case 2: return t < 0.5f ? 2.0f * t * t : 1.0f - std::pow(-2.0f * t + 2.0f, 2.0f) / 2.0f; // Ease-In-Out
+			default: return t;
+		}
+	}
+}
+
+bool MapCanvas::IsFloorFading() const
+{
+	if(!floor_fading)
+		return false;
+	long duration = g_settings.getInteger(Config::FLOOR_FADING_DURATION);
+	return floor_fade_timer.Time() < duration;
+}
+
+int MapCanvas::GetFloorFadeAlpha() const
+{
+	if(!floor_fading)
+		return 0;
+
+	long duration = g_settings.getInteger(Config::FLOOR_FADING_DURATION);
+	long elapsed = floor_fade_timer.Time();
+	if(elapsed >= duration)
+		return 0;
+
+	int easing = g_settings.getInteger(Config::FLOOR_FADING_EASING);
+	int max_opacity = g_settings.getInteger(Config::FLOOR_FADING_OPACITY);
+	float max_alpha = 255.0f * max_opacity / 100.0f;
+
+	float t = static_cast<float>(elapsed) / duration;
+	float eased = applyEasing(t, easing);
+
+	return static_cast<int>(max_alpha * (1.0f - eased));
+}
+
+float MapCanvas::GetFloorFadeProgress() const
+{
+	if(!floor_fading)
+		return 1.0f;
+
+	long duration = g_settings.getInteger(Config::FLOOR_FADING_DURATION);
+	long elapsed = floor_fade_timer.Time();
+	if(elapsed >= duration)
+		return 1.0f;
+
+	int easing = g_settings.getInteger(Config::FLOOR_FADING_EASING);
+	float t = static_cast<float>(elapsed) / duration;
+	return applyEasing(t, easing);
 }
 
 void MapCanvas::EnterDrawingMode()
@@ -3740,6 +3906,7 @@ void MapCanvas::Reset()
 		camera_path_time = 0.0;
 		camera_path_name.clear();
 	}
+	UpdateCameraPreviewCursorVisibility();
 
 	cursor_x = 0;
 	cursor_y = 0;
@@ -3770,6 +3937,8 @@ void MapCanvas::Reset()
 
 	last_mmb_click_x = -1;
 	last_mmb_click_y = -1;
+
+	g_creature_walk_animator.clear();
 
 	editor.getSelection().clear();
 	editor.clearActions();
@@ -3815,6 +3984,8 @@ void MapPopupMenu::Update()
 		if(editor.getSelection().size() == 1) {
 			Tile* tile = editor.getSelection().getSelectedTile();
 			ItemVector selected_items = tile->getSelectedItems();
+			bool can_deactivate_carpet_brush = false;
+			bool can_modify_ground_borders = tile->hasGround() && tile->getGroundBrush() != nullptr;
 
 			bool hasWall = false;
 			bool hasCarpet = false;
@@ -3898,12 +4069,12 @@ void MapPopupMenu::Update()
 
 				if(hasCarpet) {
 					Append( MAP_POPUP_MENU_SELECT_CARPET_BRUSH, "Select Carpetbrush", "Uses the current item as a carpetbrush");
-					// Check if carpet brush has source file for toggle option
+					// Keep deactivation as a dedicated action near the end of the context menu.
 					Item* carpet = tile->getCarpet();
 					if(carpet) {
 						Brush* carpetBrush = carpet->getCarpetBrush();
-						if(carpetBrush && carpetBrush->hasSourceFile()) {
-							Append( MAP_POPUP_MENU_TOGGLE_CARPET_ACTIVATED, "Deactivate Carpetbrush", "Deactivate this carpet brush in XML file");
+						if(carpetBrush && carpetBrush->hasSourceFile() && carpetBrush->isActivated()) {
+							can_deactivate_carpet_brush = true;
 						}
 					}
 				}
@@ -3966,6 +4137,18 @@ void MapPopupMenu::Update()
 			Append(MAP_POPUP_MENU_ADD_AREA_DECORATION_RULE,
 			       "Add area decoration rule",
 			       "Create an area decoration rule from the selected tiles");
+			if(can_deactivate_carpet_brush) {
+				AppendSeparator();
+				Append(MAP_POPUP_MENU_TOGGLE_CARPET_ACTIVATED,
+				       "Deactivate Carpetbrush",
+				       "Deactivate this carpet brush in XML file");
+			}
+			if(can_modify_ground_borders) {
+				AppendSeparator();
+				Append(MAP_POPUP_MENU_MODIFY_GROUND_BORDERS,
+				       "Modify Ground Borders",
+				       "Edit border references for the selected ground brush");
+			}
 		} else {
 			AppendSeparator();
 			wxMenu* rotate_menu = new wxMenu();
@@ -3982,6 +4165,14 @@ void MapPopupMenu::Update()
 	}
 
 	Theme::ApplyMenu(this);
+#if wxUSE_OWNER_DRAWN
+	wxMenuItem* deactivate_carpet_item = FindItem(MAP_POPUP_MENU_TOGGLE_CARPET_ACTIVATED);
+	if(deactivate_carpet_item) {
+		deactivate_carpet_item->SetTextColour(wxColour(255, 194, 82));
+		deactivate_carpet_item->SetBackgroundColour(wxColour(63, 44, 22));
+		deactivate_carpet_item->SetOwnerDrawn(true);
+	}
+#endif
 }
 
 void MapCanvas::getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill /*= false*/)

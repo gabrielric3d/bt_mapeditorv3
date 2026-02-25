@@ -221,12 +221,12 @@ bool Materials::unserializeMaterials(const FileName& filename, pugi::xml_node no
 		} else if(childName == "metaitem") {
 			g_items.loadMetaItem(childNode);
 		} else if(childName == "border") {
-			g_brushes.unserializeBorder(childNode, warnings);
+			g_brushes.unserializeBorder(childNode, warnings, filename.GetFullPath().ToStdString());
 			if(warning.size()) {
 				warnings.push_back("materials.xml: " + warning);
 			}
 		} else if(childName == "brush") {
-			g_brushes.unserializeBrush(childNode, warnings);
+			g_brushes.unserializeBrush(childNode, warnings, filename.GetFullPath().ToStdString());
 			if(warning.size()) {
 				warnings.push_back("materials.xml: " + warning);
 			}

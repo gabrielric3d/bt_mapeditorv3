@@ -125,6 +125,7 @@ public:
 	// ---
 	void OnProperties(wxCommandEvent& event);
 	void OnAddAreaDecorationRule(wxCommandEvent& event);
+	void OnModifyGroundBorders(wxCommandEvent& event);
 
 	void Refresh();
 
@@ -161,7 +162,21 @@ public:
 	void StopGifRecording(bool keepFile, bool notify = true);
 	bool IsGifRecording() const noexcept { return gif_recording; }
 	void ToggleCameraPathPlayback();
+	void UpdateCameraPreviewCursorVisibility();
 	bool IsCameraPathPlaying() const noexcept { return camera_path_playing; }
+
+	// Floor fading
+	bool IsFloorFading() const;
+	int GetFloorFadeAlpha() const;
+	float GetFloorFadeProgress() const;
+	int GetFloorFadeOldFloor() const { return floor_fade_old_floor; }
+
+	struct FadeLayer {
+		int floor_z;
+		wxStopWatch timer;
+		FadeLayer(int z) : floor_z(z) { timer.Start(); }
+	};
+	const std::vector<FadeLayer>& GetFadeLayers() const { return floor_fade_layers; }
 
 protected:
 	void getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill = false);
@@ -240,6 +255,12 @@ private:
 	double camera_path_time;
 	std::chrono::steady_clock::time_point camera_path_last_tick;
 
+	// Floor fading
+	wxStopWatch floor_fade_timer;
+	bool floor_fading;
+	int floor_fade_old_floor;
+	std::vector<FadeLayer> floor_fade_layers;
+
 	int drag_start_x;
 	int drag_start_y;
 	int drag_start_z;
@@ -261,6 +282,11 @@ private:
 
 	int view_scroll_x;
 	int view_scroll_y;
+
+	// Last boundbox selection coordinates (valid even for empty areas)
+	bool has_boundbox_region;
+	Position boundbox_from;
+	Position boundbox_to;
 
 	uint32_t current_house_id;
 

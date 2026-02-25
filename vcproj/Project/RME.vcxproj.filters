@@ -145,6 +145,12 @@
     <ClInclude Include="..\..\source\iomap_otbm.h">
       <Filter>editor\io</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\iomap_btmap.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\chunk_tracker.h">
+      <Filter>editor\io</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\item.h">
       <Filter>objects</Filter>
     </ClInclude>
@@ -305,6 +311,9 @@
     <ClInclude Include="..\..\source\creature_brush.h">
       <Filter>editor\brushes</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\creature_walk_animator.h">
+      <Filter>gui\map window</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\waypoint_brush.h">
       <Filter>editor\brushes</Filter>
     </ClInclude>
@@ -320,16 +329,22 @@
     <ClInclude Include="..\..\source\doodad_editor_window.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\area_creature_spawn.h">
+      <Filter>editor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\area_creature_spawn_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\instance_layout_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\area_decoration.h">
       <Filter>editor</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\area_decoration_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\source\area_creature_spawn.h">
-      <Filter>editor</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\source\area_creature_spawn_dialog.h">
+    <ClInclude Include="..\..\source\area_decoration_rule_from_selection_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\cluster_preview_window.h">
@@ -381,7 +396,19 @@
     <ClInclude Include="..\..\source\positionctrl.h">
       <Filter>gui\controls</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\region_scan_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\selection_scanner_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\spawn_density_dialog.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\source\find_item_window.h">
+      <Filter>gui\dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\floor_fading_dialog.h">
       <Filter>gui\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\main_toolbar.h">
@@ -661,10 +688,22 @@
     <ClCompile Include="..\..\source\doodad_editor_window.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\area_creature_spawn.cpp">
+      <Filter>editor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\area_creature_spawn_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\instance_layout_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\area_decoration.cpp">
       <Filter>editor</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\area_decoration_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\area_decoration_rule_from_selection_dialog.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\cluster_preview_window.cpp">
@@ -673,11 +712,8 @@
     <ClCompile Include="..\..\source\creature_brush.cpp">
       <Filter>editor\brushes</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\source\area_creature_spawn.cpp">
-      <Filter>editor</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\source\area_creature_spawn_dialog.cpp">
-      <Filter>gui\dialogs</Filter>
+    <ClCompile Include="..\..\source\creature_walk_animator.cpp">
+      <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\carpet_brush.cpp">
       <Filter>editor\brushes</Filter>
@@ -689,6 +725,12 @@
       <Filter>editor\io</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\iomap_otbm.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\iomap_btmap.cpp">
+      <Filter>editor\io</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\chunk_tracker.cpp">
       <Filter>editor\io</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\table_brush.cpp">
@@ -733,7 +775,19 @@
     <ClCompile Include="..\..\source\positionctrl.cpp">
       <Filter>gui\controls</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\region_scan_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\selection_scanner_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\spawn_density_dialog.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\source\find_item_window.cpp">
+      <Filter>gui\dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\floor_fading_dialog.cpp">
       <Filter>gui\dialogs</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\main_toolbar.cpp">
